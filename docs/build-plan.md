@@ -12,18 +12,19 @@ This document translates the [product plan](product-plan.md) into a concrete imp
 
 ---
 
-## Tech Stack (Recommendations)
+## Tech Stack
 
-| Layer | Option A (simplest) | Option B (scale later) |
-|-------|---------------------|------------------------|
-| **Frontend** | React (Vite) or Next.js | Same + React Native / Expo if native app needed |
-| **Backend** | Next.js API routes or Node + Express | Same; add queue for PDF generation |
-| **Data** | SQLite → Postgres (Supabase or Railway) | Postgres from day one |
-| **Auth** | Supabase Auth or NextAuth | Same |
-| **PDF** | React-PDF, Puppeteer, or server-side template (e.g. PDFKit) | Dedicated PDF service if volume grows |
-| **Hosting** | Vercel (Next) or similar | Same; worker for PDFs |
+| Layer | Choice |
+|-------|--------|
+| **Frontend** | Next.js (App Router) |
+| **Backend** | Next.js (API routes, Server Components, Server Actions) |
+| **Data** | Postgres via Supabase |
+| **Auth** | Supabase Auth |
+| **UI** | shadcn/ui (Radix primitives + Tailwind) |
+| **PDF** | React-PDF, Puppeteer, or server-side template (e.g. PDFKit) — TBD |
+| **Hosting** | Vercel (native Next.js support) |
 
-**Suggested starting point:** Next.js (App Router) + Supabase (Postgres + Auth) + React-PDF or a simple HTML→PDF pipeline. Deploy on Vercel; add offline/PWA later if needed.
+Single stack: Next.js handles both UI and API; Supabase provides Postgres and auth; shadcn/ui supplies accessible, customizable components. Add offline/PWA later if needed.
 
 ---
 
