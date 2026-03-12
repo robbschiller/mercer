@@ -1,19 +1,19 @@
-import { createProjectAction } from "@/lib/actions";
+import { createBidAction } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
-export default function NewProjectPage() {
+export default function NewBidPage() {
   return (
     <div className="container mx-auto max-w-lg px-4 py-8">
       <Card>
         <CardHeader>
-          <CardTitle>New project</CardTitle>
+          <CardTitle>New bid</CardTitle>
         </CardHeader>
         <CardContent>
-          <form action={createProjectAction} className="flex flex-col gap-4">
+          <form action={createBidAction} className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
               <Label htmlFor="address">Property address</Label>
               <Input
@@ -46,9 +46,9 @@ export default function NewProjectPage() {
 
             <div className="flex gap-2 justify-end pt-2">
               <Button variant="outline" asChild>
-                <a href="/projects">Cancel</a>
+                <a href="/bids">Cancel</a>
               </Button>
-              <Button type="submit">Create project</Button>
+              <Button type="submit">Create bid</Button>
             </div>
           </form>
         </CardContent>

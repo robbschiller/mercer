@@ -27,10 +27,10 @@ export default function RootLayout({
               </a>
               <nav className="ml-auto flex items-center gap-4">
                 <a
-                  href="/projects"
+                  href="/bids"
                   className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Projects
+                  Bids
                 </a>
                 <NavAuth />
               </nav>

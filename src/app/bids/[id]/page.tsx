@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
-import { getProject } from "@/lib/store";
-import { updateProjectAction, deleteProjectAction } from "@/lib/actions";
+import { getBid } from "@/lib/store";
+import { updateBidAction, deleteBidAction } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,48 +14,46 @@ import {
   CardContent,
 } from "@/components/ui/card";
 
-export default async function ProjectPage({
+export default async function BidPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const project = await getProject(id);
+  const bid = await getBid(id);
 
-  if (!project) {
+  if (!bid) {
     notFound();
   }
 
   return (
     <div className="container mx-auto max-w-2xl px-4 py-8 flex flex-col gap-6">
-      {/* Header */}
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" asChild>
-          <a href="/projects">&larr; Projects</a>
+          <a href="/bids">&larr; Bids</a>
         </Button>
       </div>
 
-      {/* Project details card */}
       <Card>
         <CardHeader>
           <div className="flex items-start justify-between gap-2">
             <div>
-              <CardTitle>{project.clientName}</CardTitle>
-              <CardDescription>{project.address}</CardDescription>
+              <CardTitle>{bid.clientName}</CardTitle>
+              <CardDescription>{bid.address}</CardDescription>
             </div>
-            <Badge variant="secondary">{project.status}</Badge>
+            <Badge variant="secondary">{bid.status}</Badge>
           </div>
         </CardHeader>
         <CardContent>
-          <form action={updateProjectAction} className="flex flex-col gap-4">
-            <input type="hidden" name="id" value={project.id} />
+          <form action={updateBidAction} className="flex flex-col gap-4">
+            <input type="hidden" name="id" value={bid.id} />
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="address">Property address</Label>
               <Input
                 id="address"
                 name="address"
-                defaultValue={project.address}
+                defaultValue={bid.address}
                 required
               />
             </div>
@@ -65,7 +63,7 @@ export default async function ProjectPage({
               <Input
                 id="clientName"
                 name="clientName"
-                defaultValue={project.clientName}
+                defaultValue={bid.clientName}
                 required
               />
             </div>
@@ -75,7 +73,7 @@ export default async function ProjectPage({
               <Textarea
                 id="notes"
                 name="notes"
-                defaultValue={project.notes}
+                defaultValue={bid.notes}
                 rows={3}
               />
             </div>
@@ -85,7 +83,7 @@ export default async function ProjectPage({
               <select
                 id="status"
                 name="status"
-                defaultValue={project.status}
+                defaultValue={bid.status}
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <option value="draft">Draft</option>
@@ -102,7 +100,6 @@ export default async function ProjectPage({
         </CardContent>
       </Card>
 
-      {/* Buildings placeholder */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Buildings</CardTitle>
@@ -123,17 +120,16 @@ export default async function ProjectPage({
         </CardContent>
       </Card>
 
-      {/* Danger zone */}
       <Card className="border-destructive/50">
         <CardContent className="flex items-center justify-between pt-6">
           <div>
-            <p className="text-sm font-medium">Delete project</p>
+            <p className="text-sm font-medium">Delete bid</p>
             <p className="text-sm text-muted-foreground">
               This action cannot be undone.
             </p>
           </div>
-          <form action={deleteProjectAction}>
-            <input type="hidden" name="id" value={project.id} />
+          <form action={deleteBidAction}>
+            <input type="hidden" name="id" value={bid.id} />
             <Button variant="destructive" size="sm" type="submit">
               Delete
             </Button>

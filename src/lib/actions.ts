@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { createProject, updateProject, deleteProject } from "./store";
+import { createBid, updateBid, deleteBid } from "./store";
 import { createClient } from "./supabase/server";
 
 export async function signInAction(formData: FormData) {
@@ -18,7 +18,7 @@ export async function signInAction(formData: FormData) {
     redirect(`/login?error=${encodeURIComponent(error.message)}`);
   }
 
-  redirect("/projects");
+  redirect("/bids");
 }
 
 export async function signUpAction(formData: FormData) {
@@ -44,7 +44,7 @@ export async function signOutAction() {
   redirect("/");
 }
 
-export async function createProjectAction(formData: FormData) {
+export async function createBidAction(formData: FormData) {
   const address = formData.get("address") as string;
   const clientName = formData.get("clientName") as string;
   const notes = (formData.get("notes") as string) || "";
@@ -53,15 +53,15 @@ export async function createProjectAction(formData: FormData) {
     throw new Error("Address and client name are required");
   }
 
-  const project = await createProject({
+  const bid = await createBid({
     address,
     clientName,
     notes,
   });
-  redirect(`/projects/${project.id}`);
+  redirect(`/bids/${bid.id}`);
 }
 
-export async function updateProjectAction(formData: FormData) {
+export async function updateBidAction(formData: FormData) {
   const id = formData.get("id") as string;
   const address = formData.get("address") as string;
   const clientName = formData.get("clientName") as string;
@@ -72,18 +72,18 @@ export async function updateProjectAction(formData: FormData) {
     throw new Error("Missing required fields");
   }
 
-  await updateProject(id, {
+  await updateBid(id, {
     address,
     clientName,
     notes,
     status: status as "draft" | "sent" | "won" | "lost",
   });
 
-  redirect(`/projects/${id}`);
+  redirect(`/bids/${id}`);
 }
 
-export async function deleteProjectAction(formData: FormData) {
+export async function deleteBidAction(formData: FormData) {
   const id = formData.get("id") as string;
-  await deleteProject(id);
-  redirect("/projects");
+  await deleteBid(id);
+  redirect("/bids");
 }

@@ -13,7 +13,7 @@ export default function Home() {
         proposals&mdash;all before you leave the property.
       </p>
       <Button asChild size="lg">
-        <a href="/projects">Get started</a>
+        <a href="/bids">Get started</a>
       </Button>
     </div>
   );

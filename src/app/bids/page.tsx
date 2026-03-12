@@ -1,4 +1,4 @@
-import { getProjects } from "@/lib/store";
+import { getBids } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,47 +16,47 @@ const statusColor: Record<string, "default" | "secondary" | "outline"> = {
   lost: "secondary",
 };
 
-export default async function ProjectsPage() {
-  const projects = await getProjects();
+export default async function BidsPage() {
+  const bids = await getBids();
 
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Projects</h1>
+        <h1 className="text-2xl font-bold">Bids</h1>
         <Button asChild>
-          <a href="/projects/new">New project</a>
+          <a href="/bids/new">New bid</a>
         </Button>
       </div>
 
-      {projects.length === 0 ? (
+      {bids.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-4 py-12">
-            <p className="text-muted-foreground">No projects yet.</p>
+            <p className="text-muted-foreground">No bids yet.</p>
             <Button asChild>
-              <a href="/projects/new">Create your first project</a>
+              <a href="/bids/new">Create your first bid</a>
             </Button>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {projects.map((project) => (
-            <a key={project.id} href={`/projects/${project.id}`}>
+          {bids.map((bid) => (
+            <a key={bid.id} href={`/bids/${bid.id}`}>
               <Card className="hover:border-foreground/20 transition-colors cursor-pointer">
                 <CardHeader>
                   <div className="flex items-start justify-between gap-2">
                     <CardTitle className="text-base">
-                      {project.clientName}
+                      {bid.clientName}
                     </CardTitle>
-                    <Badge variant={statusColor[project.status] ?? "secondary"}>
-                      {project.status}
+                    <Badge variant={statusColor[bid.status] ?? "secondary"}>
+                      {bid.status}
                     </Badge>
                   </div>
-                  <CardDescription>{project.address}</CardDescription>
+                  <CardDescription>{bid.address}</CardDescription>
                 </CardHeader>
-                {project.notes && (
+                {bid.notes && (
                   <CardContent>
                     <p className="text-sm text-muted-foreground line-clamp-2">
-                      {project.notes}
+                      {bid.notes}
                     </p>
                   </CardContent>
                 )}

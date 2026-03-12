@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun run dev)",
+      "Bash(bun install:*)",
+      "Bash(git -C /Users/robb/Developer/grant branch:*)"
+    ]
+  }
+}
