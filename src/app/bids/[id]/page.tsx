@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getBid } from "@/lib/store";
 import { updateBidAction, deleteBidAction } from "@/lib/actions";
@@ -13,6 +14,8 @@ import {
   CardDescription,
   CardContent,
 } from "@/components/ui/card";
+import { SubmitButton } from "@/components/submit-button";
+import { StatusSelect } from "@/components/status-select";
 
 export default async function BidPage({
   params,
@@ -30,7 +33,7 @@ export default async function BidPage({
     <div className="container mx-auto max-w-2xl px-4 py-8 flex flex-col gap-6">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" asChild>
-          <a href="/bids">&larr; Bids</a>
+          <Link href="/bids">&larr; Bids</Link>
         </Button>
       </div>
 
@@ -79,22 +82,12 @@ export default async function BidPage({
             </div>
 
             <div className="flex flex-col gap-2">
-              <Label htmlFor="status">Status</Label>
-              <select
-                id="status"
-                name="status"
-                defaultValue={bid.status}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              >
-                <option value="draft">Draft</option>
-                <option value="sent">Sent</option>
-                <option value="won">Won</option>
-                <option value="lost">Lost</option>
-              </select>
+              <Label>Status</Label>
+              <StatusSelect defaultValue={bid.status} />
             </div>
 
             <div className="flex gap-2 justify-end pt-2">
-              <Button type="submit">Save changes</Button>
+              <SubmitButton>Save changes</SubmitButton>
             </div>
           </form>
         </CardContent>
@@ -130,9 +123,9 @@ export default async function BidPage({
           </div>
           <form action={deleteBidAction}>
             <input type="hidden" name="id" value={bid.id} />
-            <Button variant="destructive" size="sm" type="submit">
+            <SubmitButton variant="destructive" size="sm">
               Delete
-            </Button>
+            </SubmitButton>
           </form>
         </CardContent>
       </Card>

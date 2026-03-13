@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getBids } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,7 +25,7 @@ export default async function BidsPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Bids</h1>
         <Button asChild>
-          <a href="/bids/new">New bid</a>
+          <Link href="/bids/new">New bid</Link>
         </Button>
       </div>
 
@@ -33,14 +34,14 @@ export default async function BidsPage() {
           <CardContent className="flex flex-col items-center gap-4 py-12">
             <p className="text-muted-foreground">No bids yet.</p>
             <Button asChild>
-              <a href="/bids/new">Create your first bid</a>
+              <Link href="/bids/new">Create your first bid</Link>
             </Button>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {bids.map((bid) => (
-            <a key={bid.id} href={`/bids/${bid.id}`}>
+            <Link key={bid.id} href={`/bids/${bid.id}`}>
               <Card className="hover:border-foreground/20 transition-colors cursor-pointer">
                 <CardHeader>
                   <div className="flex items-start justify-between gap-2">
@@ -61,7 +62,7 @@ export default async function BidsPage() {
                   </CardContent>
                 )}
               </Card>
-            </a>
+            </Link>
           ))}
         </div>
       )}

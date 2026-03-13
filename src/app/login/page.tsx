@@ -1,8 +1,9 @@
+import Link from "next/link";
 import { signInAction } from "@/lib/actions";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { SubmitButton } from "@/components/submit-button";
 
 export default async function LoginPage({
   searchParams,
@@ -45,15 +46,13 @@ export default async function LoginPage({
                 required
               />
             </div>
-            <Button type="submit" className="w-full">
-              Sign in
-            </Button>
+            <SubmitButton className="w-full">Sign in</SubmitButton>
           </form>
           <p className="text-sm text-muted-foreground text-center mt-4">
             No account?{" "}
-            <a href="/signup" className="underline hover:text-foreground">
+            <Link href="/signup" className="underline hover:text-foreground">
               Sign up
-            </a>
+            </Link>
           </p>
         </CardContent>
       </Card>

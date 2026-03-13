@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import Link from "next/link";
 import "./globals.css";
 import { NavAuth } from "@/components/nav-auth";
 
@@ -22,16 +23,16 @@ export default function RootLayout({
         <div className="min-h-screen flex flex-col">
           <header className="border-b">
             <div className="container mx-auto flex h-14 items-center px-4">
-              <a href="/" className="font-bold text-lg">
+              <Link href="/" className="font-bold text-lg">
                 Mercer
-              </a>
+              </Link>
               <nav className="ml-auto flex items-center gap-4">
-                <a
+                <Link
                   href="/bids"
                   className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Bids
-                </a>
+                </Link>
                 <NavAuth />
               </nav>
             </div>

@@ -3,16 +3,28 @@
 import { redirect } from "next/navigation";
 import { createBid, updateBid, deleteBid } from "./store";
 import { createClient } from "./supabase/server";
+import {
+  signInSchema,
+  signUpSchema,
+  createBidSchema,
+  updateBidSchema,
+  deleteBidSchema,
+} from "./validations";
+
+function formDataToObject(formData: FormData) {
+  return Object.fromEntries(formData.entries());
+}
 
 export async function signInAction(formData: FormData) {
-  const email = formData.get("email") as string;
-  const password = formData.get("password") as string;
-  const supabase = await createClient();
+  const result = signInSchema.safeParse(formDataToObject(formData));
 
-  const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/login?error=${encodeURIComponent(message)}`);
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithPassword(result.data);
 
   if (error) {
     redirect(`/login?error=${encodeURIComponent(error.message)}`);
@@ -22,14 +34,15 @@ export async function signInAction(formData: FormData) {
 }
 
 export async function signUpAction(formData: FormData) {
-  const email = formData.get("email") as string;
-  const password = formData.get("password") as string;
-  const supabase = await createClient();
+  const result = signUpSchema.safeParse(formDataToObject(formData));
 
-  const { error } = await supabase.auth.signUp({
-    email,
-    password,
-  });
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/signup?error=${encodeURIComponent(message)}`);
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signUp(result.data);
 
   if (error) {
     redirect(`/signup?error=${encodeURIComponent(error.message)}`);
@@ -45,45 +58,38 @@ export async function signOutAction() {
 }
 
 export async function createBidAction(formData: FormData) {
-  const address = formData.get("address") as string;
-  const clientName = formData.get("clientName") as string;
-  const notes = (formData.get("notes") as string) || "";
+  const result = createBidSchema.safeParse(formDataToObject(formData));
 
-  if (!address || !clientName) {
-    throw new Error("Address and client name are required");
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/bids/new?error=${encodeURIComponent(message)}`);
   }
 
-  const bid = await createBid({
-    address,
-    clientName,
-    notes,
-  });
+  const bid = await createBid(result.data);
   redirect(`/bids/${bid.id}`);
 }
 
 export async function updateBidAction(formData: FormData) {
-  const id = formData.get("id") as string;
-  const address = formData.get("address") as string;
-  const clientName = formData.get("clientName") as string;
-  const notes = (formData.get("notes") as string) || "";
-  const status = formData.get("status") as string;
+  const result = updateBidSchema.safeParse(formDataToObject(formData));
 
-  if (!id || !address || !clientName) {
-    throw new Error("Missing required fields");
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    const id = formData.get("id") as string;
+    redirect(`/bids/${id}?error=${encodeURIComponent(message)}`);
   }
 
-  await updateBid(id, {
-    address,
-    clientName,
-    notes,
-    status: status as "draft" | "sent" | "won" | "lost",
-  });
-
+  const { id, ...data } = result.data;
+  await updateBid(id, data);
   redirect(`/bids/${id}`);
 }
 
 export async function deleteBidAction(formData: FormData) {
-  const id = formData.get("id") as string;
-  await deleteBid(id);
+  const result = deleteBidSchema.safeParse(formDataToObject(formData));
+
+  if (!result.success) {
+    redirect("/bids");
+  }
+
+  await deleteBid(result.data.id);
   redirect("/bids");
 }

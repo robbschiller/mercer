@@ -1,8 +1,9 @@
+import Link from "next/link";
 import { signUpAction } from "@/lib/actions";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { SubmitButton } from "@/components/submit-button";
 
 export default async function SignUpPage({
   searchParams,
@@ -43,15 +44,13 @@ export default async function SignUpPage({
                 required
               />
             </div>
-            <Button type="submit" className="w-full">
-              Sign up
-            </Button>
+            <SubmitButton className="w-full">Sign up</SubmitButton>
           </form>
           <p className="text-sm text-muted-foreground text-center mt-4">
             Already have an account?{" "}
-            <a href="/login" className="underline hover:text-foreground">
+            <Link href="/login" className="underline hover:text-foreground">
               Sign in
-            </a>
+            </Link>
           </p>
         </CardContent>
       </Card>

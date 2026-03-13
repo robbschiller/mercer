@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { signOutAction } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,7 @@ export async function NavAuth() {
   if (!user) {
     return (
       <Button variant="outline" size="sm" asChild>
-        <a href="/login">Sign in</a>
+        <Link href="/login">Sign in</Link>
       </Button>
     );
   }

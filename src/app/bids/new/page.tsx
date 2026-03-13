@@ -1,9 +1,11 @@
+import Link from "next/link";
 import { createBidAction } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { SubmitButton } from "@/components/submit-button";
 
 export default function NewBidPage() {
   return (
@@ -46,9 +48,9 @@ export default function NewBidPage() {
 
             <div className="flex gap-2 justify-end pt-2">
               <Button variant="outline" asChild>
-                <a href="/bids">Cancel</a>
+                <Link href="/bids">Cancel</Link>
               </Button>
-              <Button type="submit">Create bid</Button>
+              <SubmitButton>Create bid</SubmitButton>
             </div>
           </form>
         </CardContent>

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 export default function Home() {
@@ -13,7 +14,7 @@ export default function Home() {
         proposals&mdash;all before you leave the property.
       </p>
       <Button asChild size="lg">
-        <a href="/bids">Get started</a>
+        <Link href="/bids">Get started</Link>
       </Button>
     </div>
   );
