@@ -72,6 +72,18 @@ export const userDefaults = pgTable("user_defaults", {
     .defaultNow(),
 });
 
+export const proposals = pgTable("proposals", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  bidId: uuid("bid_id")
+    .notNull()
+    .references(() => bids.id, { onDelete: "cascade" }),
+  snapshot: jsonb("snapshot").notNull(),
+  pdfUrl: text("pdf_url").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const surfaces = pgTable("surfaces", {
   id: uuid("id").primaryKey().defaultRandom(),
   buildingId: uuid("building_id")

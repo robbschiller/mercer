@@ -120,3 +120,9 @@ export const updateUserDefaultsSchema = z.object({
   laborRatePerUnit: optionalNumeric,
   marginPercent: optionalNumeric,
 });
+
+// ── Proposals ──
+
+export const generateProposalSchema = z.object({
+  bidId: z.string().uuid("Invalid bid ID"),
+});

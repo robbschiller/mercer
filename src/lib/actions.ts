@@ -18,6 +18,8 @@ import {
   deleteLineItem,
   getUserDefaults,
   upsertUserDefaults,
+  getBidPageData,
+  createProposal,
 } from "./store";
 import { createClient } from "./supabase/server";
 import {
@@ -37,7 +39,10 @@ import {
   updateLineItemSchema,
   deleteLineItemSchema,
   updateUserDefaultsSchema,
+  generateProposalSchema,
 } from "./validations";
+import { calculateBidPricing } from "./pricing";
+import type { ProposalSnapshot } from "./pdf/types";
 
 function formDataToObject(formData: FormData) {
   return Object.fromEntries(formData.entries());
@@ -320,4 +325,94 @@ export async function updateUserDefaultsAction(data: {
 
   await upsertUserDefaults(result.data);
   return { error: null };
+}
+
+// ── Proposals ──
+
+export async function generateProposalAction(data: { bidId: string }) {
+  const result = generateProposalSchema.safeParse(data);
+
+  if (!result.success) {
+    return { error: result.error.issues[0]?.message ?? "Invalid input", pdfUrl: null };
+  }
+
+  const pageData = await getBidPageData(result.data.bidId);
+  if (!pageData) {
+    return { error: "Bid not found", pdfUrl: null };
+  }
+
+  const { bid, buildings, surfacesByBuilding, lineItems, totalSqft } = pageData;
+
+  const pricing = calculateBidPricing({
+    totalSqft,
+    coverageSqftPerGallon: bid.coverageSqftPerGallon
+      ? Number(bid.coverageSqftPerGallon)
+      : null,
+    pricePerGallon: bid.pricePerGallon ? Number(bid.pricePerGallon) : null,
+    laborRatePerUnit: bid.laborRatePerUnit
+      ? Number(bid.laborRatePerUnit)
+      : null,
+    marginPercent: bid.marginPercent ? Number(bid.marginPercent) : null,
+    lineItems: lineItems.map((li) => ({
+      name: li.name,
+      amount: Number(li.amount),
+    })),
+  });
+
+  if (!pricing.complete || pricing.grandTotal == null) {
+    return { error: "Pricing is incomplete. Fill in all pricing fields before generating a proposal.", pdfUrl: null };
+  }
+
+  const snapshot: ProposalSnapshot = {
+    propertyName: bid.propertyName,
+    address: bid.address,
+    clientName: bid.clientName,
+    notes: bid.notes,
+    buildings: buildings.map((b) => ({
+      label: b.label,
+      count: b.count,
+      totalSqft: b.totalSqft,
+      surfaces: (surfacesByBuilding[b.id] ?? []).map((s) => ({
+        name: s.name,
+        dimensions: s.dimensions,
+        totalSqft: Number(s.totalSqft ?? 0),
+      })),
+    })),
+    lineItems: lineItems.map((li) => ({
+      name: li.name,
+      amount: Number(li.amount),
+    })),
+    totalSqft,
+    grandTotal: pricing.grandTotal,
+    generatedAt: new Date().toISOString(),
+  };
+
+  const { generateProposalPdf } = await import("./pdf/generate");
+  const pdfBuffer = await generateProposalPdf(snapshot);
+
+  const supabase = await createClient();
+  const fileName = `${bid.id}/${Date.now()}.pdf`;
+  const { error: uploadError } = await supabase.storage
+    .from("proposals")
+    .upload(fileName, pdfBuffer, {
+      contentType: "application/pdf",
+      upsert: false,
+    });
+
+  if (uploadError) {
+    return { error: `Failed to upload PDF: ${uploadError.message}`, pdfUrl: null };
+  }
+
+  const { data: urlData } = supabase.storage
+    .from("proposals")
+    .getPublicUrl(fileName);
+
+  const proposal = await createProposal(
+    bid.id,
+    snapshot,
+    urlData.publicUrl
+  );
+
+  revalidatePath(`/bids/${bid.id}`);
+  return { error: null, pdfUrl: proposal.pdfUrl };
 }

@@ -6,21 +6,25 @@ Mercer is a web app for exterior renovation contractors bidding multifamily prop
 
 ## Current State
 
-Mercer is an early MVP. What's working today:
+Mercer is in active MVP development. What's working today:
 
-- **Auth** — Sign up and sign in with email or Google (via Supabase)
-- **Bid CRUD** — Create, list, view, edit, and delete bids
-- **Bid status tracking** — Draft, sent, won, lost
+- **Auth** — Sign up and sign in with email (via Supabase)
+- **Bids** — Create, list, view, edit, and delete bids with property name, address, client, notes, and status tracking (draft / sent / won / lost)
+- **Buildings** — Add building types to a bid with labels and counts (e.g. "Six unit 3-story x 25"). Expand/collapse to manage surfaces.
+- **Surfaces** — Add paintable surfaces per building with dimension factor input (e.g. "90 x 33" = 2,970 sqft). Surface presets for common names (Front, Back, Posts, Porch Ceilings, etc.). Running sqft totals per building and across the bid.
+- **Pricing engine** — Enter coverage (sqft/gal), price per gallon, labor rate ($/sqft), and margin (%). Live calculation shows gallons needed, material cost, labor cost, and grand total as you type.
+- **Custom line items** — Add per-bid costs like pressure washing, dumpster rental, or scaffolding.
+- **Company defaults** — Pricing inputs save back to user defaults automatically. New bids inherit the latest defaults. Optional settings page for direct adjustment.
+- **Error handling** — Loading skeletons, error boundaries, and not-found pages throughout.
+- **Analytics** — Vercel Web Analytics
 
-What's planned but not yet built:
+What's planned next:
 
-- Building types and measurement templates (garden-style, stacked flat, townhome, breezeway)
-- Specs and pricing engine (materials, labor, margin)
-- Scope flags (breezeways, patio ceilings, catwalks)
-- Proposal PDF generation
-- EagleView aerial measurement integration
+- Proposal PDF generation with per-building breakdowns
+- Mobile responsiveness polish
+- Drag-to-reorder buildings and surfaces
 
-See `docs/` for the full product plan, build plan, and EagleView integration design.
+See `docs/` for the full product plan and build plan.
 
 ## Tech Stack
 
@@ -31,7 +35,10 @@ See `docs/` for the full product plan, build plan, and EagleView integration des
 | Database  | PostgreSQL via Supabase              |
 | ORM       | Drizzle ORM                          |
 | Auth      | Supabase Auth                        |
+| Validation| Zod                                  |
+| Analytics | Vercel Web Analytics                 |
 | Language  | TypeScript                           |
+| Hosting   | Vercel                               |
 
 ## Getting Started
 
@@ -44,7 +51,7 @@ See `docs/` for the full product plan, build plan, and EagleView integration des
 ### 1. Clone and install
 
 ```sh
-git clone <repo-url>
+git clone https://github.com/robbschiller/mercer.git
 cd mercer
 bun install
 ```
@@ -71,7 +78,7 @@ You'll need three values from your Supabase project dashboard:
 bun run db:push
 ```
 
-This uses Drizzle Kit to create the `bids` table in your Supabase Postgres instance.
+This uses Drizzle Kit to create the tables (`bids`, `buildings`, `surfaces`, `line_items`, `user_defaults`) in your Supabase Postgres instance.
 
 ### 4. Run the dev server
 
@@ -96,23 +103,38 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ```
 src/
-├── app/                    # Next.js App Router pages and routes
-│   ├── auth/callback/      # OAuth redirect handler
-│   ├── bids/               # Bid list, create, and detail pages
-│   ├── login/              # Login page
-│   └── signup/             # Signup page
+├── app/                         # Next.js App Router pages
+│   ├── auth/callback/           # OAuth redirect handler
+│   ├── bids/                    # Bid list, create, and detail pages
+│   │   ├── [id]/                # Bid detail with buildings, surfaces, pricing
+│   │   └── new/                 # New bid form
+│   ├── login/                   # Login page
+│   ├── settings/                # Company pricing defaults
+│   └── signup/                  # Signup page
 ├── components/
-│   ├── ui/                 # Reusable UI components (shadcn/Radix)
-│   └── nav-auth.tsx        # Header auth controls
+│   ├── ui/                      # Reusable primitives (button, card, input, etc.)
+│   ├── bid-summary.tsx          # Editable bid header
+│   ├── building-list.tsx        # Buildings section with grand total
+│   ├── building-card.tsx        # Expandable building with surfaces
+│   ├── pricing-section.tsx      # Pricing form + line items
+│   ├── pricing-form.tsx         # Rate inputs with live calculation
+│   ├── line-item-list.tsx       # Custom line items CRUD
+│   ├── dimension-input.tsx      # Factor-group dimension entry
+│   ├── surface-presets.tsx      # Common surface name dropdown
+│   ├── defaults-form.tsx        # Settings page defaults form
+│   └── ...                      # Add/edit forms, submit button, nav
 ├── db/
-│   ├── schema.ts           # Drizzle table definitions
-│   └── index.ts            # Database client
+│   ├── schema.ts                # Drizzle table definitions
+│   └── index.ts                 # Database client (singleton)
 └── lib/
-    ├── actions.ts          # Server actions (auth, bid CRUD)
-    ├── store.ts            # Data access layer
-    └── supabase/           # Supabase client helpers and middleware
+    ├── actions.ts               # Server actions (auth, CRUD, pricing)
+    ├── store.ts                 # Data access layer
+    ├── validations.ts           # Zod schemas for all inputs
+    ├── pricing.ts               # Pricing calculation engine
+    ├── dimensions.ts            # Sqft computation from dimension groups
+    └── supabase/                # Supabase client helpers and middleware
 docs/
-├── product-plan.md         # Market analysis and phased product plan
-├── build-plan.md           # MVP implementation roadmap
-└── eagleview-integration-plan.md
+├── product-plan.md              # Market analysis and phased product plan
+├── build-plan.md                # MVP implementation roadmap
+└── build-plans/                 # Detailed feature build plans
 ```

@@ -2,12 +2,20 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getBidPageData } from "@/lib/store";
 import { deleteBidAction } from "@/lib/actions";
+import { calculateBidPricing } from "@/lib/pricing";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/card";
 import { SubmitButton } from "@/components/submit-button";
 import { BidSummary } from "@/components/bid-summary";
 import { BuildingList } from "@/components/building-list";
 import { PricingSection } from "@/components/pricing-section";
+import { ProposalList } from "@/components/proposal-list";
 
 export default async function BidPage({
   params,
@@ -21,7 +29,24 @@ export default async function BidPage({
     notFound();
   }
 
-  const { bid, buildings, surfacesByBuilding, lineItems, totalSqft } = data;
+  const { bid, buildings, surfacesByBuilding, lineItems, totalSqft, proposals } =
+    data;
+
+  const pricing = calculateBidPricing({
+    totalSqft,
+    coverageSqftPerGallon: bid.coverageSqftPerGallon
+      ? Number(bid.coverageSqftPerGallon)
+      : null,
+    pricePerGallon: bid.pricePerGallon ? Number(bid.pricePerGallon) : null,
+    laborRatePerUnit: bid.laborRatePerUnit
+      ? Number(bid.laborRatePerUnit)
+      : null,
+    marginPercent: bid.marginPercent ? Number(bid.marginPercent) : null,
+    lineItems: lineItems.map((li) => ({
+      name: li.name,
+      amount: Number(li.amount),
+    })),
+  });
 
   return (
     <div className="container mx-auto max-w-2xl px-4 py-8 flex flex-col gap-6">
@@ -44,6 +69,22 @@ export default async function BidPage({
         lineItems={lineItems}
         totalSqft={totalSqft}
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Proposals</CardTitle>
+          <CardDescription>
+            Generate a client-facing PDF proposal from this bid.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ProposalList
+            proposals={proposals}
+            bidId={bid.id}
+            pricingComplete={pricing.complete}
+          />
+        </CardContent>
+      </Card>
 
       <Card className="border-destructive/50">
         <CardContent className="flex items-center justify-between pt-6">

@@ -34,11 +34,12 @@ This document translates the [product plan](product-plan.md) into a concrete imp
 ### Core entities
 
 - **User** — contractor/company (Supabase Auth).
-- **Bid** — one property/job. Fields: address, client name, notes, status (draft / sent / won / lost).
+- **Bid** — one property/job. Fields: property name, address, client name, notes, status (draft / sent / won / lost), pricing inputs (coverage sqft/gallon, price/gallon, labor rate/sqft, margin %).
 - **Building** — one logical building (or structure) in a bid. Fields: label (free text, e.g. "Six unit 3-story", "Parking covers"), count (how many identical, e.g. 25), sort order.
-- **Surface** — one paintable surface on a building. Fields: name (free text, e.g. "Front", "Porch Ceilings", "Posts"), dimensions or raw square footage, computed total sq ft. Stored as rows per building, not fixed columns — because every property has a different surface mix.
-- **Spec** — product system (e.g. Sherwin-Williams line), coverage rate (sq ft/gallon), price per gallon; optionally substrate-specific.
-- **Proposal** — snapshot of bid + buildings + surfaces + pricing at time of generation; links to PDF.
+- **Surface** — one paintable surface on a building. Fields: name (free text, e.g. "Front", "Porch Ceilings", "Posts"), dimensions (jsonb array of factor groups), computed total sq ft. Stored as rows per building, not fixed columns — because every property has a different surface mix.
+- **Line Item** — custom add-on cost on a bid (e.g. pressure washing, dumpster rental, scaffolding). Fields: name, amount.
+- **User Defaults** — single row per user storing default pricing inputs (coverage, price/gallon, labor rate, margin). Populated bidirectionally: seeded from the first bid's pricing, carried forward to new bids.
+- **Proposal** *(not yet built)* — snapshot of bid + buildings + surfaces + pricing at time of generation; links to PDF.
 
 ### Why flexible surfaces instead of fixed templates
 
@@ -52,8 +53,9 @@ A rigid template that says "garden-style = these 8 surfaces" would break on most
 ### Key relationships
 
 - Bid → many Buildings → many Surfaces.
-- Bid → one active Spec (or spec per surface type, later).
-- Labor: per-unit rate × unit count; formula in app logic, stored on bid or as company defaults.
+- Bid → many Line Items.
+- User → one User Defaults row.
+- Pricing inputs (coverage, price/gallon, labor rate, margin) live directly on each bid. No separate Spec table for MVP — keeps things simple. Per-surface specs can be added later.
 
 ### Dimension input model
 

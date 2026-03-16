@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { bids, buildings, surfaces, lineItems, userDefaults } from "@/db/schema";
+import { bids, buildings, surfaces, lineItems, userDefaults, proposals } from "@/db/schema";
 import { eq, desc, and, asc, sql } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
 import { computeTotalSqft } from "@/lib/dimensions";
@@ -9,6 +9,7 @@ export type Building = typeof buildings.$inferSelect;
 export type Surface = typeof surfaces.$inferSelect;
 export type LineItem = typeof lineItems.$inferSelect;
 export type UserDefault = typeof userDefaults.$inferSelect;
+export type Proposal = typeof proposals.$inferSelect;
 
 async function requireUser() {
   const supabase = await createClient();
@@ -122,7 +123,7 @@ export async function getBuildingsForBid(bidId: string) {
 export async function getBidPageData(bidId: string) {
   const user = await requireUser();
 
-  const [bidRows, buildingRows, surfaceRows, lineItemRows, sqftRows] =
+  const [bidRows, buildingRows, surfaceRows, lineItemRows, sqftRows, proposalRows] =
     await Promise.all([
       db
         .select()
@@ -159,6 +160,11 @@ export async function getBidPageData(bidId: string) {
         .from(surfaces)
         .innerJoin(buildings, eq(surfaces.buildingId, buildings.id))
         .where(eq(buildings.bidId, bidId)),
+      db
+        .select()
+        .from(proposals)
+        .where(eq(proposals.bidId, bidId))
+        .orderBy(desc(proposals.createdAt)),
     ]);
 
   const bid = bidRows[0] ?? null;
@@ -184,6 +190,7 @@ export async function getBidPageData(bidId: string) {
     surfacesByBuilding,
     lineItems: lineItemRows,
     totalSqft: Number(sqftRows[0]?.total ?? 0),
+    proposals: proposalRows,
   };
 }
 
@@ -496,5 +503,29 @@ export async function upsertUserDefaults(
     })
     .returning();
 
+  return rows[0];
+}
+
+// ── Proposals ──
+
+export async function getProposalsForBid(bidId: string) {
+  await requireBidOwnership(bidId);
+  return db
+    .select()
+    .from(proposals)
+    .where(eq(proposals.bidId, bidId))
+    .orderBy(desc(proposals.createdAt));
+}
+
+export async function createProposal(
+  bidId: string,
+  snapshot: unknown,
+  pdfUrl: string
+) {
+  await requireBidOwnership(bidId);
+  const rows = await db
+    .insert(proposals)
+    .values({ bidId, snapshot, pdfUrl })
+    .returning();
   return rows[0];
 }
