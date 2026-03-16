@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { bids, buildings, surfaces } from "@/db/schema";
+import { bids, buildings, surfaces, lineItems, userDefaults } from "@/db/schema";
 import { eq, desc, and, asc, sql } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
 import { computeTotalSqft } from "@/lib/dimensions";
@@ -7,6 +7,8 @@ import { computeTotalSqft } from "@/lib/dimensions";
 export type Bid = typeof bids.$inferSelect;
 export type Building = typeof buildings.$inferSelect;
 export type Surface = typeof surfaces.$inferSelect;
+export type LineItem = typeof lineItems.$inferSelect;
+export type UserDefault = typeof userDefaults.$inferSelect;
 
 async function requireUser() {
   const supabase = await createClient();
@@ -271,4 +273,160 @@ export async function deleteSurface(id: string) {
     .where(eq(bids.id, rows[0].bidId));
 
   return true;
+}
+
+// ── Bid Pricing ──
+
+export async function updateBidPricing(
+  id: string,
+  data: Partial<
+    Pick<
+      Bid,
+      | "coverageSqftPerGallon"
+      | "pricePerGallon"
+      | "laborRatePerUnit"
+      | "marginPercent"
+    >
+  >
+) {
+  const user = await requireUser();
+  const rows = await db
+    .update(bids)
+    .set({ ...data, updatedAt: new Date() })
+    .where(and(eq(bids.id, id), eq(bids.userId, user.id)))
+    .returning();
+  return rows[0] ?? null;
+}
+
+export async function getBidTotalSqft(bidId: string): Promise<number> {
+  const rows = await db
+    .select({
+      total: sql<number>`coalesce(sum(${surfaces.totalSqft}::numeric * ${buildings.count}), 0)`,
+    })
+    .from(surfaces)
+    .innerJoin(buildings, eq(surfaces.buildingId, buildings.id))
+    .where(eq(buildings.bidId, bidId));
+  return Number(rows[0]?.total ?? 0);
+}
+
+// ── Line Items ──
+
+export async function getLineItemsForBid(bidId: string) {
+  await requireBidOwnership(bidId);
+  return db
+    .select()
+    .from(lineItems)
+    .where(eq(lineItems.bidId, bidId))
+    .orderBy(asc(lineItems.sortOrder), asc(lineItems.createdAt));
+}
+
+export async function createLineItem(
+  bidId: string,
+  data: { name: string; amount: string }
+) {
+  await requireBidOwnership(bidId);
+
+  const maxOrder = await db
+    .select({ max: sql<number>`coalesce(max(${lineItems.sortOrder}), -1)` })
+    .from(lineItems)
+    .where(eq(lineItems.bidId, bidId));
+
+  const rows = await db
+    .insert(lineItems)
+    .values({
+      bidId,
+      name: data.name,
+      amount: data.amount,
+      sortOrder: (maxOrder[0]?.max ?? -1) + 1,
+    })
+    .returning();
+
+  await db
+    .update(bids)
+    .set({ updatedAt: new Date() })
+    .where(eq(bids.id, bidId));
+
+  return rows[0];
+}
+
+export async function updateLineItem(
+  id: string,
+  data: { name?: string; amount?: string }
+) {
+  const existing = await db
+    .select({ bidId: lineItems.bidId })
+    .from(lineItems)
+    .where(eq(lineItems.id, id))
+    .limit(1);
+
+  if (!existing[0]) throw new Error("Line item not found");
+
+  const rows = await db
+    .update(lineItems)
+    .set(data)
+    .where(eq(lineItems.id, id))
+    .returning();
+
+  await db
+    .update(bids)
+    .set({ updatedAt: new Date() })
+    .where(eq(bids.id, existing[0].bidId));
+
+  return rows[0] ?? null;
+}
+
+export async function deleteLineItem(id: string) {
+  const existing = await db
+    .select({ bidId: lineItems.bidId })
+    .from(lineItems)
+    .where(eq(lineItems.id, id))
+    .limit(1);
+
+  if (!existing[0]) throw new Error("Line item not found");
+
+  await db.delete(lineItems).where(eq(lineItems.id, id));
+
+  await db
+    .update(bids)
+    .set({ updatedAt: new Date() })
+    .where(eq(bids.id, existing[0].bidId));
+
+  return true;
+}
+
+// ── User Defaults ──
+
+export async function getUserDefaults() {
+  const user = await requireUser();
+  const rows = await db
+    .select()
+    .from(userDefaults)
+    .where(eq(userDefaults.userId, user.id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertUserDefaults(
+  data: Partial<
+    Pick<
+      UserDefault,
+      | "coverageSqftPerGallon"
+      | "pricePerGallon"
+      | "laborRatePerUnit"
+      | "marginPercent"
+    >
+  >
+) {
+  const user = await requireUser();
+
+  const rows = await db
+    .insert(userDefaults)
+    .values({ userId: user.id, ...data, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: userDefaults.userId,
+      set: { ...data, updatedAt: new Date() },
+    })
+    .returning();
+
+  return rows[0];
 }

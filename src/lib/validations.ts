@@ -73,3 +73,50 @@ export const deleteSurfaceSchema = z.object({
   id: z.string().uuid("Invalid surface ID"),
   bidId: z.string().uuid("Invalid bid ID"),
 });
+
+// ── Pricing ──
+
+const optionalNumeric = z
+  .union([z.string(), z.number(), z.null()])
+  .transform((v) => {
+    if (v === null || v === "" || v === undefined) return null;
+    const n = Number(v);
+    return isNaN(n) ? null : String(n);
+  });
+
+export const updateBidPricingSchema = z.object({
+  id: z.string().uuid("Invalid bid ID"),
+  coverageSqftPerGallon: optionalNumeric,
+  pricePerGallon: optionalNumeric,
+  laborRatePerUnit: optionalNumeric,
+  marginPercent: optionalNumeric,
+});
+
+// ── Line Items ──
+
+export const createLineItemSchema = z.object({
+  bidId: z.string().uuid("Invalid bid ID"),
+  name: z.string().min(1, "Name is required"),
+  amount: z.coerce.number({ message: "Amount must be a number" }).transform(String),
+});
+
+export const updateLineItemSchema = z.object({
+  id: z.string().uuid("Invalid line item ID"),
+  bidId: z.string().uuid("Invalid bid ID"),
+  name: z.string().min(1, "Name is required"),
+  amount: z.coerce.number({ message: "Amount must be a number" }).transform(String),
+});
+
+export const deleteLineItemSchema = z.object({
+  id: z.string().uuid("Invalid line item ID"),
+  bidId: z.string().uuid("Invalid bid ID"),
+});
+
+// ── User Defaults ──
+
+export const updateUserDefaultsSchema = z.object({
+  coverageSqftPerGallon: optionalNumeric,
+  pricePerGallon: optionalNumeric,
+  laborRatePerUnit: optionalNumeric,
+  marginPercent: optionalNumeric,
+});

@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { SubmitButton } from "@/components/submit-button";
 import { BidSummary } from "@/components/bid-summary";
 import { BuildingList } from "@/components/building-list";
+import { PricingSection } from "@/components/pricing-section";
 
 export default async function BidPage({
   params,
@@ -31,6 +32,8 @@ export default async function BidPage({
       <BidSummary bid={bid} />
 
       <BuildingList bidId={bid.id} />
+
+      <PricingSection bidId={bid.id} />
 
       <Card className="border-destructive/50">
         <CardContent className="flex items-center justify-between pt-6">

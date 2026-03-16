@@ -20,6 +20,10 @@ export const bids = pgTable("bids", {
   })
     .notNull()
     .default("draft"),
+  coverageSqftPerGallon: numeric("coverage_sqft_per_gallon"),
+  pricePerGallon: numeric("price_per_gallon"),
+  laborRatePerUnit: numeric("labor_rate_per_unit"),
+  marginPercent: numeric("margin_percent").default("0"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -39,6 +43,30 @@ export const buildings = pgTable("buildings", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const lineItems = pgTable("line_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  bidId: uuid("bid_id")
+    .notNull()
+    .references(() => bids.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  amount: numeric("amount").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const userDefaults = pgTable("user_defaults", {
+  userId: uuid("user_id").primaryKey(),
+  coverageSqftPerGallon: numeric("coverage_sqft_per_gallon"),
+  pricePerGallon: numeric("price_per_gallon"),
+  laborRatePerUnit: numeric("labor_rate_per_unit"),
+  marginPercent: numeric("margin_percent"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

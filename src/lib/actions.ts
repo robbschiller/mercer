@@ -12,6 +12,12 @@ import {
   createSurface,
   updateSurface,
   deleteSurface,
+  updateBidPricing,
+  createLineItem,
+  updateLineItem,
+  deleteLineItem,
+  getUserDefaults,
+  upsertUserDefaults,
 } from "./store";
 import { createClient } from "./supabase/server";
 import {
@@ -26,6 +32,11 @@ import {
   createSurfaceSchema,
   updateSurfaceSchema,
   deleteSurfaceSchema,
+  updateBidPricingSchema,
+  createLineItemSchema,
+  updateLineItemSchema,
+  deleteLineItemSchema,
+  updateUserDefaultsSchema,
 } from "./validations";
 
 function formDataToObject(formData: FormData) {
@@ -87,6 +98,17 @@ export async function createBidAction(formData: FormData) {
   }
 
   const bid = await createBid(result.data);
+
+  const defaults = await getUserDefaults();
+  if (defaults) {
+    await updateBidPricing(bid.id, {
+      coverageSqftPerGallon: defaults.coverageSqftPerGallon,
+      pricePerGallon: defaults.pricePerGallon,
+      laborRatePerUnit: defaults.laborRatePerUnit,
+      marginPercent: defaults.marginPercent,
+    });
+  }
+
   redirect(`/bids/${bid.id}`);
 }
 
@@ -204,4 +226,98 @@ export async function deleteSurfaceAction(data: {
 
   await deleteSurface(result.data.id);
   revalidatePath(`/bids/${result.data.bidId}`);
+}
+
+// ── Pricing ──
+
+export async function updateBidPricingAction(data: {
+  id: string;
+  coverageSqftPerGallon: string | number | null;
+  pricePerGallon: string | number | null;
+  laborRatePerUnit: string | number | null;
+  marginPercent: string | number | null;
+}) {
+  const result = updateBidPricingSchema.safeParse(data);
+
+  if (!result.success) {
+    return { error: result.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  const { id, ...pricingData } = result.data;
+  await updateBidPricing(id, pricingData);
+
+  // Upsert back to user defaults so future bids inherit these values
+  await upsertUserDefaults(pricingData);
+
+  revalidatePath(`/bids/${id}`);
+  return { error: null };
+}
+
+// ── Line Items ──
+
+export async function createLineItemAction(data: {
+  bidId: string;
+  name: string;
+  amount: string | number;
+}) {
+  const result = createLineItemSchema.safeParse(data);
+
+  if (!result.success) {
+    return { error: result.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  const { bidId, ...itemData } = result.data;
+  await createLineItem(bidId, itemData);
+  revalidatePath(`/bids/${bidId}`);
+  return { error: null };
+}
+
+export async function updateLineItemAction(data: {
+  id: string;
+  bidId: string;
+  name: string;
+  amount: string | number;
+}) {
+  const result = updateLineItemSchema.safeParse(data);
+
+  if (!result.success) {
+    return { error: result.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  const { id, bidId, ...itemData } = result.data;
+  await updateLineItem(id, itemData);
+  revalidatePath(`/bids/${bidId}`);
+  return { error: null };
+}
+
+export async function deleteLineItemAction(data: {
+  id: string;
+  bidId: string;
+}) {
+  const result = deleteLineItemSchema.safeParse(data);
+
+  if (!result.success) {
+    return;
+  }
+
+  await deleteLineItem(result.data.id);
+  revalidatePath(`/bids/${result.data.bidId}`);
+}
+
+// ── User Defaults ──
+
+export async function updateUserDefaultsAction(data: {
+  coverageSqftPerGallon: string | number | null;
+  pricePerGallon: string | number | null;
+  laborRatePerUnit: string | number | null;
+  marginPercent: string | number | null;
+}) {
+  const result = updateUserDefaultsSchema.safeParse(data);
+
+  if (!result.success) {
+    return { error: result.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  await upsertUserDefaults(result.data);
+  return { error: null };
 }

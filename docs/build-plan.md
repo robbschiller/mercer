@@ -81,34 +81,32 @@ Each surface supports:
 - [x] Client-side navigation (next/link).
 - [x] Vercel Web Analytics.
 
-### 2. Buildings and surfaces (next up)
+### 2. Buildings and surfaces — COMPLETE ✅
 
-**Schema:**
-- [ ] `buildings` table: bid_id, label (text), count (integer, default 1), sort_order, created/updated timestamps.
-- [ ] `surfaces` table: building_id, name (text), dimensions (jsonb — array of dimension groups), total_sqft (numeric, computed), sort_order.
-
-**UI:**
-- [ ] Add building to bid: label + count. "Add building" button on bid detail page replaces the placeholder.
-- [ ] Building card on bid detail: shows label, count, total sq ft, expand/collapse for surfaces.
-- [ ] Add surface to building: name input + dimension input (support factor multiplication and raw sq ft).
-- [ ] Surface presets: "Common surfaces" dropdown that pre-populates typical surface names (Front, Back, Side A, Side B, Posts, Porch Ceilings, etc.) — user can add/remove/rename freely.
-- [ ] Reorder buildings and surfaces (drag or up/down arrows).
-- [ ] Running total: sum sq ft per building (× count), sum across all buildings on the bid.
-- [ ] Delete building, delete surface.
+- [x] `buildings` table: bid_id, label (text), count (integer, default 1), sort_order, created/updated timestamps.
+- [x] `surfaces` table: building_id, name (text), dimensions (jsonb — array of dimension groups), total_sqft (numeric, computed), sort_order.
+- [x] Add building to bid: label + count. "Add building" button on bid detail page.
+- [x] Building card on bid detail: shows label, count, total sq ft, expand/collapse for surfaces.
+- [x] Add surface to building: name input + dimension input (factor multiplication and raw sq ft).
+- [x] Surface presets: "Common surfaces" dropdown that pre-populates typical surface names.
+- [x] Running total: sum sq ft per building (× count), sum across all buildings on the bid.
+- [x] Delete building, delete surface.
+- [ ] Reorder buildings and surfaces (drag or up/down arrows). *(deferred)*
 
 **Milestone:** Contractor can walk a property, add buildings with counts, enter surfaces with dimensions, and see total square footage per building and for the whole bid — matching the format of Rob's phone notes but computed automatically.
 
-### 3. Specs and pricing engine
+### 3. Specs and pricing engine — COMPLETE ✅
 
-- [ ] `specs` table: name, coverage_sqft_per_gallon, price_per_gallon; optional substrate field.
-- [ ] Bid links to one spec (or one per surface type in a later iteration).
-- [ ] Material calculation: total sq ft ÷ coverage = gallons needed; gallons × price = material cost.
-- [ ] Labor model: per-unit rate × total unit count (from building counts); store rate on bid or as user default.
-- [ ] Margin: percentage markup on materials + labor.
-- [ ] Live bid total: materials + labor + margin; shown on bid detail and per-building.
-- [ ] Company defaults: save last-used spec and labor rate for next bid.
+- [x] Pricing columns on bids: coverage_sqft_per_gallon, price_per_gallon, labor_rate_per_unit, margin_percent.
+- [x] Material calculation: total sq ft ÷ coverage = gallons needed; gallons × price = material cost.
+- [x] Labor model: labor rate × total sq ft.
+- [x] Margin: percentage markup on materials + labor + line items.
+- [x] Custom line items: per-bid add-on costs (e.g. pressure washing, dumpster rental).
+- [x] Live bid total: materials + labor + line items + margin; updates in real time as inputs change.
+- [x] Company defaults: bidirectional — pricing saved on any bid writes back to user defaults; new bids auto-populate from defaults.
+- [x] Settings page: optional page to view/adjust defaults directly.
 
-**Milestone:** Bid detail page shows a dollar amount. Changing any measurement, count, spec, or rate updates the total in real time.
+**Milestone:** Bid detail page shows a dollar amount. Changing any measurement, count, rate, or line item updates the total in real time.
 
 ### 4. Proposal PDF
 

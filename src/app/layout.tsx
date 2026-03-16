@@ -34,6 +34,12 @@ export default function RootLayout({
                 >
                   Bids
                 </Link>
+                <Link
+                  href="/settings"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Settings
+                </Link>
                 <NavAuth />
               </nav>
             </div>
