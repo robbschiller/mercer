@@ -23,7 +23,7 @@ This document translates the [product plan](product-plan.md) into a concrete imp
 | **Auth** | Supabase Auth |
 | **UI** | shadcn/ui (Radix primitives + Tailwind 4) |
 | **Validation** | Zod |
-| **PDF** | TBD — React-PDF, Puppeteer, or PDFKit |
+| **PDF** | @react-pdf/renderer |
 | **Hosting** | Vercel |
 | **Analytics** | Vercel Web Analytics |
 
@@ -39,7 +39,7 @@ This document translates the [product plan](product-plan.md) into a concrete imp
 - **Surface** — one paintable surface on a building. Fields: name (free text, e.g. "Front", "Porch Ceilings", "Posts"), dimensions (jsonb array of factor groups), computed total sq ft. Stored as rows per building, not fixed columns — because every property has a different surface mix.
 - **Line Item** — custom add-on cost on a bid (e.g. pressure washing, dumpster rental, scaffolding). Fields: name, amount.
 - **User Defaults** — single row per user storing default pricing inputs (coverage, price/gallon, labor rate, margin). Populated bidirectionally: seeded from the first bid's pricing, carried forward to new bids.
-- **Proposal** *(not yet built)* — snapshot of bid + buildings + surfaces + pricing at time of generation; links to PDF.
+- **Proposal** — frozen snapshot of bid + buildings + surfaces + pricing at time of PDF generation. Stored alongside a link to the PDF in Supabase Storage. Client-facing: shows property info, per-building sqft breakdown, scope, and total price without exposing cost structure.
 
 ### Why flexible surfaces instead of fixed templates
 
@@ -110,13 +110,15 @@ Each surface supports:
 
 **Milestone:** Bid detail page shows a dollar amount. Changing any measurement, count, rate, or line item updates the total in real time.
 
-### 4. Proposal PDF
+### 4. Proposal PDF — COMPLETE ✅
 
-- [ ] `proposals` table: bid_id, snapshot (jsonb — frozen copy of bid + buildings + surfaces + pricing), pdf_url, created_at.
-- [ ] Layout: cover page (address, client, date, contractor), per-building table (label, count, surfaces with sq ft, cost), totals summary (materials, labor, margin, grand total), scope notes.
-- [ ] Generate PDF server-side; store in Supabase Storage or similar.
-- [ ] Download button on bid detail page.
-- [ ] Optional: share via email or link.
+- [x] `proposals` table: bid_id, snapshot (jsonb — frozen copy of bid + buildings + surfaces + pricing), pdf_url, created_at.
+- [x] Client-facing layout: property info, per-building table (label, count, surfaces with dimensions and sqft), total area, scope section (auto-generated from surface names), additional items (line item names only), total price. Does NOT expose material costs, labor rates, or margin.
+- [x] Server-side PDF generation via `@react-pdf/renderer` (`renderToBuffer`). Dynamic import to avoid bundling the library on every page.
+- [x] PDF stored in Supabase Storage (`proposals` bucket). Public download URL.
+- [x] "Generate Proposal" button on bid detail page (disabled when pricing is incomplete).
+- [x] Proposal history list with date and download link for each previously generated proposal.
+- [ ] Share via email or link. *(deferred)*
 
 **Milestone:** Contractor generates a professional PDF with per-building breakdowns that "shows we did our homework."
 

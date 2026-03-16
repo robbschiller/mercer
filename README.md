@@ -2,11 +2,11 @@
 
 Bid multifamily exteriors from the parking lot.
 
-Mercer is a web app for exterior renovation contractors bidding multifamily properties. Instead of measuring with a tape and re-entering everything into a spreadsheet at home, Mercer lets you create bids on-site — log measurements per building type, calculate materials and labor, and generate proposals before you leave the property.
+Mercer is a web app for exterior renovation contractors bidding multifamily properties. Instead of measuring with a tape and re-entering everything into a spreadsheet at home, Mercer lets you create bids on-site — log measurements per building type, calculate materials and labor, and generate a proposal PDF before you leave the property.
 
 ## Current State
 
-Mercer is in active MVP development. What's working today:
+Mercer is a working MVP with the full bid-to-proposal workflow complete:
 
 - **Auth** — Sign up and sign in with email (via Supabase)
 - **Bids** — Create, list, view, edit, and delete bids with property name, address, client, notes, and status tracking (draft / sent / won / lost)
@@ -15,12 +15,13 @@ Mercer is in active MVP development. What's working today:
 - **Pricing engine** — Enter coverage (sqft/gal), price per gallon, labor rate ($/sqft), and margin (%). Live calculation shows gallons needed, material cost, labor cost, and grand total as you type.
 - **Custom line items** — Add per-bid costs like pressure washing, dumpster rental, or scaffolding.
 - **Company defaults** — Pricing inputs save back to user defaults automatically. New bids inherit the latest defaults. Optional settings page for direct adjustment.
+- **Proposal PDF** — Generate a client-facing PDF with property info, per-building sqft breakdown, scope, and total price. Each proposal is stored with a frozen snapshot so edits to the bid don't change what was sent. Download previous proposals from the bid detail page.
 - **Error handling** — Loading skeletons, error boundaries, and not-found pages throughout.
 - **Analytics** — Vercel Web Analytics
 
 What's planned next:
 
-- Proposal PDF generation with per-building breakdowns
+- Share proposals via email or link
 - Mobile responsiveness polish
 - Drag-to-reorder buildings and surfaces
 
@@ -36,6 +37,8 @@ See `docs/` for the full product plan and build plan.
 | ORM       | Drizzle ORM                          |
 | Auth      | Supabase Auth                        |
 | Validation| Zod                                  |
+| PDF       | @react-pdf/renderer                  |
+| Storage   | Supabase Storage                     |
 | Analytics | Vercel Web Analytics                 |
 | Language  | TypeScript                           |
 | Hosting   | Vercel                               |
@@ -46,7 +49,7 @@ See `docs/` for the full product plan and build plan.
 
 - [Node.js](https://nodejs.org/) (v18+)
 - [Bun](https://bun.sh/) (package manager)
-- A [Supabase](https://supabase.com/) project (provides PostgreSQL and auth)
+- A [Supabase](https://supabase.com/) project (provides PostgreSQL, auth, and storage)
 
 ### 1. Clone and install
 
@@ -78,9 +81,17 @@ You'll need three values from your Supabase project dashboard:
 bun run db:push
 ```
 
-This uses Drizzle Kit to create the tables (`bids`, `buildings`, `surfaces`, `line_items`, `user_defaults`) in your Supabase Postgres instance.
+This uses Drizzle Kit to create the tables (`bids`, `buildings`, `surfaces`, `line_items`, `user_defaults`, `proposals`) in your Supabase Postgres instance.
 
-### 4. Run the dev server
+### 4. Set up Supabase Storage
+
+In your Supabase dashboard:
+
+1. Go to **Storage** and create a bucket named `proposals` (toggle **Public bucket** on)
+2. Add an **INSERT** policy for `authenticated` users with check: `bucket_id = 'proposals'`
+3. Add a **SELECT** policy for `anon, authenticated` with using: `bucket_id = 'proposals'`
+
+### 5. Run the dev server
 
 ```sh
 bun run dev
@@ -106,7 +117,7 @@ src/
 ├── app/                         # Next.js App Router pages
 │   ├── auth/callback/           # OAuth redirect handler
 │   ├── bids/                    # Bid list, create, and detail pages
-│   │   ├── [id]/                # Bid detail with buildings, surfaces, pricing
+│   │   ├── [id]/                # Bid detail with buildings, surfaces, pricing, proposals
 │   │   └── new/                 # New bid form
 │   ├── login/                   # Login page
 │   ├── settings/                # Company pricing defaults
@@ -119,6 +130,7 @@ src/
 │   ├── pricing-section.tsx      # Pricing form + line items
 │   ├── pricing-form.tsx         # Rate inputs with live calculation
 │   ├── line-item-list.tsx       # Custom line items CRUD
+│   ├── proposal-list.tsx        # Proposal generation + history
 │   ├── dimension-input.tsx      # Factor-group dimension entry
 │   ├── surface-presets.tsx      # Common surface name dropdown
 │   ├── defaults-form.tsx        # Settings page defaults form
@@ -127,11 +139,15 @@ src/
 │   ├── schema.ts                # Drizzle table definitions
 │   └── index.ts                 # Database client (singleton)
 └── lib/
-    ├── actions.ts               # Server actions (auth, CRUD, pricing)
+    ├── actions.ts               # Server actions (auth, CRUD, pricing, proposals)
     ├── store.ts                 # Data access layer
     ├── validations.ts           # Zod schemas for all inputs
     ├── pricing.ts               # Pricing calculation engine
     ├── dimensions.ts            # Sqft computation from dimension groups
+    ├── pdf/                     # PDF generation
+    │   ├── proposal-template.tsx # React-PDF document layout
+    │   ├── generate.tsx         # renderToBuffer wrapper
+    │   └── types.ts             # ProposalSnapshot type
     └── supabase/                # Supabase client helpers and middleware
 docs/
 ├── product-plan.md              # Market analysis and phased product plan
