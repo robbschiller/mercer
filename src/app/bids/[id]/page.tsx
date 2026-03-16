@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getBid } from "@/lib/store";
+import { getBidPageData } from "@/lib/store";
 import { deleteBidAction } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,11 +15,13 @@ export default async function BidPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const bid = await getBid(id);
+  const data = await getBidPageData(id);
 
-  if (!bid) {
+  if (!data) {
     notFound();
   }
+
+  const { bid, buildings, surfacesByBuilding, lineItems, totalSqft } = data;
 
   return (
     <div className="container mx-auto max-w-2xl px-4 py-8 flex flex-col gap-6">
@@ -31,9 +33,17 @@ export default async function BidPage({
 
       <BidSummary bid={bid} />
 
-      <BuildingList bidId={bid.id} />
+      <BuildingList
+        bidId={bid.id}
+        buildings={buildings}
+        surfacesByBuilding={surfacesByBuilding}
+      />
 
-      <PricingSection bidId={bid.id} />
+      <PricingSection
+        bid={bid}
+        lineItems={lineItems}
+        totalSqft={totalSqft}
+      />
 
       <Card className="border-destructive/50">
         <CardContent className="flex items-center justify-between pt-6">

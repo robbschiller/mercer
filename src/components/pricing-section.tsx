@@ -1,4 +1,4 @@
-import { getBid, getLineItemsForBid, getBidTotalSqft } from "@/lib/store";
+import type { Bid, LineItem } from "@/lib/store";
 import {
   Card,
   CardHeader,
@@ -9,15 +9,15 @@ import {
 import { PricingForm } from "@/components/pricing-form";
 import { LineItemList } from "@/components/line-item-list";
 
-export async function PricingSection({ bidId }: { bidId: string }) {
-  const [bid, items, totalSqft] = await Promise.all([
-    getBid(bidId),
-    getLineItemsForBid(bidId),
-    getBidTotalSqft(bidId),
-  ]);
-
-  if (!bid) return null;
-
+export function PricingSection({
+  bid,
+  lineItems: items,
+  totalSqft,
+}: {
+  bid: Bid;
+  lineItems: LineItem[];
+  totalSqft: number;
+}) {
   const lineItemsTotal = items.reduce(
     (sum, li) => sum + Number(li.amount),
     0

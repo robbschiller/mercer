@@ -1,18 +1,28 @@
-import { getBuildingsForBid, getSurfacesForBuilding } from "@/lib/store";
+import type { Surface } from "@/lib/store";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { BuildingCard } from "@/components/building-card";
 import { AddBuildingForm } from "@/components/add-building-form";
 
-export async function BuildingList({ bidId }: { bidId: string }) {
-  const buildings = await getBuildingsForBid(bidId);
+interface BuildingWithSqft {
+  id: string;
+  bidId: string;
+  label: string;
+  count: number;
+  sortOrder: number;
+  createdAt: Date;
+  updatedAt: Date;
+  totalSqft: number;
+}
 
-  const buildingsWithSurfaces = await Promise.all(
-    buildings.map(async (building) => ({
-      building,
-      surfaces: await getSurfacesForBuilding(building.id),
-    }))
-  );
-
+export function BuildingList({
+  bidId,
+  buildings,
+  surfacesByBuilding,
+}: {
+  bidId: string;
+  buildings: BuildingWithSqft[];
+  surfacesByBuilding: Record<string, Surface[]>;
+}) {
   const grandTotal = buildings.reduce(
     (sum, b) => sum + b.totalSqft * b.count,
     0
@@ -38,16 +48,16 @@ export async function BuildingList({ bidId }: { bidId: string }) {
       </CardHeader>
       <CardContent>
         <div className="flex flex-col gap-3">
-          {buildingsWithSurfaces.length === 0 ? (
+          {buildings.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">
               No buildings added yet.
             </p>
           ) : (
-            buildingsWithSurfaces.map(({ building, surfaces }) => (
+            buildings.map((building) => (
               <BuildingCard
                 key={building.id}
                 building={building}
-                surfaces={surfaces}
+                surfaces={surfacesByBuilding[building.id] ?? []}
               />
             ))
           )}

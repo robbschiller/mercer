@@ -119,6 +119,74 @@ export async function getBuildingsForBid(bidId: string) {
   }));
 }
 
+export async function getBidPageData(bidId: string) {
+  const user = await requireUser();
+
+  const [bidRows, buildingRows, surfaceRows, lineItemRows, sqftRows] =
+    await Promise.all([
+      db
+        .select()
+        .from(bids)
+        .where(and(eq(bids.id, bidId), eq(bids.userId, user.id)))
+        .limit(1),
+      db
+        .select({
+          building: buildings,
+          totalSqft: sql<number>`coalesce(sum(${surfaces.totalSqft}::numeric), 0)`.as(
+            "total_sqft"
+          ),
+        })
+        .from(buildings)
+        .leftJoin(surfaces, eq(surfaces.buildingId, buildings.id))
+        .where(eq(buildings.bidId, bidId))
+        .groupBy(buildings.id)
+        .orderBy(asc(buildings.sortOrder), asc(buildings.createdAt)),
+      db
+        .select()
+        .from(surfaces)
+        .innerJoin(buildings, eq(surfaces.buildingId, buildings.id))
+        .where(eq(buildings.bidId, bidId))
+        .orderBy(asc(surfaces.sortOrder), asc(surfaces.createdAt)),
+      db
+        .select()
+        .from(lineItems)
+        .where(eq(lineItems.bidId, bidId))
+        .orderBy(asc(lineItems.sortOrder), asc(lineItems.createdAt)),
+      db
+        .select({
+          total: sql<number>`coalesce(sum(${surfaces.totalSqft}::numeric * ${buildings.count}), 0)`,
+        })
+        .from(surfaces)
+        .innerJoin(buildings, eq(surfaces.buildingId, buildings.id))
+        .where(eq(buildings.bidId, bidId)),
+    ]);
+
+  const bid = bidRows[0] ?? null;
+  if (!bid) return null;
+
+  const buildingsWithSqft = buildingRows.map((r) => ({
+    ...r.building,
+    totalSqft: Number(r.totalSqft),
+  }));
+
+  const surfacesByBuilding: Record<string, Surface[]> = {};
+  for (const row of surfaceRows) {
+    const s = row.surfaces;
+    if (!surfacesByBuilding[s.buildingId]) {
+      surfacesByBuilding[s.buildingId] = [];
+    }
+    surfacesByBuilding[s.buildingId].push(s);
+  }
+
+  return {
+    bid,
+    buildings: buildingsWithSqft,
+    surfacesByBuilding,
+    lineItems: lineItemRows,
+    totalSqft: Number(sqftRows[0]?.total ?? 0),
+  };
+}
+
 export async function createBuilding(
   bidId: string,
   data: { label: string; count: number }
