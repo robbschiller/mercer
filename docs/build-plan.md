@@ -1,13 +1,14 @@
 # Build Plan: Multifamily Exterior Bid App
 
-This document translates the [product plan](product-plan.md) into a concrete implementation roadmap for Phase 1 (MVP).
+This document translates the [product plan](product-plan.md) into a concrete implementation roadmap for Phase 1 (MVP). Updated to reflect what's built, real field data from [Rob's measurement notes](property-measurement-rawdata.md), and lessons from [interview 2](interview002.md).
 
 ---
 
 ## Build Principles
 
-- **Mobile-first, on-site use:** Contractors use it in the parking lot; fast, offline-capable, simple inputs.
+- **Mobile-first, on-site use:** Contractors use it in the parking lot; fast, simple inputs, large tap targets.
 - **Bid-in-real-time:** Every change (building count, sq ft, product choice) updates the bid immediately.
+- **Flexible, not rigid:** Real properties don't fit templates perfectly. The app should suggest, not constrain.
 - **Output that wins work:** Proposal PDF with per-building breakdown is the primary deliverable.
 
 ---
@@ -16,15 +17,15 @@ This document translates the [product plan](product-plan.md) into a concrete imp
 
 | Layer | Choice |
 |-------|--------|
-| **Frontend** | Next.js (App Router) |
-| **Backend** | Next.js (API routes, Server Components, Server Actions) |
-| **Data** | Postgres via Supabase |
+| **Frontend** | Next.js 15 (App Router), React 19 |
+| **Backend** | Next.js (Server Components, Server Actions) |
+| **Data** | Postgres via Supabase, Drizzle ORM |
 | **Auth** | Supabase Auth |
-| **UI** | shadcn/ui (Radix primitives + Tailwind) |
-| **PDF** | React-PDF, Puppeteer, or server-side template (e.g. PDFKit) — TBD |
-| **Hosting** | Vercel (native Next.js support) |
-
-Single stack: Next.js handles both UI and API; Supabase provides Postgres and auth; shadcn/ui supplies accessible, customizable components. Add offline/PWA later if needed.
+| **UI** | shadcn/ui (Radix primitives + Tailwind 4) |
+| **Validation** | Zod |
+| **PDF** | TBD — React-PDF, Puppeteer, or PDFKit |
+| **Hosting** | Vercel |
+| **Analytics** | Vercel Web Analytics |
 
 ---
 
@@ -32,91 +33,136 @@ Single stack: Next.js handles both UI and API; Supabase provides Postgres and au
 
 ### Core entities
 
-- **User** — contractor/company (auth provider).
-- **Project** — one property/job. Fields: address, client name, optional notes, status (draft / sent / won / lost).
-- **Building** — one logical building in a project. Fields: building type (template id), label (e.g. "A", "Building 1"), count (e.g. 25 "like this one"), measurements (see below).
-- **BuildingType (template)** — e.g. garden-style, stacked flat, townhome, breezeway. Defines which surfaces/inputs to show (stucco sq ft, wood trim, metal railings, doors, windows, etc.).
-- **MeasurementSet** — per building (or per building × count): surface areas, linear feet, counts. Stored as flexible key-value or a structured JSON/columns so new surface types can be added.
-- **Spec** — product system (e.g. Sherwin-Williams product line), coverage rate, price per gallon; optionally substrate-specific.
-- **Proposal** — snapshot of project + buildings + pricing at time of generation; links to generated PDF.
+- **User** — contractor/company (Supabase Auth).
+- **Bid** — one property/job. Fields: address, client name, notes, status (draft / sent / won / lost).
+- **Building** — one logical building (or structure) in a bid. Fields: label (free text, e.g. "Six unit 3-story", "Parking covers"), count (how many identical, e.g. 25), sort order.
+- **Surface** — one paintable surface on a building. Fields: name (free text, e.g. "Front", "Porch Ceilings", "Posts"), dimensions or raw square footage, computed total sq ft. Stored as rows per building, not fixed columns — because every property has a different surface mix.
+- **Spec** — product system (e.g. Sherwin-Williams line), coverage rate (sq ft/gallon), price per gallon; optionally substrate-specific.
+- **Proposal** — snapshot of bid + buildings + surfaces + pricing at time of generation; links to PDF.
+
+### Why flexible surfaces instead of fixed templates
+
+Rob's field notes show the surface mix varies significantly between properties:
+- **Jessups Reserve:** Front, Back, Side A, Side B, Posts, Porch Ceilings, Porch Walls, Porch Side Bands, Porch Floors, Porch Steps, Above Soffit
+- **Lancaster Villas:** Front, Back, Sides, Platforms, Middle Ceilings, Stairs, Divider Fences
+- **Fountains At Pershing:** Named facades (leasing office side, circle side), Catwalks, Cat Walk Ceilings, Elevator Area, Stairwell Walls, Tunnel Walls, Tunnel Ceiling
+
+A rigid template that says "garden-style = these 8 surfaces" would break on most real properties. Instead: offer **surface presets** (a suggested list of common surfaces) that pre-populate the form, but let the contractor add, remove, or rename any surface freely. The presets speed up input without constraining it.
 
 ### Key relationships
 
-- Project → many Buildings. Building → one BuildingType, one MeasurementSet (or inline).
-- Project → one active Spec (or spec per surface type).
-- Labor: stored as per-unit rate and unit count (e.g. doors, units); formula in app logic.
+- Bid → many Buildings → many Surfaces.
+- Bid → one active Spec (or spec per surface type, later).
+- Labor: per-unit rate × unit count; formula in app logic, stored on bid or as company defaults.
+
+### Dimension input model
+
+Contractors write measurements as multiplied factors: "Posts 2×10×27" means 2ft × 10ft × 27 posts = 540 sq ft. "Porch Ceilings (8×3×2) + (17×8×9)" means two groups added together.
+
+Each surface supports:
+- **Dimension groups** — one or more sets of factors (e.g. [90, 33] = 2,970 sq ft)
+- **Multiple groups per surface** — added together (e.g. group 1 + group 2)
+- **Or raw square footage** — for flat entries like "Above soffit square footage 1000"
+- The app computes and displays the total. The contractor enters numbers the way they already think.
 
 ---
 
 ## Feature Breakdown & Implementation Order
 
-### 1. Project and address (Week 1)
+### 1. Bid and address — COMPLETE ✅
 
-- [ ] Auth: sign up / sign in (email or Google).
-- [ ] Projects list: create project, enter address + client name, list/view projects.
-- [ ] No buildings yet; just CRUD for projects.
+- [x] Auth: sign up / sign in (email + OAuth via Supabase).
+- [x] Bids list: create bid, enter address + client name, list/view bids.
+- [x] Bid status tracking: draft / sent / won / lost.
+- [x] Edit and delete bids.
+- [x] Zod validation on all server actions.
+- [x] Loading skeletons, error boundaries, not-found pages.
+- [x] Form pending states (useFormStatus).
+- [x] Client-side navigation (next/link).
+- [x] Vercel Web Analytics.
 
-### 2. Building types and measurements (Weeks 2–3)
+### 2. Buildings and surfaces (next up)
 
-- [ ] Seed or admin: define 2–3 building type templates (e.g. garden-style, breezeway) with surface fields (stucco sq ft, wood trim sq ft, door count, etc.).
-- [ ] Add building to project: choose building type, optional label, **count** (e.g. 25).
-- [ ] Measurement form: inputs for each surface type from template; save to MeasurementSet.
-- [ ] Repeat for multiple building types per project (e.g. 25 garden-style + 3 breezeways).
+**Schema:**
+- [ ] `buildings` table: bid_id, label (text), count (integer, default 1), sort_order, created/updated timestamps.
+- [ ] `surfaces` table: building_id, name (text), dimensions (jsonb — array of dimension groups), total_sqft (numeric, computed), sort_order.
 
-### 3. Specs and pricing engine (Weeks 3–4)
+**UI:**
+- [ ] Add building to bid: label + count. "Add building" button on bid detail page replaces the placeholder.
+- [ ] Building card on bid detail: shows label, count, total sq ft, expand/collapse for surfaces.
+- [ ] Add surface to building: name input + dimension input (support factor multiplication and raw sq ft).
+- [ ] Surface presets: "Common surfaces" dropdown that pre-populates typical surface names (Front, Back, Side A, Side B, Posts, Porch Ceilings, etc.) — user can add/remove/rename freely.
+- [ ] Reorder buildings and surfaces (drag or up/down arrows).
+- [ ] Running total: sum sq ft per building (× count), sum across all buildings on the bid.
+- [ ] Delete building, delete surface.
 
-- [ ] Spec model: product system name, coverage (sq ft/gallon), price per gallon; optional substrate overrides.
-- [ ] Project uses one spec (or one per surface) for material cost.
-- [ ] Labor: per-unit rate × unit count (from building types); store rate on project or in app config.
-- [ ] Compute in real time: materials (gallons, cost) + labor + margin; show running total and per-building breakdown.
+**Milestone:** Contractor can walk a property, add buildings with counts, enter surfaces with dimensions, and see total square footage per building and for the whole bid — matching the format of Rob's phone notes but computed automatically.
 
-### 4. Scope flags (Week 4)
+### 3. Specs and pricing engine
 
-- [ ] Per building type: optional scope questions (e.g. "Catwalks/breezeways in scope?", "Patio ceilings?").
-- [ ] Store answers; surface in proposal as “Assumptions” or “Scope” so property managers see them.
+- [ ] `specs` table: name, coverage_sqft_per_gallon, price_per_gallon; optional substrate field.
+- [ ] Bid links to one spec (or one per surface type in a later iteration).
+- [ ] Material calculation: total sq ft ÷ coverage = gallons needed; gallons × price = material cost.
+- [ ] Labor model: per-unit rate × total unit count (from building counts); store rate on bid or as user default.
+- [ ] Margin: percentage markup on materials + labor.
+- [ ] Live bid total: materials + labor + margin; shown on bid detail and per-building.
+- [ ] Company defaults: save last-used spec and labor rate for next bid.
 
-### 5. Proposal PDF (Weeks 5–6)
+**Milestone:** Bid detail page shows a dollar amount. Changing any measurement, count, spec, or rate updates the total in real time.
 
-- [ ] Proposal snapshot: save project + buildings + measurements + pricing at generate time.
-- [ ] Layout: cover (address, client, date), per-building table (type, count, sq ft, key surfaces), material/labor/margin summary, assumptions/scope.
-- [ ] Generate PDF (React-PDF or server-side); store file and link from Proposal.
-- [ ] Download / share (email or link).
+### 4. Proposal PDF
 
-### 6. Polish and launch prep (Week 7)
+- [ ] `proposals` table: bid_id, snapshot (jsonb — frozen copy of bid + buildings + surfaces + pricing), pdf_url, created_at.
+- [ ] Layout: cover page (address, client, date, contractor), per-building table (label, count, surfaces with sq ft, cost), totals summary (materials, labor, margin, grand total), scope notes.
+- [ ] Generate PDF server-side; store in Supabase Storage or similar.
+- [ ] Download button on bid detail page.
+- [ ] Optional: share via email or link.
 
-- [ ] Offline: optional PWA or cache project/building types so form works with spotty signal.
-- [ ] Validation: required fields, sane ranges, “confirm before leaving” if unsaved.
-- [ ] Onboarding: one-time tips for “count” and building types.
+**Milestone:** Contractor generates a professional PDF with per-building breakdowns that "shows we did our homework."
+
+### 5. Polish and launch prep
+
+- [ ] Mobile responsiveness audit: large tap targets, sensible stacking on small screens.
+- [ ] Validation: required fields, sane numeric ranges, confirm before delete.
+- [ ] Onboarding: brief explanation of count ("25 buildings like this one") and surface presets.
+- [ ] Performance: check load times on 3G, optimize if needed.
+- [ ] Offline: optional PWA or local cache so the form works with spotty signal (stretch goal).
+
+---
+
+## Scope Handling
+
+The original plan had scope flags as a separate feature (§4). After reviewing the real data, scope is better handled implicitly through the surface list itself. Each surface the contractor adds is a scope decision — "Porch ceilings: yes, I measured them, they're in scope." Surfaces not added are not in scope.
+
+For the proposal, a "Scope" or "Assumptions" section can be generated from what's present and what's absent — e.g. "Includes: exterior walls, porch ceilings, posts. Does not include: parking structures, interior hallways." This can be a text field on the bid or auto-generated from the surface list.
 
 ---
 
 ## UI/UX Priorities
 
-- **Single-project flow:** Open project → add/edit buildings → see bid total update live → generate proposal. Minimize steps.
-- **Repeater pattern:** “25 buildings like this one” is first-class (count field prominent).
-- **Defaults:** Prefill coverage and labor from last project or company defaults.
-- **Mobile:** Large tap targets, minimal typing; consider dropdowns and steppers for numbers.
+- **Single-bid flow:** Open bid → add/edit buildings → enter surfaces → see total update live → generate proposal. Minimize navigation.
+- **Repeater pattern:** "25 buildings like this one" is first-class — count field is prominent, total sq ft multiplies automatically.
+- **Dimension input matches field notes:** Enter "90 × 33" and see "2,970 sq ft." Enter "2 × 10 × 27" and see "540 sq ft." Multiple groups add together.
+- **Surface presets, not rigid templates:** Suggest common surfaces, let the contractor customize freely.
+- **Defaults:** Prefill spec and labor rate from last bid or saved company defaults.
+- **Mobile:** Large tap targets, minimal typing, numeric keyboards for dimensions.
 
 ---
 
 ## Out of Scope for MVP
 
 - EagleView or any aerial/satellite integration (Phase 3).
-- Benchmarking / “typical range” sanity checks (Phase 2).
-- Multi-user/team or company hierarchy (can add after first customer).
-- Invoicing or scheduling (stay focused on bid → proposal).
+- Benchmarking / "typical range" sanity checks (Phase 2).
+- Multi-user/team or company hierarchy.
+- Invoicing or scheduling.
+- Substrate-specific pricing (simplify to one spec per bid for MVP; per-surface specs later).
 
 ---
 
 ## Success Criteria for MVP
 
-1. Contractor can create a project, add 2+ building types with counts and measurements, and see a live bid total.
-2. Proposal PDF generates with per-building square footage (and key surfaces) so it “shows we did our homework.”
-3. Scope assumptions (e.g. breezeways, patio ceilings) are visible on the proposal.
-4. Usable on a phone in a parking lot (responsive or PWA).
-
----
-
-## Next Step
-
-Initialize the repo with the chosen stack (e.g. `npx create-next-app` + Supabase project), define the schema in migrations, and implement **§1 Project and address** first.
+1. Contractor can create a bid, add multiple building types with counts and surface measurements, and see a live bid total in dollars.
+2. Dimension input matches how contractors already think — enter factors, see computed sq ft.
+3. Proposal PDF generates with per-building square footage breakdown.
+4. Usable on a phone in a parking lot.
+5. A real bid (e.g. Jessups Reserve) can be fully entered and produces a reasonable proposal.

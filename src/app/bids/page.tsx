@@ -46,13 +46,15 @@ export default async function BidsPage() {
                 <CardHeader>
                   <div className="flex items-start justify-between gap-2">
                     <CardTitle className="text-base">
-                      {bid.clientName}
+                      {bid.propertyName}
                     </CardTitle>
                     <Badge variant={statusColor[bid.status] ?? "secondary"}>
                       {bid.status}
                     </Badge>
                   </div>
-                  <CardDescription>{bid.address}</CardDescription>
+                  <CardDescription>
+                    {bid.clientName} &middot; {bid.address}
+                  </CardDescription>
                 </CardHeader>
                 {bid.notes && (
                   <CardContent>

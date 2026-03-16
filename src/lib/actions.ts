@@ -1,7 +1,18 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { createBid, updateBid, deleteBid } from "./store";
+import { revalidatePath } from "next/cache";
+import {
+  createBid,
+  updateBid,
+  deleteBid,
+  createBuilding,
+  updateBuilding,
+  deleteBuilding,
+  createSurface,
+  updateSurface,
+  deleteSurface,
+} from "./store";
 import { createClient } from "./supabase/server";
 import {
   signInSchema,
@@ -9,11 +20,19 @@ import {
   createBidSchema,
   updateBidSchema,
   deleteBidSchema,
+  createBuildingSchema,
+  updateBuildingSchema,
+  deleteBuildingSchema,
+  createSurfaceSchema,
+  updateSurfaceSchema,
+  deleteSurfaceSchema,
 } from "./validations";
 
 function formDataToObject(formData: FormData) {
   return Object.fromEntries(formData.entries());
 }
+
+// ── Auth ──
 
 export async function signInAction(formData: FormData) {
   const result = signInSchema.safeParse(formDataToObject(formData));
@@ -57,6 +76,8 @@ export async function signOutAction() {
   redirect("/");
 }
 
+// ── Bids ──
+
 export async function createBidAction(formData: FormData) {
   const result = createBidSchema.safeParse(formDataToObject(formData));
 
@@ -92,4 +113,95 @@ export async function deleteBidAction(formData: FormData) {
 
   await deleteBid(result.data.id);
   redirect("/bids");
+}
+
+// ── Buildings ──
+
+export async function createBuildingAction(formData: FormData) {
+  const result = createBuildingSchema.safeParse(formDataToObject(formData));
+
+  if (!result.success) {
+    const bidId = formData.get("bidId") as string;
+    redirect(`/bids/${bidId}`);
+  }
+
+  const { bidId, ...data } = result.data;
+  await createBuilding(bidId, data);
+  revalidatePath(`/bids/${bidId}`);
+}
+
+export async function updateBuildingAction(formData: FormData) {
+  const result = updateBuildingSchema.safeParse(formDataToObject(formData));
+
+  if (!result.success) {
+    return;
+  }
+
+  const { id, ...data } = result.data;
+  const bidId = formData.get("bidId") as string;
+  await updateBuilding(id, data);
+  revalidatePath(`/bids/${bidId}`);
+}
+
+export async function deleteBuildingAction(formData: FormData) {
+  const result = deleteBuildingSchema.safeParse(formDataToObject(formData));
+
+  if (!result.success) {
+    return;
+  }
+
+  await deleteBuilding(result.data.id);
+  revalidatePath(`/bids/${result.data.bidId}`);
+}
+
+// ── Surfaces ──
+
+export async function createSurfaceAction(data: {
+  buildingId: string;
+  bidId: string;
+  name: string;
+  dimensions: number[][];
+}) {
+  const result = createSurfaceSchema.safeParse(data);
+
+  if (!result.success) {
+    return { error: result.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  const { buildingId, bidId, ...surfaceData } = result.data;
+  await createSurface(buildingId, surfaceData);
+  revalidatePath(`/bids/${bidId}`);
+  return { error: null };
+}
+
+export async function updateSurfaceAction(data: {
+  id: string;
+  bidId: string;
+  name: string;
+  dimensions: number[][];
+}) {
+  const result = updateSurfaceSchema.safeParse(data);
+
+  if (!result.success) {
+    return { error: result.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  const { id, bidId, ...surfaceData } = result.data;
+  await updateSurface(id, surfaceData);
+  revalidatePath(`/bids/${bidId}`);
+  return { error: null };
+}
+
+export async function deleteSurfaceAction(data: {
+  id: string;
+  bidId: string;
+}) {
+  const result = deleteSurfaceSchema.safeParse(data);
+
+  if (!result.success) {
+    return;
+  }
+
+  await deleteSurface(result.data.id);
+  revalidatePath(`/bids/${result.data.bidId}`);
 }

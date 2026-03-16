@@ -17,6 +17,16 @@ export default function NewBidPage() {
         <CardContent>
           <form action={createBidAction} className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
+              <Label htmlFor="propertyName">Property name</Label>
+              <Input
+                id="propertyName"
+                name="propertyName"
+                placeholder="Jessups Reserve"
+                required
+              />
+            </div>
+
+            <div className="flex flex-col gap-2">
               <Label htmlFor="address">Property address</Label>
               <Input
                 id="address"
