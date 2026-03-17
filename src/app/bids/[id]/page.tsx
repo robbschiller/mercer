@@ -4,18 +4,10 @@ import { getBidPageData } from "@/lib/store";
 import { deleteBidAction } from "@/lib/actions";
 import { calculateBidPricing } from "@/lib/pricing";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { SubmitButton } from "@/components/submit-button";
 import { BidSummary } from "@/components/bid-summary";
-import { BuildingList } from "@/components/building-list";
-import { PricingSection } from "@/components/pricing-section";
-import { ProposalList } from "@/components/proposal-list";
+import { BidDetailSections } from "@/components/bid-detail-sections";
 
 export default async function BidPage({
   params,
@@ -58,33 +50,15 @@ export default async function BidPage({
 
       <BidSummary bid={bid} />
 
-      <BuildingList
-        bidId={bid.id}
+      <BidDetailSections
+        bid={bid}
         buildings={buildings}
         surfacesByBuilding={surfacesByBuilding}
-      />
-
-      <PricingSection
-        bid={bid}
         lineItems={lineItems}
         totalSqft={totalSqft}
+        proposals={proposals}
+        pricing={pricing}
       />
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Proposals</CardTitle>
-          <CardDescription>
-            Generate a client-facing PDF proposal from this bid.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ProposalList
-            proposals={proposals}
-            bidId={bid.id}
-            pricingComplete={pricing.complete}
-          />
-        </CardContent>
-      </Card>
 
       <Card className="border-destructive/50">
         <CardContent className="flex items-center justify-between pt-6">

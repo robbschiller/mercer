@@ -16,13 +16,24 @@ const statuses = [
   { value: "lost", label: "Lost" },
 ] as const;
 
-export function StatusSelect({ defaultValue }: { defaultValue: string }) {
+export function StatusSelect({
+  defaultValue,
+  onValueChange: onChangeProp,
+}: {
+  defaultValue: string;
+  onValueChange?: (value: string) => void;
+}) {
   const [value, setValue] = useState(defaultValue);
+
+  function handleChange(next: string) {
+    setValue(next);
+    onChangeProp?.(next);
+  }
 
   return (
     <>
       <input type="hidden" name="status" value={value} />
-      <Select value={value} onValueChange={setValue}>
+      <Select value={value} onValueChange={handleChange}>
         <SelectTrigger>
           <SelectValue />
         </SelectTrigger>

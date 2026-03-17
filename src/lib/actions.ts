@@ -413,6 +413,11 @@ export async function generateProposalAction(data: { bidId: string }) {
     urlData.publicUrl
   );
 
+  if (bid.status === "draft") {
+    await updateBid(bid.id, { status: "sent" });
+  }
+
   revalidatePath(`/bids/${bid.id}`);
+  revalidatePath("/bids");
   return { error: null, pdfUrl: proposal.pdfUrl };
 }

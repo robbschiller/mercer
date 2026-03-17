@@ -54,6 +54,41 @@ export async function getBids() {
     .orderBy(desc(bids.updatedAt));
 }
 
+export async function getBidsWithSummary() {
+  const user = await requireUser();
+
+  const bidId = sql.raw('"bids"."id"');
+
+  const rows = await db
+    .select({
+      bid: bids,
+      buildingCount: sql<number>`coalesce((
+        select count(*) from buildings where buildings.bid_id = ${bidId}
+      ), 0)`,
+      totalSqft: sql<number>`coalesce((
+        select sum(s.total_sqft::numeric * b.count)
+        from surfaces s
+        join buildings b on b.id = s.building_id
+        where b.bid_id = ${bidId}
+      ), 0)`,
+      lastProposalAt: sql<string | null>`(
+        select max(p.created_at)::text
+        from proposals p
+        where p.bid_id = ${bidId}
+      )`,
+    })
+    .from(bids)
+    .where(eq(bids.userId, user.id))
+    .orderBy(desc(bids.updatedAt));
+
+  return rows.map((r) => ({
+    ...r.bid,
+    buildingCount: Number(r.buildingCount),
+    totalSqft: Number(r.totalSqft),
+    lastProposalAt: r.lastProposalAt ? new Date(r.lastProposalAt) : null,
+  }));
+}
+
 export async function getBid(id: string) {
   const user = await requireUser();
   const rows = await db
