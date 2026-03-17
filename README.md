@@ -9,23 +9,31 @@ Mercer is a web app for exterior renovation contractors bidding multifamily prop
 Mercer is a working MVP with the full bid-to-proposal workflow complete:
 
 - **Auth** — Sign up and sign in with email (via Supabase)
-- **Bids** — Create, list, view, edit, and delete bids with property name, address, client, notes, and status tracking (draft / sent / won / lost)
+- **Bids** — Create, list, view, edit, and delete bids with property name, address, client, notes, and status tracking (draft / sent / won / lost). Bid list cards show building count, total sqft, grand total, and last proposal date.
 - **Buildings** — Add building types to a bid with labels and counts (e.g. "Six unit 3-story x 25"). Expand/collapse to manage surfaces.
 - **Surfaces** — Add paintable surfaces per building with dimension factor input (e.g. "90 x 33" = 2,970 sqft). Surface presets for common names (Front, Back, Posts, Porch Ceilings, etc.). Running sqft totals per building and across the bid.
 - **Pricing engine** — Enter coverage (sqft/gal), price per gallon, labor rate ($/sqft), and margin (%). Live calculation shows gallons needed, material cost, labor cost, and grand total as you type.
 - **Custom line items** — Add per-bid costs like pressure washing, dumpster rental, or scaffolding.
 - **Company defaults** — Pricing inputs save back to user defaults automatically. New bids inherit the latest defaults. Optional settings page for direct adjustment.
-- **Proposal PDF** — Generate a client-facing PDF with property info, per-building sqft breakdown, scope, and total price. Each proposal is stored with a frozen snapshot so edits to the bid don't change what was sent. Download previous proposals from the bid detail page.
+- **Proposal PDF** — Generate a client-facing PDF with property info, per-building sqft breakdown, scope, and total price. Each proposal is stored with a frozen snapshot so edits to the bid don't change what was sent. Download previous proposals from the bid detail page. Status auto-updates to "Sent" on first generation.
+- **Collapsible cards** — Bid detail sections (info, buildings, pricing, proposals) collapse to read-only summaries and expand inline for editing. All sections can be open simultaneously.
 - **Error handling** — Loading skeletons, error boundaries, and not-found pages throughout.
 - **Analytics** — Vercel Web Analytics
 
-What's planned next:
+## What's Next
 
-- Share proposals via email or link
-- Mobile responsiveness polish
-- Drag-to-reorder buildings and surfaces
+**Property Intelligence** — The headline feature for the next phase:
 
-See `docs/` for the full product plan and build plan.
+- Address autocomplete via Google Places API (validated addresses + lat/lng coordinates)
+- Satellite image display from Google Maps to validate the property visually
+- Automated building detection using OpenStreetMap footprint data and AI vision analysis (GPT-4o / Gemini) to suggest building count, types, and similarity grouping
+- Pre-populated building list that the contractor reviews and accepts — reducing manual setup time significantly
+
+**Workflow Efficiency** — Duplicate buildings, clone bids, surface set templates, and proposal sharing via email or link.
+
+**Polish** — Mobile responsiveness audit, confirm-before-delete dialogs, numeric validation, and onboarding hints.
+
+See `docs/` for the full [product plan](docs/product-plan.md), [build plan](docs/build-plan.md), and [EagleView integration plan](docs/eagleview-integration-plan.md).
 
 ## Tech Stack
 
@@ -124,8 +132,9 @@ src/
 │   └── signup/                  # Signup page
 ├── components/
 │   ├── ui/                      # Reusable primitives (button, card, input, etc.)
-│   ├── bid-summary.tsx          # Editable bid header
-│   ├── building-list.tsx        # Buildings section with grand total
+│   ├── bid-detail-sections.tsx  # Collapsible buildings/pricing/proposals sections
+│   ├── bid-summary.tsx          # Collapsible bid info with dirty tracking
+│   ├── building-list.tsx        # Buildings list with add form
 │   ├── building-card.tsx        # Expandable building with surfaces
 │   ├── pricing-section.tsx      # Pricing form + line items
 │   ├── pricing-form.tsx         # Rate inputs with live calculation
@@ -151,6 +160,7 @@ src/
     └── supabase/                # Supabase client helpers and middleware
 docs/
 ├── product-plan.md              # Market analysis and phased product plan
-├── build-plan.md                # MVP implementation roadmap
+├── build-plan.md                # Implementation roadmap
+├── eagleview-integration-plan.md # EagleView API integration plan (Phase 3)
 └── build-plans/                 # Detailed feature build plans
 ```

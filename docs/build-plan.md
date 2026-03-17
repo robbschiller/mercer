@@ -1,6 +1,6 @@
 # Build Plan: Multifamily Exterior Bid App
 
-This document translates the [product plan](product-plan.md) into a concrete implementation roadmap for Phase 1 (MVP). Updated to reflect what's built, real field data from [Rob's measurement notes](property-measurement-rawdata.md), and lessons from [interview 2](interview002.md).
+This document translates the [product plan](product-plan.md) into a concrete implementation roadmap. Updated to reflect the completed MVP, planned Property Intelligence features, and the path to EagleView integration.
 
 ---
 
@@ -9,6 +9,7 @@ This document translates the [product plan](product-plan.md) into a concrete imp
 - **Mobile-first, on-site use:** Contractors use it in the parking lot; fast, simple inputs, large tap targets.
 - **Bid-in-real-time:** Every change (building count, sq ft, product choice) updates the bid immediately.
 - **Flexible, not rigid:** Real properties don't fit templates perfectly. The app should suggest, not constrain.
+- **Automate what's tedious:** Use satellite imagery, building footprints, and AI to reduce manual data entry.
 - **Output that wins work:** Proposal PDF with per-building breakdown is the primary deliverable.
 
 ---
@@ -26,15 +27,18 @@ This document translates the [product plan](product-plan.md) into a concrete imp
 | **PDF** | @react-pdf/renderer |
 | **Hosting** | Vercel |
 | **Analytics** | Vercel Web Analytics |
+| **Maps** | Google Places API, Google Maps Static API *(planned)* |
+| **Building data** | OpenStreetMap Overpass API *(planned)* |
+| **AI Vision** | OpenAI GPT-4o or Google Gemini *(planned)* |
 
 ---
 
-## Data Model (MVP)
+## Data Model
 
 ### Core entities
 
 - **User** — contractor/company (Supabase Auth).
-- **Bid** — one property/job. Fields: property name, address, client name, notes, status (draft / sent / won / lost), pricing inputs (coverage sqft/gallon, price/gallon, labor rate/sqft, margin %).
+- **Bid** — one property/job. Fields: property name, address, client name, notes, status (draft / sent / won / lost), pricing inputs (coverage sqft/gallon, price/gallon, labor rate/sqft, margin %), latitude, longitude, satellite image URL.
 - **Building** — one logical building (or structure) in a bid. Fields: label (free text, e.g. "Six unit 3-story", "Parking covers"), count (how many identical, e.g. 25), sort order.
 - **Surface** — one paintable surface on a building. Fields: name (free text, e.g. "Front", "Porch Ceilings", "Posts"), dimensions (jsonb array of factor groups), computed total sq ft. Stored as rows per building, not fixed columns — because every property has a different surface mix.
 - **Line Item** — custom add-on cost on a bid (e.g. pressure washing, dumpster rental, scaffolding). Fields: name, amount.
@@ -82,6 +86,11 @@ Each surface supports:
 - [x] Form pending states (useFormStatus).
 - [x] Client-side navigation (next/link).
 - [x] Vercel Web Analytics.
+- [x] Collapsible summary cards for all bid detail sections (buildings, pricing, proposals, bid info).
+- [x] Bid list cards show building count, total sqft, grand total, and last proposal date.
+- [x] Auto-set bid status to "Sent" on first proposal generation.
+
+**Milestone:** Full bid lifecycle from creation to status tracking, with rich summary cards.
 
 ### 2. Buildings and surfaces — COMPLETE ✅
 
@@ -95,7 +104,7 @@ Each surface supports:
 - [x] Delete building, delete surface.
 - [ ] Reorder buildings and surfaces (drag or up/down arrows). *(deferred)*
 
-**Milestone:** Contractor can walk a property, add buildings with counts, enter surfaces with dimensions, and see total square footage per building and for the whole bid — matching the format of Rob's phone notes but computed automatically.
+**Milestone:** Contractor can walk a property, add buildings with counts, enter surfaces with dimensions, and see total square footage per building and for the whole bid.
 
 ### 3. Specs and pricing engine — COMPLETE ✅
 
@@ -118,17 +127,61 @@ Each surface supports:
 - [x] PDF stored in Supabase Storage (`proposals` bucket). Public download URL.
 - [x] "Generate Proposal" button on bid detail page (disabled when pricing is incomplete).
 - [x] Proposal history list with date and download link for each previously generated proposal.
-- [ ] Share via email or link. *(deferred)*
+- [ ] Share via email or link. *(deferred to §7)*
 
 **Milestone:** Contractor generates a professional PDF with per-building breakdowns that "shows we did our homework."
 
-### 5. Polish and launch prep
+### 5. Property Intelligence
 
-- [ ] Mobile responsiveness audit: large tap targets, sensible stacking on small screens.
-- [ ] Validation: required fields, sane numeric ranges, confirm before delete.
-- [ ] Onboarding: brief explanation of count ("25 buildings like this one") and surface presets.
-- [ ] Performance: check load times on 3G, optimize if needed.
-- [ ] Offline: optional PWA or local cache so the form works with spotty signal (stretch goal).
+Use address autocomplete, satellite imagery, building footprint data, and AI vision to automate building detection and reduce manual data entry.
+
+#### 5a. Address autocomplete (Google Places API)
+
+- [ ] Add Google Places API typeahead to the address field on bid create and bid edit forms.
+- [ ] Return structured address + latitude/longitude coordinates.
+- [ ] Add `latitude` and `longitude` columns to `bids` table (nullable, populated on address selection).
+- [ ] Coordinates feed satellite image and building detection in subsequent steps.
+
+#### 5b. Satellite image + building footprints
+
+- [ ] **Satellite image:** Use Google Maps Static API (`maptype=satellite`, zoom 17–18) centered on the bid's coordinates. Display on the bid detail page. Optionally embed in the proposal PDF for visual context.
+- [ ] **Building footprints:** Query OpenStreetMap Overpass API for building polygons within a radius of the coordinates. Extract building count, individual footprint areas (sq meters), and rough shape/grouping data. Free, no API key required.
+- [ ] **Google Maps link:** Deep link from the bid detail page to the property on Google Maps.
+- [ ] Store `satellite_image_url` on the bid for reuse (avoid re-fetching).
+
+#### 5c. AI vision analysis
+
+- [ ] Send the satellite image to an AI vision model (GPT-4o or Gemini) with a structured prompt.
+- [ ] Model returns: suggested building count, building type descriptions (e.g. "2-story garden-style", "3-story stacked flat"), similarity grouping ("buildings A–F appear identical"), auxiliary structures (parking covers, pool house, clubhouse), estimated story count per type.
+- [ ] Parse response into a structured building suggestion list.
+
+#### 5d. Pre-populated building list UX
+
+- [ ] "We detected N buildings at this property" review card on bid detail.
+- [ ] Suggested buildings list with label, count, and type — contractor can accept all, accept individually, adjust, or dismiss.
+- [ ] Accepted suggestions create building rows in the database.
+- [ ] Manual building entry still works alongside — suggestions don't block the existing workflow.
+
+**Milestone:** Contractor types an address, sees the property from above, and gets a pre-populated building list before leaving the truck.
+
+### 6. Workflow Efficiency
+
+- [ ] **Duplicate building:** Copy a building with all its surfaces to speed up similar entries.
+- [ ] **Bid cloning:** Clone an entire bid (buildings, surfaces, pricing, line items) as a starting point for a similar property.
+- [ ] **Surface set templates:** Save a building's surface list as a reusable template that can be applied to new buildings across bids.
+- [ ] **Reorder buildings and surfaces:** Drag-to-reorder or up/down arrows.
+
+**Milestone:** Returning users can set up new bids significantly faster using templates, cloning, and duplication.
+
+### 7. Polish and Launch Prep
+
+- [ ] **Mobile responsiveness audit:** Large tap targets, sensible stacking on small screens. The app must work well in a parking lot on a phone.
+- [ ] **Confirm-before-delete dialogs:** Prevent accidental deletion of bids, buildings, and surfaces.
+- [ ] **Numeric validation:** Sane ranges on pricing inputs (no negatives, no absurd values), clear error messages.
+- [ ] **Onboarding hints:** Brief explanation of building count ("25 buildings like this one") and surface presets on first use.
+- [ ] **Performance:** Check load times on 3G, optimize data fetching and bundle size if needed.
+- [ ] **Share proposals:** Send proposal PDF via email or shareable public link (no auth required to view).
+- [ ] **Offline / PWA:** Optional local cache so the form works with spotty cell signal. *(stretch goal)*
 
 ---
 
@@ -143,6 +196,7 @@ For the proposal, a "Scope" or "Assumptions" section can be generated from what'
 ## UI/UX Priorities
 
 - **Single-bid flow:** Open bid → add/edit buildings → enter surfaces → see total update live → generate proposal. Minimize navigation.
+- **Collapsible cards:** Each section (bid info, buildings, pricing, proposals) collapses to a read-only summary. Click to expand and edit. All sections can be open simultaneously.
 - **Repeater pattern:** "25 buildings like this one" is first-class — count field is prominent, total sq ft multiplies automatically.
 - **Dimension input matches field notes:** Enter "90 × 33" and see "2,970 sq ft." Enter "2 × 10 × 27" and see "540 sq ft." Multiple groups add together.
 - **Surface presets, not rigid templates:** Suggest common surfaces, let the contractor customize freely.
@@ -151,20 +205,40 @@ For the proposal, a "Scope" or "Assumptions" section can be generated from what'
 
 ---
 
-## Out of Scope for MVP
+## Future Phases (Out of Scope for Current Roadmap)
 
-- EagleView or any aerial/satellite integration (Phase 3).
-- Benchmarking / "typical range" sanity checks (Phase 2).
+### Phase 2 — Bid Intelligence
+
+- Bid analytics dashboard (win rate, average $/sqft, pipeline value).
+- Benchmarking: "typical range for this property type in this region."
+- Requires accumulating real bid data first — gated on user adoption.
+
+### Phase 3 — EagleView Integration
+
+- Replace or augment satellite + AI building detection with EagleView's aerial measurement API for accurate wall areas, window/door counts, and trim measurements.
+- Property Intelligence (§5) is the stepping stone — same "enter address, get building data" UX, but EagleView provides more accurate data.
+- Gated on business prerequisites: developer account, API access, per-report pricing model.
+- See [docs/eagleview-integration-plan.md](eagleview-integration-plan.md) for full technical plan.
+
+### Other future items
+
 - Multi-user/team or company hierarchy.
 - Invoicing or scheduling.
-- Substrate-specific pricing (simplify to one spec per bid for MVP; per-surface specs later).
+- Substrate-specific pricing (per-surface specs instead of one spec per bid).
 
 ---
 
-## Success Criteria for MVP
+## Success Criteria
+
+### MVP (complete)
 
 1. Contractor can create a bid, add multiple building types with counts and surface measurements, and see a live bid total in dollars.
 2. Dimension input matches how contractors already think — enter factors, see computed sq ft.
 3. Proposal PDF generates with per-building square footage breakdown.
 4. Usable on a phone in a parking lot.
 5. A real bid (e.g. Jessups Reserve) can be fully entered and produces a reasonable proposal.
+
+### Property Intelligence (next)
+
+6. Contractor types an address, sees a satellite view, and gets a suggested building count and types — reducing manual setup time by 50%+.
+7. AI-suggested building list is accurate enough that the contractor accepts most suggestions with minor adjustments.
