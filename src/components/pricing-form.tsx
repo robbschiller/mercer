@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useTransition } from "react";
+import { useState, useCallback, useTransition, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,8 @@ export function PricingForm({
   const [margin, setMargin] = useState(initialValues.marginPercent ?? "0");
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFirstRender = useRef(true);
 
   const calc: PricingResult = calculateBidPricing({
     totalSqft,
@@ -52,7 +54,7 @@ export function PricingForm({
     lineItems: [{ name: "total", amount: lineItemsTotal }],
   });
 
-  const handleSave = useCallback(() => {
+  const save = useCallback(() => {
     startTransition(async () => {
       await updateBidPricingAction({
         id: bidId,
@@ -65,6 +67,28 @@ export function PricingForm({
       setTimeout(() => setSaved(false), 2000);
     });
   }, [bidId, coverage, pricePerGallon, laborRate, margin]);
+
+  // Auto-save after 2 seconds of inactivity
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+
+    if (autoSaveTimer.current) {
+      clearTimeout(autoSaveTimer.current);
+    }
+
+    autoSaveTimer.current = setTimeout(() => {
+      save();
+    }, 2000);
+
+    return () => {
+      if (autoSaveTimer.current) {
+        clearTimeout(autoSaveTimer.current);
+      }
+    };
+  }, [coverage, pricePerGallon, laborRate, margin, save]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -190,7 +214,7 @@ export function PricingForm({
         {saved && (
           <span className="text-sm text-muted-foreground">Saved</span>
         )}
-        <Button onClick={handleSave} disabled={isPending} size="sm">
+        <Button onClick={save} disabled={isPending} size="sm">
           {isPending && <Loader2 className="animate-spin" />}
           Save pricing
         </Button>

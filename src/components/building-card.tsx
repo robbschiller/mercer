@@ -10,24 +10,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { SubmitButton } from "@/components/submit-button";
 import { SurfaceList } from "@/components/surface-list";
 import { AddSurfaceForm } from "@/components/add-surface-form";
-import type { Surface } from "@/lib/store";
-
-interface BuildingWithTotal {
-  id: string;
-  bidId: string;
-  label: string;
-  count: number;
-  totalSqft: number;
-  sortOrder: number;
-  createdAt: Date;
-  updatedAt: Date;
-}
+import type { Surface, BuildingWithSqft } from "@/lib/store";
 
 export function BuildingCard({
   building,
   surfaces,
 }: {
-  building: BuildingWithTotal;
+  building: BuildingWithSqft;
   surfaces: Surface[];
 }) {
   const [editing, setEditing] = useState(false);

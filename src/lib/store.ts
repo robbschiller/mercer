@@ -10,6 +10,7 @@ export type Surface = typeof surfaces.$inferSelect;
 export type LineItem = typeof lineItems.$inferSelect;
 export type UserDefault = typeof userDefaults.$inferSelect;
 export type Proposal = typeof proposals.$inferSelect;
+export type BuildingWithSqft = Building & { totalSqft: number };
 
 async function requireUser() {
   const supabase = await createClient();
@@ -20,27 +21,27 @@ async function requireUser() {
   return user;
 }
 
-async function requireBidOwnership(bidId: string) {
-  const user = await requireUser();
+async function requireBidOwnership(bidId: string, existingUserId?: string) {
+  const userId = existingUserId ?? (await requireUser()).id;
   const rows = await db
     .select({ id: bids.id })
     .from(bids)
-    .where(and(eq(bids.id, bidId), eq(bids.userId, user.id)))
+    .where(and(eq(bids.id, bidId), eq(bids.userId, userId)))
     .limit(1);
   if (!rows[0]) throw new Error("Bid not found");
-  return user;
+  return userId;
 }
 
-async function requireBuildingOwnership(buildingId: string) {
-  const user = await requireUser();
+async function requireBuildingOwnership(buildingId: string, existingUserId?: string) {
+  const userId = existingUserId ?? (await requireUser()).id;
   const rows = await db
     .select({ id: buildings.id, bidId: buildings.bidId })
     .from(buildings)
     .innerJoin(bids, eq(buildings.bidId, bids.id))
-    .where(and(eq(buildings.id, buildingId), eq(bids.userId, user.id)))
+    .where(and(eq(buildings.id, buildingId), eq(bids.userId, userId)))
     .limit(1);
   if (!rows[0]) throw new Error("Building not found");
-  return { user, bidId: rows[0].bidId };
+  return { userId, bidId: rows[0].bidId };
 }
 
 // ── Bids ──
@@ -331,6 +332,7 @@ export async function updateSurface(
   id: string,
   data: { name?: string; dimensions?: number[][] }
 ) {
+  const user = await requireUser();
   const rows = await db
     .select({
       surface: surfaces,
@@ -339,7 +341,7 @@ export async function updateSurface(
     .from(surfaces)
     .innerJoin(buildings, eq(surfaces.buildingId, buildings.id))
     .innerJoin(bids, eq(buildings.bidId, bids.id))
-    .where(eq(surfaces.id, id))
+    .where(and(eq(surfaces.id, id), eq(bids.userId, user.id)))
     .limit(1);
 
   if (!rows[0]) throw new Error("Surface not found");
@@ -366,11 +368,13 @@ export async function updateSurface(
 }
 
 export async function deleteSurface(id: string) {
+  const user = await requireUser();
   const rows = await db
     .select({ bidId: buildings.bidId })
     .from(surfaces)
     .innerJoin(buildings, eq(surfaces.buildingId, buildings.id))
-    .where(eq(surfaces.id, id))
+    .innerJoin(bids, eq(buildings.bidId, bids.id))
+    .where(and(eq(surfaces.id, id), eq(bids.userId, user.id)))
     .limit(1);
 
   if (!rows[0]) throw new Error("Surface not found");
@@ -406,17 +410,6 @@ export async function updateBidPricing(
     .where(and(eq(bids.id, id), eq(bids.userId, user.id)))
     .returning();
   return rows[0] ?? null;
-}
-
-export async function getBidTotalSqft(bidId: string): Promise<number> {
-  const rows = await db
-    .select({
-      total: sql<number>`coalesce(sum(${surfaces.totalSqft}::numeric * ${buildings.count}), 0)`,
-    })
-    .from(surfaces)
-    .innerJoin(buildings, eq(surfaces.buildingId, buildings.id))
-    .where(eq(buildings.bidId, bidId));
-  return Number(rows[0]?.total ?? 0);
 }
 
 // ── Line Items ──
@@ -463,10 +456,12 @@ export async function updateLineItem(
   id: string,
   data: { name?: string; amount?: string }
 ) {
+  const user = await requireUser();
   const existing = await db
     .select({ bidId: lineItems.bidId })
     .from(lineItems)
-    .where(eq(lineItems.id, id))
+    .innerJoin(bids, eq(lineItems.bidId, bids.id))
+    .where(and(eq(lineItems.id, id), eq(bids.userId, user.id)))
     .limit(1);
 
   if (!existing[0]) throw new Error("Line item not found");
@@ -486,10 +481,12 @@ export async function updateLineItem(
 }
 
 export async function deleteLineItem(id: string) {
+  const user = await requireUser();
   const existing = await db
     .select({ bidId: lineItems.bidId })
     .from(lineItems)
-    .where(eq(lineItems.id, id))
+    .innerJoin(bids, eq(lineItems.bidId, bids.id))
+    .where(and(eq(lineItems.id, id), eq(bids.userId, user.id)))
     .limit(1);
 
   if (!existing[0]) throw new Error("Line item not found");

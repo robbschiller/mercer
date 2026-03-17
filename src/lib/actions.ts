@@ -43,6 +43,7 @@ import {
 } from "./validations";
 import { calculateBidPricing } from "./pricing";
 import type { ProposalSnapshot } from "./pdf/types";
+import { generateProposalPdf } from "./pdf/generate";
 
 function formDataToObject(formData: FormData) {
   return Object.fromEntries(formData.entries());
@@ -102,9 +103,11 @@ export async function createBidAction(formData: FormData) {
     redirect(`/bids/new?error=${encodeURIComponent(message)}`);
   }
 
-  const bid = await createBid(result.data);
+  const [bid, defaults] = await Promise.all([
+    createBid(result.data),
+    getUserDefaults(),
+  ]);
 
-  const defaults = await getUserDefaults();
   if (defaults) {
     await updateBidPricing(bid.id, {
       coverageSqftPerGallon: defaults.coverageSqftPerGallon,
@@ -149,7 +152,7 @@ export async function createBuildingAction(formData: FormData) {
 
   if (!result.success) {
     const bidId = formData.get("bidId") as string;
-    redirect(`/bids/${bidId}`);
+    redirect(`/bids/${bidId}?error=${encodeURIComponent(result.error.issues[0]?.message ?? "Invalid input")}`);
   }
 
   const { bidId, ...data } = result.data;
@@ -161,7 +164,8 @@ export async function updateBuildingAction(formData: FormData) {
   const result = updateBuildingSchema.safeParse(formDataToObject(formData));
 
   if (!result.success) {
-    return;
+    const bidId = formData.get("bidId") as string;
+    redirect(`/bids/${bidId}?error=${encodeURIComponent(result.error.issues[0]?.message ?? "Invalid input")}`);
   }
 
   const { id, ...data } = result.data;
@@ -226,11 +230,12 @@ export async function deleteSurfaceAction(data: {
   const result = deleteSurfaceSchema.safeParse(data);
 
   if (!result.success) {
-    return;
+    return { error: result.error.issues[0]?.message ?? "Invalid input" };
   }
 
   await deleteSurface(result.data.id);
   revalidatePath(`/bids/${result.data.bidId}`);
+  return { error: null };
 }
 
 // ── Pricing ──
@@ -249,10 +254,12 @@ export async function updateBidPricingAction(data: {
   }
 
   const { id, ...pricingData } = result.data;
-  await updateBidPricing(id, pricingData);
 
-  // Upsert back to user defaults so future bids inherit these values
-  await upsertUserDefaults(pricingData);
+  // Save to bid and upsert defaults in parallel
+  await Promise.all([
+    updateBidPricing(id, pricingData),
+    upsertUserDefaults(pricingData),
+  ]);
 
   revalidatePath(`/bids/${id}`);
   return { error: null };
@@ -302,11 +309,12 @@ export async function deleteLineItemAction(data: {
   const result = deleteLineItemSchema.safeParse(data);
 
   if (!result.success) {
-    return;
+    return { error: result.error.issues[0]?.message ?? "Invalid input" };
   }
 
   await deleteLineItem(result.data.id);
   revalidatePath(`/bids/${result.data.bidId}`);
+  return { error: null };
 }
 
 // ── User Defaults ──
@@ -387,7 +395,6 @@ export async function generateProposalAction(data: { bidId: string }) {
     generatedAt: new Date().toISOString(),
   };
 
-  const { generateProposalPdf } = await import("./pdf/generate");
   const pdfBuffer = await generateProposalPdf(snapshot);
 
   const supabase = await createClient();

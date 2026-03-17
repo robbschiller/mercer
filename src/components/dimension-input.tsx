@@ -106,7 +106,3 @@ export function DimensionInput({ value, onChange }: DimensionInputProps) {
   );
 }
 
-export function formatDimensions(dimensions: number[][] | null): string {
-  if (!dimensions || dimensions.length === 0) return "—";
-  return dimensions.map((g) => g.join(" × ")).join(" + ");
-}

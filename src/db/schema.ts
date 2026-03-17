@@ -48,6 +48,20 @@ export const buildings = pgTable("buildings", {
     .defaultNow(),
 });
 
+export const surfaces = pgTable("surfaces", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  buildingId: uuid("building_id")
+    .notNull()
+    .references(() => buildings.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  dimensions: jsonb("dimensions").$type<number[][]>(),
+  totalSqft: numeric("total_sqft"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const lineItems = pgTable("line_items", {
   id: uuid("id").primaryKey().defaultRandom(),
   bidId: uuid("bid_id")
@@ -57,17 +71,6 @@ export const lineItems = pgTable("line_items", {
   amount: numeric("amount").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
-
-export const userDefaults = pgTable("user_defaults", {
-  userId: uuid("user_id").primaryKey(),
-  coverageSqftPerGallon: numeric("coverage_sqft_per_gallon"),
-  pricePerGallon: numeric("price_per_gallon"),
-  laborRatePerUnit: numeric("labor_rate_per_unit"),
-  marginPercent: numeric("margin_percent"),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
@@ -84,16 +87,13 @@ export const proposals = pgTable("proposals", {
     .defaultNow(),
 });
 
-export const surfaces = pgTable("surfaces", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  buildingId: uuid("building_id")
-    .notNull()
-    .references(() => buildings.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  dimensions: jsonb("dimensions").$type<number[][]>(),
-  totalSqft: numeric("total_sqft"),
-  sortOrder: integer("sort_order").notNull().default(0),
-  createdAt: timestamp("created_at", { withTimezone: true })
+export const userDefaults = pgTable("user_defaults", {
+  userId: uuid("user_id").primaryKey(),
+  coverageSqftPerGallon: numeric("coverage_sqft_per_gallon"),
+  pricePerGallon: numeric("price_per_gallon"),
+  laborRatePerUnit: numeric("labor_rate_per_unit"),
+  marginPercent: numeric("margin_percent"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });

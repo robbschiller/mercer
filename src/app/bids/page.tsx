@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getBidsWithSummary } from "@/lib/store";
-import { formatCurrency } from "@/lib/pricing";
+import { calculateBidPricing, formatCurrency } from "@/lib/pricing";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -49,23 +49,23 @@ export default async function BidsPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {bids.map((bid) => {
-            const hasPrice =
-              bid.coverageSqftPerGallon &&
-              bid.pricePerGallon &&
-              bid.laborRatePerUnit &&
-              bid.totalSqft > 0;
-
-            let grandTotal: number | null = null;
-            if (hasPrice) {
-              const coverage = Number(bid.coverageSqftPerGallon);
-              const ppg = Number(bid.pricePerGallon);
-              const labor = Number(bid.laborRatePerUnit);
-              const margin = Number(bid.marginPercent ?? 0);
-              const material = (bid.totalSqft / coverage) * ppg;
-              const laborCost = bid.totalSqft * labor;
-              const subtotal = material + laborCost;
-              grandTotal = subtotal + subtotal * (margin / 100);
-            }
+            const pricing = calculateBidPricing({
+              totalSqft: bid.totalSqft,
+              coverageSqftPerGallon: bid.coverageSqftPerGallon
+                ? Number(bid.coverageSqftPerGallon)
+                : null,
+              pricePerGallon: bid.pricePerGallon
+                ? Number(bid.pricePerGallon)
+                : null,
+              laborRatePerUnit: bid.laborRatePerUnit
+                ? Number(bid.laborRatePerUnit)
+                : null,
+              marginPercent: bid.marginPercent
+                ? Number(bid.marginPercent)
+                : null,
+              lineItems: [],
+            });
+            const grandTotal = pricing.grandTotal;
 
             return (
               <Link key={bid.id} href={`/bids/${bid.id}`}>

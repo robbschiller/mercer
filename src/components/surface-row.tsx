@@ -5,7 +5,8 @@ import { Pencil, Trash2, X } from "lucide-react";
 import { updateSurfaceAction, deleteSurfaceAction } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DimensionInput, formatDimensions } from "@/components/dimension-input";
+import { DimensionInput } from "@/components/dimension-input";
+import { formatDimensions } from "@/lib/dimensions";
 import type { Surface } from "@/lib/store";
 
 export function SurfaceRow({
