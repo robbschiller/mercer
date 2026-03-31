@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown, ChevronRight, Pencil, Trash2, X } from "lucide-react";
+import { useState, useTransition } from "react";
+import { ChevronDown, ChevronRight, Pencil, Trash2 } from "lucide-react";
 import { updateBuildingAction, deleteBuildingAction } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { SubmitButton } from "@/components/submit-button";
 import { SurfaceList } from "@/components/surface-list";
 import { AddSurfaceForm } from "@/components/add-surface-form";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import type { Surface, BuildingWithSqft } from "@/lib/store";
 
 export function BuildingCard({
@@ -21,9 +22,19 @@ export function BuildingCard({
 }) {
   const [editing, setEditing] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [, startDeleteTransition] = useTransition();
 
   const buildingSqft = building.totalSqft;
   const totalWithCount = buildingSqft * building.count;
+
+  const handleDelete = () => {
+    startDeleteTransition(async () => {
+      const formData = new FormData();
+      formData.append("id", building.id);
+      formData.append("bidId", building.bidId);
+      await deleteBuildingAction(formData);
+    });
+  };
 
   return (
     <Card>
@@ -38,7 +49,7 @@ export function BuildingCard({
           >
             <input type="hidden" name="id" value={building.id} />
             <input type="hidden" name="bidId" value={building.bidId} />
-            <div className="flex items-end gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-end gap-3">
               <div className="flex flex-col gap-1.5 flex-1">
                 <Label htmlFor={`edit-label-${building.id}`} className="text-xs">
                   Label
@@ -50,7 +61,7 @@ export function BuildingCard({
                   required
                 />
               </div>
-              <div className="flex flex-col gap-1.5 w-20">
+              <div className="flex flex-col gap-1.5 sm:w-20">
                 <Label htmlFor={`edit-count-${building.id}`} className="text-xs">
                   Count
                 </Label>
@@ -82,7 +93,7 @@ export function BuildingCard({
               <button
                 type="button"
                 onClick={() => setExpanded(!expanded)}
-                className="flex items-center gap-1 flex-1 min-w-0 text-left"
+                className="flex items-center gap-1 flex-1 min-w-0 text-left min-h-[44px] sm:min-h-0"
               >
                 {expanded ? (
                   <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -104,23 +115,25 @@ export function BuildingCard({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 shrink-0"
+                className="h-11 w-11 sm:h-7 sm:w-7 shrink-0"
                 onClick={() => setEditing(true)}
               >
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
-              <form action={deleteBuildingAction}>
-                <input type="hidden" name="id" value={building.id} />
-                <input type="hidden" name="bidId" value={building.bidId} />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  type="submit"
-                  className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </form>
+              <DeleteConfirmDialog
+                trigger={
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-11 w-11 sm:h-7 sm:w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                }
+                title={`Delete "${building.label}"?`}
+                description="This will remove the building and all its surfaces. This cannot be undone."
+                onConfirm={handleDelete}
+              />
             </div>
 
             {expanded && (
