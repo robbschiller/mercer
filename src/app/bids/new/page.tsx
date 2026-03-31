@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createBidAction } from "@/lib/actions";
+import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,12 +29,7 @@ export default function NewBidPage() {
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="address">Property address</Label>
-              <Input
-                id="address"
-                name="address"
-                placeholder="123 Main St, City, State"
-                required
-              />
+              <AddressAutocomplete id="address" required />
             </div>
 
             <div className="flex flex-col gap-2">

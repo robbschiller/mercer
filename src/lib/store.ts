@@ -101,19 +101,41 @@ export async function getBid(id: string) {
 }
 
 export async function createBid(
-  data: Pick<Bid, "propertyName" | "address" | "clientName" | "notes">
+  data: Pick<Bid, "propertyName" | "address" | "clientName" | "notes"> &
+    Partial<Pick<Bid, "latitude" | "longitude" | "googlePlaceId">>
 ) {
   const user = await requireUser();
   const rows = await db
     .insert(bids)
-    .values({ ...data, userId: user.id })
+    .values({
+      propertyName: data.propertyName,
+      address: data.address,
+      clientName: data.clientName,
+      notes: data.notes,
+      latitude: data.latitude ?? null,
+      longitude: data.longitude ?? null,
+      googlePlaceId: data.googlePlaceId ?? null,
+      userId: user.id,
+    })
     .returning();
   return rows[0];
 }
 
 export async function updateBid(
   id: string,
-  data: Partial<Pick<Bid, "propertyName" | "address" | "clientName" | "notes" | "status">>
+  data: Partial<
+    Pick<
+      Bid,
+      | "propertyName"
+      | "address"
+      | "clientName"
+      | "notes"
+      | "status"
+      | "latitude"
+      | "longitude"
+      | "googlePlaceId"
+    >
+  >
 ) {
   const user = await requireUser();
   const rows = await db

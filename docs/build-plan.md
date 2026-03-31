@@ -137,10 +137,10 @@ Use address autocomplete, satellite imagery, building footprint data, and AI vis
 
 #### 5a. Address autocomplete (Google Places API)
 
-- [ ] Add Google Places API typeahead to the address field on bid create and bid edit forms.
-- [ ] Return structured address + latitude/longitude coordinates.
-- [ ] Add `latitude` and `longitude` columns to `bids` table (nullable, populated on address selection).
-- [ ] Coordinates feed satellite image and building detection in subsequent steps.
+- [x] Add Google Places API typeahead to the address field on bid create and bid edit forms.
+- [x] Return structured address + latitude/longitude coordinates (and optional `google_place_id`).
+- [x] Add `latitude`, `longitude`, and `google_place_id` columns to `bids` table (nullable, populated on address selection).
+- [ ] Coordinates feed satellite image and building detection in subsequent steps *(§5b–5d)*.
 
 #### 5b. Satellite image + building footprints
 

@@ -10,6 +10,7 @@ Mercer is a working MVP with the full bid-to-proposal workflow complete:
 
 - **Auth** — Sign up and sign in with email (via Supabase)
 - **Bids** — Create, list, view, edit, and delete bids with property name, address, client, notes, and status tracking (draft / sent / won / lost). Bid list cards show building count, total sqft, grand total, and last proposal date.
+- **Address autocomplete** — On new bid and bid edit, property address uses Google Places when `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is set (formatted address + optional lat/lng and place ID). Without a key, the field falls back to a normal text input.
 - **Buildings** — Add building types to a bid with labels and counts (e.g. "Six unit 3-story x 25"). Expand/collapse to manage surfaces.
 - **Surfaces** — Add paintable surfaces per building with dimension factor input (e.g. "90 x 33" = 2,970 sqft). Surface presets for common names (Front, Back, Posts, Porch Ceilings, etc.). Running sqft totals per building and across the bid.
 - **Pricing engine** — Enter coverage (sqft/gal), price per gallon, labor rate ($/sqft), and margin (%). Live calculation shows gallons needed, material cost, labor cost, and grand total as you type.
@@ -24,8 +25,7 @@ Mercer is a working MVP with the full bid-to-proposal workflow complete:
 
 **Property Intelligence** — The headline feature for the next phase:
 
-- Address autocomplete via Google Places API (validated addresses + lat/lng coordinates)
-- Satellite image display from Google Maps to validate the property visually
+- Satellite image display from Google Maps to validate the property visually (lat/lng from address autocomplete is stored on bids for this)
 - Automated building detection using OpenStreetMap footprint data and AI vision analysis (GPT-4o / Gemini) to suggest building count, types, and similarity grouping
 - Pre-populated building list that the contractor reviews and accepts — reducing manual setup time significantly
 
@@ -48,6 +48,7 @@ See `docs/` for the full [product plan](docs/product-plan.md), [build plan](docs
 | PDF       | @react-pdf/renderer                  |
 | Storage   | Supabase Storage                     |
 | Analytics | Vercel Web Analytics                 |
+| Maps      | Google Maps JavaScript API + Places API (New) (optional; address autocomplete) |
 | Language  | TypeScript                           |
 | Hosting   | Vercel                               |
 
@@ -83,13 +84,35 @@ You'll need three values from your Supabase project dashboard:
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | Project Settings → API → anon public key  |
 | `DATABASE_URL`                   | Project Settings → Database → Connection string (use the pooler / Transaction mode URI on port 6543) |
 
+Optional, for address autocomplete:
+
+| Variable | Where to find it |
+| -------- | ---------------- |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials → Create API key → restrict to **HTTP referrers** (e.g. `http://localhost:3000/*`, your production origin). Enable **Maps JavaScript API** and **Places API (New)** (address autocomplete uses the new Places Data API, not the legacy Places widget). Billing must be enabled on the project. After changing `.env.local`, restart `bun run dev`. |
+
 ### 3. Push the database schema
 
 ```sh
 bun run db:push
 ```
 
-This uses Drizzle Kit to create the tables (`bids`, `buildings`, `surfaces`, `line_items`, `user_defaults`, `proposals`) in your Supabase Postgres instance.
+This uses Drizzle Kit to create the tables (`bids`, `buildings`, `surfaces`, `line_items`, `user_defaults`, `proposals`) in your Supabase Postgres instance. The `bids` table includes optional `latitude`, `longitude`, and `google_place_id` for Places-backed addresses.
+
+`drizzle.config.ts` loads `.env` then `.env.local` so `DATABASE_URL` is available (Drizzle does not use Next.js env loading). If push fails with a missing URL error, confirm `DATABASE_URL` exists in `.env.local`.
+
+**If `db:push` crashes** with `TypeError: Cannot read properties of undefined (reading 'replace')`, that is a [known drizzle-kit + Supabase introspection bug](https://github.com/drizzle-team/drizzle-orm/issues/3766). Use:
+
+```sh
+bun run db:apply-manual
+```
+
+That runs every `drizzle/manual/*.sql` file in order (see [drizzle/manual/README.md](drizzle/manual/README.md)). You can also paste SQL into the Supabase SQL editor, e.g.:
+
+```sql
+ALTER TABLE bids ADD COLUMN IF NOT EXISTS latitude double precision;
+ALTER TABLE bids ADD COLUMN IF NOT EXISTS longitude double precision;
+ALTER TABLE bids ADD COLUMN IF NOT EXISTS google_place_id text;
+```
 
 ### 4. Set up Supabase Storage
 
@@ -115,8 +138,9 @@ Open [http://localhost:3000](http://localhost:3000).
 | `build`      | `next build`          | Create a production build            |
 | `start`      | `next start`          | Run the production server            |
 | `lint`       | `next lint`           | Run ESLint                           |
-| `db:push`    | `drizzle-kit push`    | Push schema changes to the database  |
-| `db:studio`  | `drizzle-kit studio`  | Open Drizzle Studio for DB inspection|
+| `db:push`         | `drizzle-kit push`                    | Push schema changes to the database  |
+| `db:apply-manual` | `bun run scripts/apply-manual-migrations.ts` | Apply `drizzle/manual/*.sql` when `db:push` fails |
+| `db:studio`       | `drizzle-kit studio`                  | Open Drizzle Studio for DB inspection|
 
 ## Project Structure
 
@@ -132,6 +156,7 @@ src/
 │   └── signup/                  # Signup page
 ├── components/
 │   ├── ui/                      # Reusable primitives (button, card, input, etc.)
+│   ├── address-autocomplete.tsx # Google Places address field (optional API key)
 │   ├── bid-detail-sections.tsx  # Collapsible buildings/pricing/proposals sections
 │   ├── bid-summary.tsx          # Collapsible bid info with dirty tracking
 │   ├── building-list.tsx        # Buildings list with add form

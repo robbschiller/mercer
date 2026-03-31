@@ -12,11 +12,26 @@ export const signUpSchema = z.object({
 
 const bidStatusEnum = z.enum(["draft", "sent", "won", "lost"]);
 
+/** Empty / missing → null so updates clear coords; valid number → number. */
+const formLatLng = z.preprocess((val: unknown) => {
+  if (val === "" || val === undefined || val === null) return null;
+  const n = typeof val === "number" ? val : Number(val);
+  return Number.isFinite(n) ? n : null;
+}, z.union([z.number().finite(), z.null()]));
+
+const formPlaceId = z.preprocess((val: unknown) => {
+  if (val === "" || val === undefined || val === null) return null;
+  return String(val);
+}, z.union([z.string().min(1), z.null()]));
+
 export const createBidSchema = z.object({
   propertyName: z.string().min(1, "Property name is required"),
   address: z.string().min(1, "Address is required"),
   clientName: z.string().min(1, "Client name is required"),
   notes: z.string().default(""),
+  latitude: formLatLng,
+  longitude: formLatLng,
+  googlePlaceId: formPlaceId,
 });
 
 export const updateBidSchema = z.object({
@@ -26,6 +41,9 @@ export const updateBidSchema = z.object({
   clientName: z.string().min(1, "Client name is required"),
   notes: z.string().default(""),
   status: bidStatusEnum,
+  latitude: formLatLng,
+  longitude: formLatLng,
+  googlePlaceId: formPlaceId,
 });
 
 export const deleteBidSchema = z.object({

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { ClipboardList, Pencil } from "lucide-react";
 import { updateBidAction } from "@/lib/actions";
+import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,11 +27,27 @@ const statusLabels: Record<string, string> = {
   lost: "Lost",
 };
 
+function toNum(v: unknown): number | null {
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function BidSummary({ bid }: { bid: Bid }) {
   const [editing, setEditing] = useState(false);
+  const [editSession, setEditSession] = useState(0);
 
   const [propertyName, setPropertyName] = useState(bid.propertyName);
   const [address, setAddress] = useState(bid.address);
+  const [latitude, setLatitude] = useState<number | null>(() =>
+    toNum(bid.latitude)
+  );
+  const [longitude, setLongitude] = useState<number | null>(() =>
+    toNum(bid.longitude)
+  );
+  const [googlePlaceId, setGooglePlaceId] = useState<string | null>(
+    bid.googlePlaceId ?? null
+  );
   const [clientName, setClientName] = useState(bid.clientName);
   const [notes, setNotes] = useState(bid.notes);
   const [status, setStatus] = useState<string>(bid.status);
@@ -39,19 +56,41 @@ export function BidSummary({ bid }: { bid: Bid }) {
     () =>
       propertyName !== bid.propertyName ||
       address !== bid.address ||
+      toNum(latitude) !== toNum(bid.latitude) ||
+      toNum(longitude) !== toNum(bid.longitude) ||
+      (googlePlaceId ?? "") !== (bid.googlePlaceId ?? "") ||
       clientName !== bid.clientName ||
       notes !== bid.notes ||
       status !== bid.status,
-    [propertyName, address, clientName, notes, status, bid]
+    [
+      propertyName,
+      address,
+      latitude,
+      longitude,
+      googlePlaceId,
+      clientName,
+      notes,
+      status,
+      bid,
+    ]
   );
 
-  function resetForm() {
+  const resetForm = useCallback(() => {
     setPropertyName(bid.propertyName);
     setAddress(bid.address);
+    setLatitude(toNum(bid.latitude));
+    setLongitude(toNum(bid.longitude));
+    setGooglePlaceId(bid.googlePlaceId ?? null);
     setClientName(bid.clientName);
     setNotes(bid.notes);
     setStatus(bid.status);
-  }
+  }, [bid]);
+
+  const openEdit = useCallback(() => {
+    resetForm();
+    setEditSession((s) => s + 1);
+    setEditing(true);
+  }, [resetForm]);
 
   if (editing) {
     return (
@@ -99,12 +138,44 @@ export function BidSummary({ bid }: { bid: Bid }) {
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="address">Property address</Label>
-              <Input
+              <AddressAutocomplete
+                key={`addr-${editSession}`}
                 id="address"
-                name="address"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
+                initialAddress={address}
+                includeHiddenGeoFields={false}
                 required
+                onResolve={(p) => {
+                  setAddress(p.address);
+                  setLatitude(p.lat);
+                  setLongitude(p.lng);
+                  setGooglePlaceId(p.placeId);
+                }}
+              />
+              <input
+                type="hidden"
+                name="latitude"
+                value={
+                  latitude === null || latitude === undefined
+                    ? ""
+                    : String(latitude)
+                }
+                onChange={() => {}}
+              />
+              <input
+                type="hidden"
+                name="longitude"
+                value={
+                  longitude === null || longitude === undefined
+                    ? ""
+                    : String(longitude)
+                }
+                onChange={() => {}}
+              />
+              <input
+                type="hidden"
+                name="googlePlaceId"
+                value={googlePlaceId ?? ""}
+                onChange={() => {}}
               />
             </div>
 
@@ -157,7 +228,7 @@ export function BidSummary({ bid }: { bid: Bid }) {
   return (
     <Card
       className="cursor-pointer hover:border-foreground/20 transition-colors"
-      onClick={() => setEditing(true)}
+      onClick={openEdit}
     >
       <CardHeader>
         <div className="flex items-start justify-between gap-2">
@@ -183,7 +254,7 @@ export function BidSummary({ bid }: { bid: Bid }) {
             className="h-7 w-7 shrink-0"
             onClick={(e) => {
               e.stopPropagation();
-              setEditing(true);
+              openEdit();
             }}
           >
             <Pencil className="h-3.5 w-3.5" />

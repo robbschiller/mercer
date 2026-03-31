@@ -39,3 +39,8 @@
     color: var(--color-foreground);
   }
 }
+
+/* Google Places Autocomplete suggestions (appended to body); avoid stacking under header/cards */
+.pac-container {
+  z-index: 100000 !important;
+}
