@@ -15,7 +15,7 @@ export function AddBuildingForm({ bidId }: { bidId: string }) {
   }
 
   return (
-    <form ref={formRef} action={handleAction} className="flex items-end gap-3">
+    <form ref={formRef} action={handleAction} className="flex flex-col sm:flex-row sm:items-end gap-3">
       <input type="hidden" name="bidId" value={bidId} />
       <div className="flex flex-col gap-1.5 flex-1">
         <Label htmlFor="building-label" className="text-xs">
@@ -28,20 +28,22 @@ export function AddBuildingForm({ bidId }: { bidId: string }) {
           required
         />
       </div>
-      <div className="flex flex-col gap-1.5 w-20">
-        <Label htmlFor="building-count" className="text-xs">
-          Count
-        </Label>
-        <Input
-          id="building-count"
-          name="count"
-          type="number"
-          min={1}
-          defaultValue={1}
-          required
-        />
+      <div className="flex items-end gap-3 sm:contents">
+        <div className="flex flex-col gap-1.5 w-20 shrink-0">
+          <Label htmlFor="building-count" className="text-xs">
+            Count
+          </Label>
+          <Input
+            id="building-count"
+            name="count"
+            type="number"
+            min={1}
+            defaultValue={1}
+            required
+          />
+        </div>
+        <SubmitButton size="sm" className="flex-1 sm:flex-none">Add</SubmitButton>
       </div>
-      <SubmitButton size="sm">Add</SubmitButton>
     </form>
   );
 }

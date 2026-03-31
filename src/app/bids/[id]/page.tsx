@@ -1,13 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getBidPageData } from "@/lib/store";
-import { deleteBidAction } from "@/lib/actions";
 import { calculateBidPricing } from "@/lib/pricing";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { SubmitButton } from "@/components/submit-button";
 import { BidSummary } from "@/components/bid-summary";
 import { BidDetailSections } from "@/components/bid-detail-sections";
+import { DeleteBidButton } from "@/components/delete-bid-button";
 
 export default async function BidPage({
   params,
@@ -68,12 +67,7 @@ export default async function BidPage({
               This action cannot be undone.
             </p>
           </div>
-          <form action={deleteBidAction}>
-            <input type="hidden" name="id" value={bid.id} />
-            <SubmitButton variant="destructive" size="sm">
-              Delete
-            </SubmitButton>
-          </form>
+          <DeleteBidButton bid={bid} />
         </CardContent>
       </Card>
     </div>

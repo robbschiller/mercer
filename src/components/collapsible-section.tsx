@@ -40,7 +40,12 @@ export function CollapsibleSection({
               <CardTitle className="text-lg">{title}</CardTitle>
               <CardDescription>{description}</CardDescription>
             </div>
-            <Button variant="ghost" size="sm" onClick={onToggle}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="min-h-[44px] px-4 sm:min-h-0 sm:px-3"
+              onClick={onToggle}
+            >
               Done
             </Button>
           </div>
@@ -58,7 +63,7 @@ export function CollapsibleSection({
       <CardHeader>
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted shrink-0">
+            <div className="flex h-10 w-10 sm:h-8 sm:w-8 items-center justify-center rounded-md bg-muted shrink-0">
               <Icon className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="min-w-0">
@@ -69,7 +74,7 @@ export function CollapsibleSection({
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 shrink-0"
+            className="h-11 w-11 sm:h-7 sm:w-7 shrink-0"
             onClick={(e) => {
               e.stopPropagation();
               onToggle();

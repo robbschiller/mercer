@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Pencil, Trash2, X } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { updateSurfaceAction, deleteSurfaceAction } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DimensionInput } from "@/components/dimension-input";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { formatDimensions } from "@/lib/dimensions";
 import type { Surface } from "@/lib/store";
 
@@ -93,20 +94,26 @@ export function SurfaceRow({
       <Button
         variant="ghost"
         size="icon"
-        className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="h-11 w-11 sm:h-6 sm:w-6 shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
         onClick={() => setEditing(true)}
       >
         <Pencil className="h-3 w-3" />
       </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-        disabled={isPending}
-        onClick={handleDelete}
-      >
-        <Trash2 className="h-3 w-3" />
-      </Button>
+      <DeleteConfirmDialog
+        trigger={
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-11 w-11 sm:h-6 sm:w-6 shrink-0 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+            disabled={isPending}
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        }
+        title={`Delete "${surface.name}"?`}
+        description="This cannot be undone."
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }
