@@ -6,6 +6,7 @@ import {
   integer,
   jsonb,
   numeric,
+  doublePrecision,
 } from "drizzle-orm/pg-core";
 
 export const bids = pgTable("bids", {
@@ -13,6 +14,9 @@ export const bids = pgTable("bids", {
   userId: uuid("user_id").notNull(),
   propertyName: text("property_name").notNull(),
   address: text("address").notNull(),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
+  googlePlaceId: text("google_place_id"),
   clientName: text("client_name").notNull(),
   notes: text("notes").notNull().default(""),
   status: text("status", {
