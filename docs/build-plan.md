@@ -1,6 +1,6 @@
 # Build Plan: Multifamily Exterior Bid App
 
-This document translates the [product plan](product-plan.md) into a concrete implementation roadmap. Updated to reflect the completed MVP, planned Property Intelligence features, and the path to EagleView integration.
+This document translates the [product plan](product-plan.md) into a concrete implementation roadmap. Updated to reflect the completed MVP, **Property Intelligence §5a (Google Places autocomplete) complete**, remaining §5b–5d planned, and the path to EagleView integration.
 
 ---
 
@@ -27,7 +27,7 @@ This document translates the [product plan](product-plan.md) into a concrete imp
 | **PDF** | @react-pdf/renderer |
 | **Hosting** | Vercel |
 | **Analytics** | Vercel Web Analytics |
-| **Maps** | Google Places API, Google Maps Static API *(planned)* |
+| **Maps** | **Places API (New)** — address autocomplete on bid create/edit *(live; optional `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`)*; **Maps Static API** — satellite thumbnails *(planned, §5b)* |
 | **Building data** | OpenStreetMap Overpass API *(planned)* |
 | **AI Vision** | OpenAI GPT-4o or Google Gemini *(planned)* |
 
@@ -89,6 +89,7 @@ Each surface supports:
 - [x] Collapsible summary cards for all bid detail sections (buildings, pricing, proposals, bid info).
 - [x] Bid list cards show building count, total sqft, grand total, and last proposal date.
 - [x] Auto-set bid status to "Sent" on first proposal generation.
+- [x] Google Places (New) address autocomplete on new bid and bid edit when a browser API key is configured; stores formatted address plus optional `latitude`, `longitude`, and `google_place_id`. Free-text fallback when no key.
 
 **Milestone:** Full bid lifecycle from creation to status tracking, with rich summary cards.
 
@@ -135,7 +136,9 @@ Each surface supports:
 
 Use address autocomplete, satellite imagery, building footprint data, and AI vision to automate building detection and reduce manual data entry.
 
-#### 5a. Address autocomplete (Google Places API)
+**Status:** §5a (Places autocomplete + geo columns) is **complete**. Next up: §5b (satellite + OSM + Maps link).
+
+#### 5a. Address autocomplete (Google Places API) — COMPLETE ✅
 
 - [x] Add Google Places API typeahead to the address field on bid create and bid edit forms.
 - [x] Return structured address + latitude/longitude coordinates (and optional `google_place_id`).
@@ -238,7 +241,10 @@ For the proposal, a "Scope" or "Assumptions" section can be generated from what'
 4. Usable on a phone in a parking lot.
 5. A real bid (e.g. Jessups Reserve) can be fully entered and produces a reasonable proposal.
 
-### Property Intelligence (next)
+### Property Intelligence (in progress)
+
+- **Done:** Validated addresses with coordinates on the bid (Google Places API New, §5a).
+- **Next:** Satellite view, footprint query, and AI-assisted building suggestions (§5b–5d).
 
 6. Contractor types an address, sees a satellite view, and gets a suggested building count and types — reducing manual setup time by 50%+.
 7. AI-suggested building list is accurate enough that the contractor accepts most suggestions with minor adjustments.

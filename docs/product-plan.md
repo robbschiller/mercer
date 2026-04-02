@@ -8,7 +8,7 @@
 
 The MVP is complete. The full bid-to-proposal workflow works end-to-end:
 
-- Create a bid with property name, address, client name, and notes
+- Create a bid with property name, address, client name, and notes — address entry uses **Google Places API (New)** autocomplete when `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is set (validated formatted address plus optional lat/lng and place ID persisted on the bid); otherwise a normal text field
 - Add building types with counts and paintable surfaces with dimension-factor input
 - Price the bid with coverage rates, labor, margin, and custom line items
 - Generate a client-facing proposal PDF with per-building breakdowns
@@ -65,7 +65,7 @@ The honest truth is you can't out-EagleView EagleView on remote aerial measureme
 
 Before investing in expensive aerial measurement APIs, use freely available satellite imagery and AI to automate the most tedious part of bid setup: counting and categorizing buildings.
 
-**Address autocomplete** — Google Places API typeahead replaces free-text address entry. Returns a validated address with lat/lng coordinates that power everything below.
+**Address autocomplete** — **Shipped.** Google Places API (New) typeahead on bid create and edit returns a validated formatted address and persists optional lat/lng and Google place ID on the bid for downstream map and detection features. Without an API key, contractors still enter a free-text address as before.
 
 **Satellite validation** — Display a Google Maps satellite image of the property on the bid detail page. The contractor immediately confirms they have the right property. The satellite view can also be embedded in the proposal PDF for visual context.
 
@@ -77,7 +77,7 @@ Before investing in expensive aerial measurement APIs, use freely available sate
 - Similarity grouping — "25 of these, 2 of those" detected automatically
 - Auxiliary structure identification — parking covers, clubhouse, pool house flagged separately
 
-**Why this comes before EagleView:** It uses free or low-cost APIs (Google Maps free tier, OpenStreetMap, AI vision), proves the "enter address, get building data" UX pattern, and delivers immediate value without a vendor relationship or per-report costs. When EagleView is integrated later, it slots into the same UX — just with more accurate measurement data.
+**Why this comes before EagleView:** It uses free or low-cost APIs (Places is usage-based with a Google Cloud free tier; Maps Static, OpenStreetMap, AI vision), proves the "enter address, get building data" UX pattern, and delivers immediate value without a vendor relationship or per-report costs. When EagleView is integrated later, it slots into the same UX — just with more accurate measurement data.
 
 ### Phase 1.5 — Workflow Efficiency (parallel)
 
