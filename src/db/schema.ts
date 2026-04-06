@@ -17,6 +17,7 @@ export const bids = pgTable("bids", {
   latitude: doublePrecision("latitude"),
   longitude: doublePrecision("longitude"),
   googlePlaceId: text("google_place_id"),
+  satelliteImageUrl: text("satellite_image_url"),
   clientName: text("client_name").notNull(),
   notes: text("notes").notNull().default(""),
   status: text("status", {

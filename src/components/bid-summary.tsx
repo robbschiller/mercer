@@ -19,6 +19,7 @@ import {
 import { SubmitButton } from "@/components/submit-button";
 import { SatellitePreview } from "@/components/satellite-preview";
 import { StatusSelect } from "@/components/status-select";
+import { buildGoogleMapsUrl } from "@/lib/maps/google-maps-url";
 import type { Bid } from "@/lib/store";
 
 const statusLabels: Record<string, string> = {
@@ -92,6 +93,17 @@ export function BidSummary({ bid }: { bid: Bid }) {
     setEditSession((s) => s + 1);
     setEditing(true);
   }, [resetForm]);
+
+  const mapsUrlEdit = useMemo(
+    () =>
+      buildGoogleMapsUrl({
+        address,
+        latitude,
+        longitude,
+        googlePlaceId,
+      }),
+    [address, latitude, longitude, googlePlaceId]
+  );
 
   if (editing) {
     return (
@@ -178,6 +190,16 @@ export function BidSummary({ bid }: { bid: Bid }) {
                 value={googlePlaceId ?? ""}
                 onChange={() => {}}
               />
+              {mapsUrlEdit ? (
+                <a
+                  href={mapsUrlEdit}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  Open in Google Maps
+                </a>
+              ) : null}
             </div>
 
             <div className="flex flex-col gap-2">
@@ -228,6 +250,13 @@ export function BidSummary({ bid }: { bid: Bid }) {
 
   const summaryLat = toNum(bid.latitude);
   const summaryLng = toNum(bid.longitude);
+  const mapsUrlRead = buildGoogleMapsUrl({
+    address: bid.address,
+    latitude: bid.latitude,
+    longitude: bid.longitude,
+    googlePlaceId: bid.googlePlaceId,
+  });
+  const showSatellite = summaryLat != null && summaryLng != null;
 
   return (
     <Card
@@ -265,12 +294,30 @@ export function BidSummary({ bid }: { bid: Bid }) {
           </Button>
         </div>
       </CardHeader>
-      {summaryLat != null && summaryLng != null ? (
+      {mapsUrlRead || showSatellite ? (
         <CardContent
           className="pt-0"
           onClick={(e) => e.stopPropagation()}
         >
-          <SatellitePreview lat={summaryLat} lng={summaryLng} />
+          <div className="flex flex-col gap-2">
+            {mapsUrlRead ? (
+              <a
+                href={mapsUrlRead}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+              >
+                Open in Google Maps
+              </a>
+            ) : null}
+            {showSatellite ? (
+              <SatellitePreview
+                lat={summaryLat}
+                lng={summaryLng}
+                satellitePath={bid.satelliteImageUrl}
+              />
+            ) : null}
+          </div>
         </CardContent>
       ) : null}
     </Card>

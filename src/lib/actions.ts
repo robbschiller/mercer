@@ -42,6 +42,7 @@ import {
 import { calculateBidPricing } from "./pricing";
 import type { ProposalSnapshot } from "./pdf/types";
 import { generateProposalPdf } from "./pdf/generate";
+import { fetchSatelliteImageDataUriForPdf } from "./maps/satellite-pdf";
 import { createBidAction as createBidActionImpl } from "./actions/create-bid";
 
 function formDataToObject(formData: FormData) {
@@ -373,7 +374,12 @@ export async function generateProposalAction(data: { bidId: string }) {
     generatedAt: new Date().toISOString(),
   };
 
-  const pdfBuffer = await generateProposalPdf(snapshot);
+  const satelliteImageDataUri = await fetchSatelliteImageDataUriForPdf(bid);
+  const snapshotForPdf: ProposalSnapshot = satelliteImageDataUri
+    ? { ...snapshot, satelliteImageDataUri }
+    : snapshot;
+
+  const pdfBuffer = await generateProposalPdf(snapshotForPdf);
 
   const supabase = await createClient();
   const fileName = `${bid.id}/${Date.now()}.pdf`;

@@ -1,6 +1,6 @@
 # Build Plan: Multifamily Exterior Bid App
 
-This document translates the [product plan](product-plan.md) into a concrete implementation roadmap. Updated to reflect the completed MVP, **Property Intelligence §5a (Google Places autocomplete) complete**, remaining §5b–5d planned, and the path to EagleView integration.
+This document translates the [product plan](product-plan.md) into a concrete implementation roadmap. Updated to reflect the completed MVP, **Property Intelligence §5a–§5b (Places, satellite, Maps link, persisted proxy path, satellite in proposal PDF)**, **§5c–§5d still open**, plus **perceived-performance work** (route `loading.tsx`, `React.cache` session dedupe, header `useLinkStatus`, client-deferred Analytics), and the path to EagleView integration.
 
 ---
 
@@ -38,7 +38,7 @@ This document translates the [product plan](product-plan.md) into a concrete imp
 ### Core entities
 
 - **User** — contractor/company (Supabase Auth).
-- **Bid** — one property/job. Fields: property name, address, client name, notes, status (draft / sent / won / lost), pricing inputs (coverage sqft/gallon, price/gallon, labor rate/sqft, margin %), latitude, longitude, satellite image URL.
+- **Bid** — one property/job. Fields: property name, address, client name, notes, status (draft / sent / won / lost), pricing inputs (coverage sqft/gallon, price/gallon, labor rate/sqft, margin %), latitude, longitude, `google_place_id`, optional **`satellite_image_url`** (canonical relative path to `/api/maps/satellite` for UI, PDF fetch, and future AI).
 - **Building** — one logical building (or structure) in a bid. Fields: label (free text, e.g. "Six unit 3-story", "Parking covers"), count (how many identical, e.g. 25), sort order.
 - **Surface** — one paintable surface on a building. Fields: name (free text, e.g. "Front", "Porch Ceilings", "Posts"), dimensions (jsonb array of factor groups), computed total sq ft. Stored as rows per building, not fixed columns — because every property has a different surface mix.
 - **Line Item** — custom add-on cost on a bid (e.g. pressure washing, dumpster rental, scaffolding). Fields: name, amount.
@@ -83,6 +83,9 @@ Each surface supports:
 - [x] Edit and delete bids.
 - [x] Zod validation on all server actions.
 - [x] Loading skeletons, error boundaries, not-found pages.
+- [x] Route-level `loading.tsx` for major segments (home, bids list, bid detail, new bid, settings, login, signup) with shared skeleton components.
+- [x] Header nav uses `useLinkStatus` (Next.js) for in-flight feedback on primary links; `React.cache` on `getSessionUser()` so layout + data layer share one Supabase `getUser()` per request.
+- [x] Vercel Analytics loaded client-side (`dynamic` + `ssr: false`) to keep it off the server render path.
 - [x] Form pending states (useFormStatus).
 - [x] Client-side navigation (next/link).
 - [x] Vercel Web Analytics.
@@ -128,6 +131,7 @@ Each surface supports:
 - [x] PDF stored in Supabase Storage (`proposals` bucket). Public download URL.
 - [x] "Generate Proposal" button on bid detail page (disabled when pricing is incomplete).
 - [x] Proposal history list with date and download link for each previously generated proposal.
+- [x] Optional **Property location** section in the client PDF: satellite image (server fetch of proxied Static API at PDF dimensions, data URI in memory only — not stored in `proposals.snapshot` JSON).
 - [ ] Share via email or link. *(deferred to §7)*
 
 **Milestone:** Contractor generates a professional PDF with per-building breakdowns that "shows we did our homework."
@@ -136,22 +140,22 @@ Each surface supports:
 
 Use address autocomplete, satellite imagery, building footprint data, and AI vision to automate building detection and reduce manual data entry.
 
-**Status:** §5a complete. §5b: **satellite preview shipped** (new bid + bid detail); OSM footprints, Maps deep link, optional PDF embed, and `satellite_image_url` storage still open.
+**Status:** §5a complete. §5b **core shipped:** satellite preview, **Google Maps deep link** on bid summary/edit, **`satellite_image_url`** on `bids` (relative proxy path; set on create/update when lat/lng change), **satellite embedded in proposal PDF** when Static API + app origin are available (`NEXT_PUBLIC_APP_URL` / `VERCEL_URL` for server self-fetch). **Still open in §5b:** OSM building footprints. **Next up:** (1) OSM footprints; (2) AI vision + suggestion UX (§5c–§5d).
 
 #### 5a. Address autocomplete (Google Places API) — COMPLETE ✅
 
 - [x] Add Google Places API typeahead to the address field on bid create and bid edit forms.
 - [x] Return structured address + latitude/longitude coordinates (and optional `google_place_id`).
 - [x] Add `latitude`, `longitude`, and `google_place_id` columns to `bids` table (nullable, populated on address selection).
-- [x] Coordinates feed satellite preview on new-bid confirmation and bid detail *(§5b partial)*; building detection still *(§5b–5d)*.
+- [x] Coordinates feed satellite preview on new-bid confirmation and bid detail *(§5b satellite done)*; building detection still *(§5b follow-ups + §5c–5d)*.
 
 #### 5b. Satellite image + building footprints
 
 - [x] **Satellite image:** Google Maps Static API (`maptype=satellite`, zoom 17–18) centered on coordinates, proxied at `/api/maps/satellite` with `GOOGLE_MAPS_STATIC_API_KEY`. Shown on **new-bid confirmation** (after Places selection) and **bid summary** on detail page.
-- [ ] **Satellite in proposal PDF** — embed the same preview for visual context on the client PDF.
+- [x] **Google Maps link:** Deep link from bid summary and edit form (`query_place_id` when available, else lat/lng).
+- [x] **Satellite in proposal PDF** — “Property location” section with proxied image (in-memory data URI for render; snapshot JSON unchanged).
+- [x] **`satellite_image_url`** on `bids` — stores canonical relative proxy path; recomputed when lat/lng update (not when status-only updates).
 - [ ] **Building footprints:** Query OpenStreetMap Overpass API for building polygons within a radius of the coordinates. Extract building count, individual footprint areas (sq meters), and rough shape/grouping data. Free, no API key required.
-- [ ] **Google Maps link:** Deep link from the bid detail page to the property on Google Maps.
-- [ ] Store `satellite_image_url` on the bid for reuse (avoid re-fetching).
 
 #### 5c. AI vision analysis
 
@@ -183,7 +187,7 @@ Use address autocomplete, satellite imagery, building footprint data, and AI vis
 - [ ] **Confirm-before-delete dialogs:** Prevent accidental deletion of bids, buildings, and surfaces.
 - [ ] **Numeric validation:** Sane ranges on pricing inputs (no negatives, no absurd values), clear error messages.
 - [ ] **Onboarding hints:** Brief explanation of building count ("25 buildings like this one") and surface presets on first use.
-- [ ] **Performance:** Check load times on 3G, optimize data fetching and bundle size if needed.
+- [x] **Performance (initial pass):** Per-request auth dedupe (`React.cache` + `getSessionUser`); route `loading.tsx` shells; deferred Analytics bundle; parallel DB reads already in `getBidPageData`. Further: 3G audit, bundle trimming, caching headers as needed.
 - [ ] **Share proposals:** Send proposal PDF via email or shareable public link (no auth required to view).
 - [ ] **Offline / PWA:** Optional local cache so the form works with spotty cell signal. *(stretch goal)*
 
@@ -244,8 +248,8 @@ For the proposal, a "Scope" or "Assumptions" section can be generated from what'
 
 ### Property Intelligence (in progress)
 
-- **Done:** Validated addresses with coordinates on the bid (Google Places API New, §5a).
-- **Next:** Satellite view, footprint query, and AI-assisted building suggestions (§5b–5d).
+- **Done:** Places-backed addresses (§5a). Satellite in-app + **Maps link** + **persisted `satellite_image_url`** + **satellite in proposal PDF** (§5b).
+- **Next:** OSM footprints; AI vision and pre-populated building UX (§5c–§5d).
 
 6. Contractor types an address, sees a satellite view, and gets a suggested building count and types — reducing manual setup time by 50%+.
 7. AI-suggested building list is accurate enough that the contractor accepts most suggestions with minor adjustments.
