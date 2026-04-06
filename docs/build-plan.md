@@ -1,6 +1,6 @@
 # Build Plan: Multifamily Exterior Bid App
 
-This document translates the [product plan](product-plan.md) into a concrete implementation roadmap. Updated to reflect the completed MVP, **Property Intelligence §5a–§5b (Places, satellite, Maps link, persisted proxy path, satellite in proposal PDF)**, **§5c–§5d still open**, plus **perceived-performance work** (route `loading.tsx`, `React.cache` session dedupe, header `useLinkStatus`, client-deferred Analytics), and the path to EagleView integration.
+This document translates the [product plan](product-plan.md) into a concrete implementation roadmap. Updated to reflect the completed MVP, **Property Intelligence §5a–§5b (Places, satellite, Maps link, persisted proxy path, satellite in proposal PDF, OSM building footprints on bid detail)**, **§5c–§5d still open**, plus **perceived-performance work** (route `loading.tsx`, `React.cache` session dedupe, header `useLinkStatus`, client-deferred Analytics), and the path to EagleView integration.
 
 ---
 
@@ -28,7 +28,7 @@ This document translates the [product plan](product-plan.md) into a concrete imp
 | **Hosting** | Vercel |
 | **Analytics** | Vercel Web Analytics |
 | **Maps** | **Places API (New)** — address autocomplete *(live; optional `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`)*; **Maps Static API** — satellite thumbnails *(live; server proxy + optional `GOOGLE_MAPS_STATIC_API_KEY`)* |
-| **Building data** | OpenStreetMap Overpass API *(planned)* |
+| **Building data** | OpenStreetMap Overpass API *(live; `way[building]` near bid coordinates, read-only table on bid detail; optional `OVERPASS_API_URL`; retries + longer timeouts for public instance 504s)* |
 | **AI Vision** | OpenAI GPT-4o or Google Gemini *(planned)* |
 
 ---
@@ -140,14 +140,14 @@ Each surface supports:
 
 Use address autocomplete, satellite imagery, building footprint data, and AI vision to automate building detection and reduce manual data entry.
 
-**Status:** §5a complete. §5b **core shipped:** satellite preview, **Google Maps deep link** on bid summary/edit, **`satellite_image_url`** on `bids` (relative proxy path; set on create/update when lat/lng change), **satellite embedded in proposal PDF** when Static API + app origin are available (`NEXT_PUBLIC_APP_URL` / `VERCEL_URL` for server self-fetch). **Still open in §5b:** OSM building footprints. **Next up:** (1) OSM footprints; (2) AI vision + suggestion UX (§5c–§5d).
+**Status:** §5a complete. §5b **core shipped:** satellite preview, **Google Maps deep link** on bid summary/edit, **`satellite_image_url`** on `bids` (relative proxy path; set on create/update when lat/lng change), **satellite embedded in proposal PDF** when Static API + app origin are available (`NEXT_PUBLIC_APP_URL` / `VERCEL_URL` for server self-fetch). **§5b OSM footprints:** shipped (read-only table on bid detail). **Next up:** (1) AI vision + suggestion UX (§5c–§5d); (2) optional multipolygon relations for large sites.
 
 #### 5a. Address autocomplete (Google Places API) — COMPLETE ✅
 
 - [x] Add Google Places API typeahead to the address field on bid create and bid edit forms.
 - [x] Return structured address + latitude/longitude coordinates (and optional `google_place_id`).
 - [x] Add `latitude`, `longitude`, and `google_place_id` columns to `bids` table (nullable, populated on address selection).
-- [x] Coordinates feed satellite preview on new-bid confirmation and bid detail *(§5b satellite done)*; building detection still *(§5b follow-ups + §5c–5d)*.
+- [x] Coordinates feed satellite preview on new-bid confirmation and bid detail *(§5b satellite done)*; OSM footprint readout on bid detail *(§5b)*; AI-assisted building list still *(§5c–§5d)*.
 
 #### 5b. Satellite image + building footprints
 
@@ -155,7 +155,7 @@ Use address autocomplete, satellite imagery, building footprint data, and AI vis
 - [x] **Google Maps link:** Deep link from bid summary and edit form (`query_place_id` when available, else lat/lng).
 - [x] **Satellite in proposal PDF** — “Property location” section with proxied image (in-memory data URI for render; snapshot JSON unchanged).
 - [x] **`satellite_image_url`** on `bids` — stores canonical relative proxy path; recomputed when lat/lng update (not when status-only updates).
-- [ ] **Building footprints:** Query OpenStreetMap Overpass API for building polygons within a radius of the coordinates. Extract building count, individual footprint areas (sq meters), and rough shape/grouping data. Free, no API key required.
+- [x] **Building footprints:** Query OpenStreetMap Overpass API for `way["building"]` polygons within ~**75 m** of the coordinates; footprint area (m²) via Turf; count + table on bid detail behind Suspense; `unstable_cache` (success only) + optional `OVERPASS_API_URL`; HTTP retries for transient 504s. Multipolygon relations and “accept suggestions” UX deferred.
 
 #### 5c. AI vision analysis
 
@@ -248,8 +248,8 @@ For the proposal, a "Scope" or "Assumptions" section can be generated from what'
 
 ### Property Intelligence (in progress)
 
-- **Done:** Places-backed addresses (§5a). Satellite in-app + **Maps link** + **persisted `satellite_image_url`** + **satellite in proposal PDF** (§5b).
-- **Next:** OSM footprints; AI vision and pre-populated building UX (§5c–§5d).
+- **Done:** Places-backed addresses (§5a). Satellite in-app + **Maps link** + **persisted `satellite_image_url`** + **satellite in proposal PDF** + **OSM footprint readout** (Overpass + Turf, §5b).
+- **Next:** AI vision and pre-populated building UX (§5c–§5d); optional multipolygon relations for complex OSM sites.
 
 6. Contractor types an address, sees a satellite view, and gets a suggested building count and types — reducing manual setup time by 50%+.
 7. AI-suggested building list is accurate enough that the contractor accepts most suggestions with minor adjustments.

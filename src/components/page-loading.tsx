@@ -155,3 +155,18 @@ export function GenericPageSkeleton() {
     </div>
   );
 }
+
+export function OsmFootprintsSkeleton() {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="h-5 w-48 animate-pulse rounded bg-muted" />
+        <div className="h-4 w-full max-w-md animate-pulse rounded bg-muted" />
+      </CardHeader>
+      <CardContent className="space-y-2 pt-0">
+        <div className="h-4 w-64 animate-pulse rounded bg-muted" />
+        <div className="h-32 w-full animate-pulse rounded-md bg-muted" />
+      </CardContent>
+    </Card>
+  );
+}

@@ -185,12 +185,11 @@ export function NewBidWizard({ errorMessage }: { errorMessage?: string | null })
               continuing.
             </p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end pt-2">
+          <div className="flex flex-row flex-wrap justify-end gap-2 pt-2">
             <Button
               type="button"
               variant="outline"
               onClick={handleChangeAddress}
-              className="sm:order-1"
             >
               Not the right property
             </Button>

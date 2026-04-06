@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { getBidPageData } from "@/lib/store";
 import { calculateBidPricing } from "@/lib/pricing";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { BidSummary } from "@/components/bid-summary";
 import { BidDetailSections } from "@/components/bid-detail-sections";
 import { DeleteBidButton } from "@/components/delete-bid-button";
+import { OsmFootprintsSection } from "@/components/osm-footprints-section";
+import { OsmFootprintsSkeleton } from "@/components/page-loading";
 
 export default async function BidPage({
   params,
@@ -48,6 +51,13 @@ export default async function BidPage({
       </div>
 
       <BidSummary bid={bid} />
+
+      <Suspense fallback={<OsmFootprintsSkeleton />}>
+        <OsmFootprintsSection
+          latitude={bid.latitude}
+          longitude={bid.longitude}
+        />
+      </Suspense>
 
       <BidDetailSections
         bid={bid}

@@ -14,6 +14,7 @@ The MVP is complete. The full bid-to-proposal workflow works end-to-end:
 - Generate a client-facing proposal PDF with per-building breakdowns; optional **Property location** section with satellite imagery when Static API and app origin are configured (`NEXT_PUBLIC_APP_URL` helps server-side PDF generation fetch the proxy)
 - Track bid status (draft / sent / won / lost) with automatic status updates
 - **Perceived speed:** Route-level loading skeletons for main navigations, header link pending spinners (`useLinkStatus`), single auth read per request (`React.cache` on session), and Analytics loaded client-side so it does not block first paint
+- **OpenStreetMap footprints** on **bid detail** when the bid has coordinates: Overpass-backed **building** outline count and approximate footprint areas (reference only; optional `OVERPASS_API_URL` for a reliable interpreter)
 
 The app is deployed on Vercel, uses Supabase for auth, database, and file storage, and is built with Next.js 15, React 19, and Tailwind CSS 4. See the [build plan](build-plan.md) for full technical details.
 
@@ -68,7 +69,9 @@ Before investing in expensive aerial measurement APIs, use freely available sate
 
 **Address autocomplete** — **Shipped.** Google Places API (New) typeahead on bid create and edit returns a validated formatted address and persists optional lat/lng and Google place ID on the bid for downstream map and detection features. Without an API key, contractors still enter a free-text address as before.
 
-**Satellite validation** — **Shipped:** in-app snapshot on **new-bid confirmation** and **bid detail**; **Google Maps** deep link on bid summary and edit; **persisted proxy path** on the bid; **satellite image in the client proposal PDF** (Property location section) when configured. **Next:** OSM footprints and AI-assisted building suggestions.
+**Satellite validation** — **Shipped:** in-app snapshot on **new-bid confirmation** and **bid detail**; **Google Maps** deep link on bid summary and edit; **persisted proxy path** on the bid; **satellite image in the client proposal PDF** (Property location section) when configured.
+
+**OSM building footprints** — **Shipped (read-only):** on bid detail, Overpass query for `building` ways within ~75 m of the pin; approximate footprint areas (m²) and count in a reference table (coverage varies; public Overpass can be slow—retries and optional `OVERPASS_API_URL` improve reliability). **Next:** AI-assisted suggestions and optional “create buildings from outlines” (see build plan §5d).
 
 **Automated building detection** — Query OpenStreetMap building footprint data at the property coordinates to detect how many buildings exist. Combined with AI vision analysis of the satellite image, the app suggests a building list with types ("2-story garden-style x 25", "clubhouse x 1", "parking covers x 4") and counts. The contractor reviews, adjusts, and accepts — buildings are pre-created in the bid.
 
@@ -80,7 +83,7 @@ Before investing in expensive aerial measurement APIs, use freely available sate
 
 **Why this comes before EagleView:** It uses free or low-cost APIs (Places is usage-based with a Google Cloud free tier; Maps Static, OpenStreetMap, AI vision), proves the "enter address, get building data" UX pattern, and delivers immediate value without a vendor relationship or per-report costs. When EagleView is integrated later, it slots into the same UX — just with more accurate measurement data.
 
-**Suggested implementation order (remaining):** (1) Overpass API for building footprints. (2) AI vision + “accept suggestions” building list UX.
+**Suggested implementation order (remaining):** (1) AI vision + “accept suggestions” building list UX (can combine with OSM counts). (2) Optional multipolygon relations in Overpass for complex sites.
 
 ### Phase 1.5 — Workflow Efficiency (parallel)
 
