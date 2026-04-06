@@ -1,13 +1,10 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/supabase/auth-cache";
 import { signOutAction } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 
 export async function NavAuth() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
 
   if (!user) {
     return (

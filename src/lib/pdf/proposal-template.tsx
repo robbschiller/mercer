@@ -4,6 +4,7 @@ import {
   View,
   Text,
   StyleSheet,
+  Image,
 } from "@react-pdf/renderer";
 import { formatDimensions } from "@/lib/dimensions";
 import { formatCurrency } from "@/lib/pricing";
@@ -41,6 +42,20 @@ const styles = StyleSheet.create({
   propertyValue: {
     fontSize: 12,
     marginBottom: 8,
+  },
+  satelliteSection: {
+    marginTop: 20,
+  },
+  satelliteImage: {
+    width: 480,
+    maxHeight: 280,
+    objectFit: "contain" as const,
+    marginTop: 8,
+  },
+  satelliteCaption: {
+    fontSize: 8,
+    color: "#666",
+    marginTop: 4,
   },
   sectionTitle: {
     fontSize: 13,
@@ -207,6 +222,17 @@ export function ProposalDocument({
             <Text style={styles.propertyValue}>{snapshot.clientName}</Text>
           </View>
         </View>
+
+        {snapshot.satelliteImageDataUri ? (
+          <View style={styles.satelliteSection}>
+            <Text style={styles.sectionTitle}>Property location</Text>
+            <Image
+              src={snapshot.satelliteImageDataUri}
+              style={styles.satelliteImage}
+            />
+            <Text style={styles.satelliteCaption}>Map imagery © Google</Text>
+          </View>
+        ) : null}
 
         <Text style={styles.sectionTitle}>Building Breakdown</Text>
 

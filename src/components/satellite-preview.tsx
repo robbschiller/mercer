@@ -2,10 +2,13 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { buildSatelliteProxyPath } from "@/lib/maps/satellite-path";
 
 type SatellitePreviewProps = {
   lat: number;
   lng: number;
+  /** Stored proxy path from DB; must match lat/lng for consistent imagery. */
+  satellitePath?: string | null;
   className?: string;
   width?: number;
   height?: number;
@@ -15,13 +18,21 @@ type SatellitePreviewProps = {
 export function SatellitePreview({
   lat,
   lng,
+  satellitePath,
   className,
   width = 600,
   height = 360,
   zoom = 18,
 }: SatellitePreviewProps) {
   const [failed, setFailed] = useState(false);
-  const src = `/api/maps/satellite?lat=${encodeURIComponent(String(lat))}&lng=${encodeURIComponent(String(lng))}&w=${width}&h=${height}&zoom=${zoom}`;
+  const src =
+    satellitePath?.trim() ||
+    buildSatelliteProxyPath(lat, lng, { w: width, h: height, zoom }) ||
+    "";
+
+  if (!src) {
+    return null;
+  }
 
   if (failed) {
     return (

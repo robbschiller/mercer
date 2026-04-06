@@ -26,4 +26,6 @@ export interface ProposalSnapshot {
   totalSqft: number;
   grandTotal: number;
   generatedAt: string;
+  /** In-memory only for PDF render; never persist to `proposals.snapshot`. */
+  satelliteImageDataUri?: string;
 }

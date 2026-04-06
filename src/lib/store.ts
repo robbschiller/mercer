@@ -1,8 +1,9 @@
 import { db } from "@/db";
 import { bids, buildings, surfaces, lineItems, userDefaults, proposals } from "@/db/schema";
 import { eq, desc, and, asc, sql } from "drizzle-orm";
-import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/supabase/auth-cache";
 import { computeTotalSqft } from "@/lib/dimensions";
+import { buildSatelliteProxyPath } from "@/lib/maps/satellite-path";
 
 export type Bid = typeof bids.$inferSelect;
 export type Building = typeof buildings.$inferSelect;
@@ -13,10 +14,7 @@ export type Proposal = typeof proposals.$inferSelect;
 export type BuildingWithSqft = Building & { totalSqft: number };
 
 async function requireUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) throw new Error("Not authenticated");
   return user;
 }
@@ -105,6 +103,8 @@ export async function createBid(
     Partial<Pick<Bid, "latitude" | "longitude" | "googlePlaceId">>
 ) {
   const user = await requireUser();
+  const lat = data.latitude ?? null;
+  const lng = data.longitude ?? null;
   const rows = await db
     .insert(bids)
     .values({
@@ -112,9 +112,10 @@ export async function createBid(
       address: data.address,
       clientName: data.clientName,
       notes: data.notes,
-      latitude: data.latitude ?? null,
-      longitude: data.longitude ?? null,
+      latitude: lat,
+      longitude: lng,
       googlePlaceId: data.googlePlaceId ?? null,
+      satelliteImageUrl: buildSatelliteProxyPath(lat, lng),
       userId: user.id,
     })
     .returning();
@@ -138,9 +139,16 @@ export async function updateBid(
   >
 ) {
   const user = await requireUser();
+  const patch: Record<string, unknown> = { ...data, updatedAt: new Date() };
+  if (data.latitude !== undefined || data.longitude !== undefined) {
+    patch.satelliteImageUrl = buildSatelliteProxyPath(
+      data.latitude ?? null,
+      data.longitude ?? null
+    );
+  }
   const rows = await db
     .update(bids)
-    .set({ ...data, updatedAt: new Date() })
+    .set(patch as typeof data & { updatedAt: Date; satelliteImageUrl?: string | null })
     .where(and(eq(bids.id, id), eq(bids.userId, user.id)))
     .returning();
   return rows[0] ?? null;

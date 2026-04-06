@@ -8,11 +8,12 @@
 
 The MVP is complete. The full bid-to-proposal workflow works end-to-end:
 
-- Create a bid via a short flow: **address first** (Places autocomplete when `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is set), then **confirm with satellite + suggested name** when coordinates exist, then property name, client, and notes. Satellite uses **Maps Static API** via a server proxy when `GOOGLE_MAPS_STATIC_API_KEY` is configured. Without keys, behavior falls back to a single form-style flow with free-text address
+- Create a bid via a short flow: **address first** (Places autocomplete when `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is set), then **confirm with satellite + suggested name** when coordinates exist, then property name, client, and notes. Satellite uses **Maps Static API** via a server proxy (`/api/maps/satellite`) when `GOOGLE_MAPS_STATIC_API_KEY` is configured — **working end-to-end** on new-bid confirmation and bid detail. **`satellite_image_url`** on the bid stores the canonical proxy path for consistent reuse. **Open in Google Maps** links use place id when available, otherwise coordinates. Without keys, behavior falls back to a single form-style flow with free-text address
 - Add building types with counts and paintable surfaces with dimension-factor input
 - Price the bid with coverage rates, labor, margin, and custom line items
-- Generate a client-facing proposal PDF with per-building breakdowns
+- Generate a client-facing proposal PDF with per-building breakdowns; optional **Property location** section with satellite imagery when Static API and app origin are configured (`NEXT_PUBLIC_APP_URL` helps server-side PDF generation fetch the proxy)
 - Track bid status (draft / sent / won / lost) with automatic status updates
+- **Perceived speed:** Route-level loading skeletons for main navigations, header link pending spinners (`useLinkStatus`), single auth read per request (`React.cache` on session), and Analytics loaded client-side so it does not block first paint
 
 The app is deployed on Vercel, uses Supabase for auth, database, and file storage, and is built with Next.js 15, React 19, and Tailwind CSS 4. See the [build plan](build-plan.md) for full technical details.
 
@@ -61,13 +62,13 @@ The honest truth is you can't out-EagleView EagleView on remote aerial measureme
 - Company defaults that carry pricing forward across bids — enter rates once, use everywhere
 - Collapsible summary cards so the contractor sees the big picture at a glance and drills in to edit
 
-### Phase 1.5 — Property Intelligence (next)
+### Phase 1.5 — Property Intelligence (in progress)
 
 Before investing in expensive aerial measurement APIs, use freely available satellite imagery and AI to automate the most tedious part of bid setup: counting and categorizing buildings.
 
 **Address autocomplete** — **Shipped.** Google Places API (New) typeahead on bid create and edit returns a validated formatted address and persists optional lat/lng and Google place ID on the bid for downstream map and detection features. Without an API key, contractors still enter a free-text address as before.
 
-**Satellite validation** — **In progress (partially shipped).** Satellite image on the **new-bid confirmation** step and on the **bid detail** summary when coordinates and Static API are available. Embedding the same view in the **proposal PDF** is still planned.
+**Satellite validation** — **Shipped:** in-app snapshot on **new-bid confirmation** and **bid detail**; **Google Maps** deep link on bid summary and edit; **persisted proxy path** on the bid; **satellite image in the client proposal PDF** (Property location section) when configured. **Next:** OSM footprints and AI-assisted building suggestions.
 
 **Automated building detection** — Query OpenStreetMap building footprint data at the property coordinates to detect how many buildings exist. Combined with AI vision analysis of the satellite image, the app suggests a building list with types ("2-story garden-style x 25", "clubhouse x 1", "parking covers x 4") and counts. The contractor reviews, adjusts, and accepts — buildings are pre-created in the bid.
 
@@ -78,6 +79,8 @@ Before investing in expensive aerial measurement APIs, use freely available sate
 - Auxiliary structure identification — parking covers, clubhouse, pool house flagged separately
 
 **Why this comes before EagleView:** It uses free or low-cost APIs (Places is usage-based with a Google Cloud free tier; Maps Static, OpenStreetMap, AI vision), proves the "enter address, get building data" UX pattern, and delivers immediate value without a vendor relationship or per-report costs. When EagleView is integrated later, it slots into the same UX — just with more accurate measurement data.
+
+**Suggested implementation order (remaining):** (1) Overpass API for building footprints. (2) AI vision + “accept suggestions” building list UX.
 
 ### Phase 1.5 — Workflow Efficiency (parallel)
 
