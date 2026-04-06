@@ -17,6 +17,7 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { SubmitButton } from "@/components/submit-button";
+import { SatellitePreview } from "@/components/satellite-preview";
 import { StatusSelect } from "@/components/status-select";
 import type { Bid } from "@/lib/store";
 
@@ -225,6 +226,9 @@ export function BidSummary({ bid }: { bid: Bid }) {
     );
   }
 
+  const summaryLat = toNum(bid.latitude);
+  const summaryLng = toNum(bid.longitude);
+
   return (
     <Card
       className="cursor-pointer hover:border-foreground/20 transition-colors"
@@ -261,6 +265,14 @@ export function BidSummary({ bid }: { bid: Bid }) {
           </Button>
         </div>
       </CardHeader>
+      {summaryLat != null && summaryLng != null ? (
+        <CardContent
+          className="pt-0"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <SatellitePreview lat={summaryLat} lng={summaryLng} />
+        </CardContent>
+      ) : null}
     </Card>
   );
 }

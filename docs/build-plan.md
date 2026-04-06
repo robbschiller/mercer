@@ -27,7 +27,7 @@ This document translates the [product plan](product-plan.md) into a concrete imp
 | **PDF** | @react-pdf/renderer |
 | **Hosting** | Vercel |
 | **Analytics** | Vercel Web Analytics |
-| **Maps** | **Places API (New)** — address autocomplete on bid create/edit *(live; optional `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`)*; **Maps Static API** — satellite thumbnails *(planned, §5b)* |
+| **Maps** | **Places API (New)** — address autocomplete *(live; optional `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`)*; **Maps Static API** — satellite thumbnails *(live; server proxy + optional `GOOGLE_MAPS_STATIC_API_KEY`)* |
 | **Building data** | OpenStreetMap Overpass API *(planned)* |
 | **AI Vision** | OpenAI GPT-4o or Google Gemini *(planned)* |
 
@@ -136,18 +136,19 @@ Each surface supports:
 
 Use address autocomplete, satellite imagery, building footprint data, and AI vision to automate building detection and reduce manual data entry.
 
-**Status:** §5a (Places autocomplete + geo columns) is **complete**. Next up: §5b (satellite + OSM + Maps link).
+**Status:** §5a complete. §5b: **satellite preview shipped** (new bid + bid detail); OSM footprints, Maps deep link, optional PDF embed, and `satellite_image_url` storage still open.
 
 #### 5a. Address autocomplete (Google Places API) — COMPLETE ✅
 
 - [x] Add Google Places API typeahead to the address field on bid create and bid edit forms.
 - [x] Return structured address + latitude/longitude coordinates (and optional `google_place_id`).
 - [x] Add `latitude`, `longitude`, and `google_place_id` columns to `bids` table (nullable, populated on address selection).
-- [ ] Coordinates feed satellite image and building detection in subsequent steps *(§5b–5d)*.
+- [x] Coordinates feed satellite preview on new-bid confirmation and bid detail *(§5b partial)*; building detection still *(§5b–5d)*.
 
 #### 5b. Satellite image + building footprints
 
-- [ ] **Satellite image:** Use Google Maps Static API (`maptype=satellite`, zoom 17–18) centered on the bid's coordinates. Display on the bid detail page. Optionally embed in the proposal PDF for visual context.
+- [x] **Satellite image:** Google Maps Static API (`maptype=satellite`, zoom 17–18) centered on coordinates, proxied at `/api/maps/satellite` with `GOOGLE_MAPS_STATIC_API_KEY`. Shown on **new-bid confirmation** (after Places selection) and **bid summary** on detail page.
+- [ ] **Satellite in proposal PDF** — embed the same preview for visual context on the client PDF.
 - [ ] **Building footprints:** Query OpenStreetMap Overpass API for building polygons within a radius of the coordinates. Extract building count, individual footprint areas (sq meters), and rough shape/grouping data. Free, no API key required.
 - [ ] **Google Maps link:** Deep link from the bid detail page to the property on Google Maps.
 - [ ] Store `satellite_image_url` on the bid for reuse (avoid re-fetching).

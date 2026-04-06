@@ -10,7 +10,9 @@ Mercer is a working MVP with the full bid-to-proposal workflow complete:
 
 - **Auth** — Sign up and sign in with email (via Supabase)
 - **Bids** — Create, list, view, edit, and delete bids with property name, address, client, notes, and status tracking (draft / sent / won / lost). Bid list cards show building count, total sqft, grand total, and last proposal date.
-- **Address autocomplete** — On new bid and bid edit, property address uses Google Places when `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is set (formatted address + optional lat/lng and place ID). Without a key, the field falls back to a normal text input.
+- **New bid flow** — Start with the property address only. After choosing a Places result (when configured), a satellite snapshot and suggested property name help confirm the site; then enter client, notes, and submit.
+- **Address autocomplete** — On new bid and bid edit, property address uses Google Places when `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is set (formatted address + optional lat/lng, place ID, and display name for suggestions). Without a key, the field falls back to a normal text input.
+- **Satellite preview** — When `GOOGLE_MAPS_STATIC_API_KEY` is set (server-only) and the bid has coordinates, a Maps Static API satellite image is shown on the new-bid confirmation step and on the bid summary card (proxied via `/api/maps/satellite` so the key stays off the client).
 - **Buildings** — Add building types to a bid with labels and counts (e.g. "Six unit 3-story x 25"). Expand/collapse to manage surfaces.
 - **Surfaces** — Add paintable surfaces per building with dimension factor input (e.g. "90 x 33" = 2,970 sqft). Surface presets for common names (Front, Back, Posts, Porch Ceilings, etc.). Running sqft totals per building and across the bid.
 - **Pricing engine** — Enter coverage (sqft/gal), price per gallon, labor rate ($/sqft), and margin (%). Live calculation shows gallons needed, material cost, labor cost, and grand total as you type.
@@ -25,7 +27,7 @@ Mercer is a working MVP with the full bid-to-proposal workflow complete:
 
 **Property Intelligence** — The headline feature for the next phase:
 
-- Satellite image display from Google Maps to validate the property visually (lat/lng from address autocomplete is stored on bids for this)
+- Satellite preview on new-bid confirmation and bid detail is live when Static API is configured; proposal PDF embed and OSM footprints are next
 - Automated building detection using OpenStreetMap footprint data and AI vision analysis (GPT-4o / Gemini) to suggest building count, types, and similarity grouping
 - Pre-populated building list that the contractor reviews and accepts — reducing manual setup time significantly
 
@@ -48,7 +50,7 @@ See `docs/` for the full [product plan](docs/product-plan.md), [build plan](docs
 | PDF       | @react-pdf/renderer                  |
 | Storage   | Supabase Storage                     |
 | Analytics | Vercel Web Analytics                 |
-| Maps      | Google Maps JavaScript API + Places API (New) (optional; address autocomplete) |
+| Maps      | Google Maps JavaScript API + Places API (New) (optional; autocomplete); Maps Static API (optional; satellite preview via server proxy) |
 | Language  | TypeScript                           |
 | Hosting   | Vercel                               |
 
@@ -89,6 +91,7 @@ Optional, for address autocomplete:
 | Variable | Where to find it |
 | -------- | ---------------- |
 | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials → Create API key → restrict to **HTTP referrers** (e.g. `http://localhost:3000/*`, your production origin). Enable **Maps JavaScript API** and **Places API (New)** (address autocomplete uses the new Places Data API, not the legacy Places widget). Billing must be enabled on the project. After changing `.env.local`, restart `bun run dev`. |
+| `GOOGLE_MAPS_STATIC_API_KEY` | **Server-only** key for [Maps Static API](https://developers.google.com/maps/documentation/maps-static/overview) (satellite thumbnails). Create a separate key, enable **Maps Static API**, and restrict it appropriately (e.g. IP for your hosting provider, or API restriction to Static API only). Used by `/api/maps/satellite`; never exposed to the browser. Optional — without it, satellite previews are skipped with a short message. |
 
 ### 3. Push the database schema
 
@@ -148,15 +151,18 @@ Open [http://localhost:3000](http://localhost:3000).
 src/
 ├── app/                         # Next.js App Router pages
 │   ├── auth/callback/           # OAuth redirect handler
+│   ├── api/maps/satellite/      # Proxied Maps Static API (satellite) images
 │   ├── bids/                    # Bid list, create, and detail pages
 │   │   ├── [id]/                # Bid detail with buildings, surfaces, pricing, proposals
-│   │   └── new/                 # New bid form
+│   │   └── new/                 # New bid wizard (address → confirm → details)
 │   ├── login/                   # Login page
 │   ├── settings/                # Company pricing defaults
 │   └── signup/                  # Signup page
 ├── components/
 │   ├── ui/                      # Reusable primitives (button, card, input, etc.)
 │   ├── address-autocomplete.tsx # Google Places address field (optional API key)
+│   ├── new-bid-wizard.tsx      # Staged create flow with satellite confirmation
+│   ├── satellite-preview.tsx   # Satellite image via /api/maps/satellite
 │   ├── bid-detail-sections.tsx  # Collapsible buildings/pricing/proposals sections
 │   ├── bid-summary.tsx          # Collapsible bid info with dirty tracking
 │   ├── building-list.tsx        # Buildings list with add form
