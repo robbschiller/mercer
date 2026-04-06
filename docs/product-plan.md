@@ -8,7 +8,7 @@
 
 The MVP is complete. The full bid-to-proposal workflow works end-to-end:
 
-- Create a bid with property name, address, client name, and notes — address entry uses **Google Places API (New)** autocomplete when `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is set (validated formatted address plus optional lat/lng and place ID persisted on the bid); otherwise a normal text field
+- Create a bid via a short flow: **address first** (Places autocomplete when `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is set), then **confirm with satellite + suggested name** when coordinates exist, then property name, client, and notes. Satellite uses **Maps Static API** via a server proxy when `GOOGLE_MAPS_STATIC_API_KEY` is configured. Without keys, behavior falls back to a single form-style flow with free-text address
 - Add building types with counts and paintable surfaces with dimension-factor input
 - Price the bid with coverage rates, labor, margin, and custom line items
 - Generate a client-facing proposal PDF with per-building breakdowns
@@ -67,7 +67,7 @@ Before investing in expensive aerial measurement APIs, use freely available sate
 
 **Address autocomplete** — **Shipped.** Google Places API (New) typeahead on bid create and edit returns a validated formatted address and persists optional lat/lng and Google place ID on the bid for downstream map and detection features. Without an API key, contractors still enter a free-text address as before.
 
-**Satellite validation** — Display a Google Maps satellite image of the property on the bid detail page. The contractor immediately confirms they have the right property. The satellite view can also be embedded in the proposal PDF for visual context.
+**Satellite validation** — **In progress (partially shipped).** Satellite image on the **new-bid confirmation** step and on the **bid detail** summary when coordinates and Static API are available. Embedding the same view in the **proposal PDF** is still planned.
 
 **Automated building detection** — Query OpenStreetMap building footprint data at the property coordinates to detect how many buildings exist. Combined with AI vision analysis of the satellite image, the app suggests a building list with types ("2-story garden-style x 25", "clubhouse x 1", "parking covers x 4") and counts. The contractor reviews, adjusts, and accepts — buildings are pre-created in the bid.
 

@@ -3,7 +3,6 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import {
-  createBid,
   updateBid,
   deleteBid,
   createBuilding,
@@ -25,7 +24,6 @@ import { createClient } from "./supabase/server";
 import {
   signInSchema,
   signUpSchema,
-  createBidSchema,
   updateBidSchema,
   deleteBidSchema,
   createBuildingSchema,
@@ -44,6 +42,7 @@ import {
 import { calculateBidPricing } from "./pricing";
 import type { ProposalSnapshot } from "./pdf/types";
 import { generateProposalPdf } from "./pdf/generate";
+import { createBidAction as createBidActionImpl } from "./actions/create-bid";
 
 function formDataToObject(formData: FormData) {
   return Object.fromEntries(formData.entries());
@@ -96,28 +95,7 @@ export async function signOutAction() {
 // ── Bids ──
 
 export async function createBidAction(formData: FormData) {
-  const result = createBidSchema.safeParse(formDataToObject(formData));
-
-  if (!result.success) {
-    const message = result.error.issues[0]?.message ?? "Invalid input";
-    redirect(`/bids/new?error=${encodeURIComponent(message)}`);
-  }
-
-  const [bid, defaults] = await Promise.all([
-    createBid(result.data),
-    getUserDefaults(),
-  ]);
-
-  if (defaults) {
-    await updateBidPricing(bid.id, {
-      coverageSqftPerGallon: defaults.coverageSqftPerGallon,
-      pricePerGallon: defaults.pricePerGallon,
-      laborRatePerUnit: defaults.laborRatePerUnit,
-      marginPercent: defaults.marginPercent,
-    });
-  }
-
-  redirect(`/bids/${bid.id}`);
+  return createBidActionImpl(formData);
 }
 
 export async function updateBidAction(formData: FormData) {

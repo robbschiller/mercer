@@ -13,6 +13,22 @@ function getMapsApiKey(): string | undefined {
 const SUGGEST_DEBOUNCE_MS = 250;
 const MIN_QUERY_LEN = 2;
 
+/** Places API may return displayName as a string or a localized object with `text`. */
+function readPlaceDisplayName(place: google.maps.places.Place): string | null {
+  const raw = place.displayName as unknown;
+  if (typeof raw === "string" && raw.trim() !== "") return raw.trim();
+  if (
+    raw &&
+    typeof raw === "object" &&
+    "text" in raw &&
+    typeof (raw as { text: unknown }).text === "string"
+  ) {
+    const t = (raw as { text: string }).text.trim();
+    return t || null;
+  }
+  return null;
+}
+
 interface AddressAutocompleteProps {
   id?: string;
   required?: boolean;
@@ -29,6 +45,7 @@ interface AddressAutocompleteProps {
     lat: number | null;
     lng: number | null;
     placeId: string | null;
+    displayName: string | null;
   }) => void;
 }
 
@@ -183,7 +200,7 @@ export function AddressAutocomplete({
     const place = pred.toPlace();
     try {
       await place.fetchFields({
-        fields: ["formattedAddress", "location", "id"],
+        fields: ["formattedAddress", "location", "id", "displayName"],
       });
     } catch (e) {
       console.error("[AddressAutocomplete] fetchFields:", e);
@@ -195,6 +212,7 @@ export function AddressAutocomplete({
     const nextLat = loc ? loc.lat() : null;
     const nextLng = loc ? loc.lng() : null;
     const nextPlaceId = place.id ?? pred.placeId ?? null;
+    const nextDisplayName = readPlaceDisplayName(place);
 
     if (input) {
       input.value = formatted;
@@ -216,6 +234,7 @@ export function AddressAutocomplete({
       lat: nextLat,
       lng: nextLng,
       placeId: nextPlaceId,
+      displayName: nextDisplayName,
     });
   }
 
@@ -235,6 +254,7 @@ export function AddressAutocomplete({
       lat: null,
       lng: null,
       placeId: null,
+      displayName: null,
     });
 
     scheduleFetch();
@@ -276,6 +296,7 @@ export function AddressAutocomplete({
               lat: null,
               lng: null,
               placeId: null,
+              displayName: null,
             })
           }
         />
@@ -314,6 +335,7 @@ export function AddressAutocomplete({
               lat: null,
               lng: null,
               placeId: null,
+              displayName: null,
             })
           }
         />
