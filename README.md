@@ -27,7 +27,7 @@ Mercer is a working MVP with the full bid-to-proposal workflow complete:
 
 **Property Intelligence** — The headline feature for the next phase:
 
-- Satellite preview on new-bid confirmation and bid detail is live when Static API is configured; proposal PDF embed and OSM footprints are next
+- Satellite preview and proposal PDF property image when Static API is configured; **OpenStreetMap building footprints** on bid detail (Overpass API, optional `OVERPASS_API_URL`)
 - Automated building detection using OpenStreetMap footprint data and AI vision analysis (GPT-4o / Gemini) to suggest building count, types, and similarity grouping
 - Pre-populated building list that the contractor reviews and accepts — reducing manual setup time significantly
 
@@ -50,7 +50,7 @@ See `docs/` for the full [product plan](docs/product-plan.md), [build plan](docs
 | PDF       | @react-pdf/renderer                  |
 | Storage   | Supabase Storage                     |
 | Analytics | Vercel Web Analytics                 |
-| Maps      | Google Maps JavaScript API + Places API (New) (optional; autocomplete); Maps Static API (optional; satellite preview via server proxy) |
+| Maps / OSM | Google Maps (Places + Static, optional); OpenStreetMap via Overpass (no key; optional custom `OVERPASS_API_URL`) |
 | Language  | TypeScript                           |
 | Hosting   | Vercel                               |
 
@@ -92,6 +92,7 @@ Optional, for address autocomplete:
 | -------- | ---------------- |
 | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials → Create API key → restrict to **HTTP referrers** (e.g. `http://localhost:3000/*`, your production origin). Enable **Maps JavaScript API** and **Places API (New)** (address autocomplete uses the new Places Data API, not the legacy Places widget). Billing must be enabled on the project. After changing `.env.local`, restart `bun run dev`. |
 | `GOOGLE_MAPS_STATIC_API_KEY` | **Server-only** key for [Maps Static API](https://developers.google.com/maps/documentation/maps-static/overview) (satellite thumbnails). Create a separate key, enable **Maps Static API**, and restrict it appropriately (e.g. IP for your hosting provider, or API restriction to Static API only). Used by `/api/maps/satellite`; never exposed to the browser. Optional — without it, satellite previews are skipped with a short message. |
+| `OVERPASS_API_URL` | Optional. Base URL for the [Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API) interpreter (default: `https://overpass-api.de/api/interpreter`). Used server-side for building footprint lookup on bid detail. Public instances are rate-limited; use your own for heavy use. |
 
 ### 3. Push the database schema
 
@@ -163,6 +164,7 @@ src/
 │   ├── address-autocomplete.tsx # Google Places address field (optional API key)
 │   ├── new-bid-wizard.tsx      # Staged create flow with satellite confirmation
 │   ├── satellite-preview.tsx   # Satellite image via /api/maps/satellite
+│   ├── osm-footprints-section.tsx # OSM building outlines (Overpass) on bid detail
 │   ├── bid-detail-sections.tsx  # Collapsible buildings/pricing/proposals sections
 │   ├── bid-summary.tsx          # Collapsible bid info with dirty tracking
 │   ├── building-list.tsx        # Buildings list with add form
@@ -179,6 +181,8 @@ src/
 │   ├── schema.ts                # Drizzle table definitions
 │   └── index.ts                 # Database client (singleton)
 └── lib/
+    ├── osm/
+    │   └── overpass.ts          # OpenStreetMap Overpass queries + cached footprint fetch
     ├── actions.ts               # Server actions (auth, CRUD, pricing, proposals)
     ├── store.ts                 # Data access layer
     ├── validations.ts           # Zod schemas for all inputs
