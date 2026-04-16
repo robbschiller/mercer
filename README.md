@@ -35,7 +35,7 @@ Mercer is a working MVP with the full bid-to-proposal workflow complete:
 
 **Polish** — Mobile responsiveness audit, confirm-before-delete dialogs, numeric validation, and onboarding hints.
 
-See `docs/` for the full [product plan](docs/product-plan.md), [build plan](docs/build-plan.md), and [EagleView integration plan](docs/eagleview-integration-plan.md).
+See `docs/` for the full [plan](docs/plan.md) and [EagleView integration plan](docs/eagleview-integration-plan.md).
 
 ## Tech Stack
 
@@ -194,8 +194,7 @@ src/
     │   └── types.ts             # ProposalSnapshot type
     └── supabase/                # Supabase client helpers and middleware
 docs/
-├── product-plan.md              # Market analysis and phased product plan
-├── build-plan.md                # Implementation roadmap
+├── plan.md                      # Market analysis, roadmap, tech stack, and data model
 ├── eagleview-integration-plan.md # EagleView API integration plan (Phase 3)
 └── build-plans/                 # Detailed feature build plans
 ```
