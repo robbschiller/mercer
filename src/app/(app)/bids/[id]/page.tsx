@@ -23,8 +23,16 @@ export default async function BidPage({
     notFound();
   }
 
-  const { bid, buildings, surfacesByBuilding, lineItems, totalSqft, proposals } =
-    data;
+  const {
+    bid,
+    buildings,
+    surfacesByBuilding,
+    lineItems,
+    totalSqft,
+    proposals,
+    proposalShares,
+  } = data;
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
   const pricing = calculateBidPricing({
     totalSqft,
@@ -66,7 +74,9 @@ export default async function BidPage({
         lineItems={lineItems}
         totalSqft={totalSqft}
         proposals={proposals}
+        proposalShares={proposalShares}
         pricing={pricing}
+        siteUrl={siteUrl}
       />
 
       <Card className="border-destructive/50">

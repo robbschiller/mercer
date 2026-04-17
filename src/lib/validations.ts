@@ -145,6 +145,33 @@ export const generateProposalSchema = z.object({
   bidId: z.string().uuid("Invalid bid ID"),
 });
 
+export const createProposalShareSchema = z.object({
+  proposalId: z.string().uuid("Invalid proposal ID"),
+});
+
+export const acceptProposalShareSchema = z.object({
+  slug: z.string().uuid("Invalid share link"),
+  acceptedByName: z.string().trim().min(1, "Name is required"),
+  acceptedByTitle: z
+    .union([z.string(), z.undefined(), z.null()])
+    .transform((v) => {
+      if (v == null) return null;
+      const trimmed = v.trim();
+      return trimmed === "" ? null : trimmed;
+    }),
+});
+
+export const declineProposalShareSchema = z.object({
+  slug: z.string().uuid("Invalid share link"),
+  reason: z
+    .union([z.string(), z.undefined(), z.null()])
+    .transform((v) => {
+      if (v == null) return null;
+      const trimmed = v.trim();
+      return trimmed === "" ? null : trimmed;
+    }),
+});
+
 // ── Leads ──
 
 const optionalText = z

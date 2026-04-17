@@ -6,6 +6,8 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarHeader,
+  SidebarRail,
+  SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { AppSidebarNav } from "@/components/app-sidebar-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -15,13 +17,18 @@ export function AppSidebar({ userEmail }: { userEmail: string }) {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <Link
-          href="/bids"
-          className="flex items-center gap-2 px-2 py-1.5 font-bold text-lg group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center"
-        >
-          <span className="group-data-[collapsible=icon]:hidden">Mercer</span>
-          <span className="hidden group-data-[collapsible=icon]:inline">M</span>
-        </Link>
+        <div className="flex items-center gap-1 px-2 py-1.5 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center">
+          <Link
+            href="/dashboard"
+            className="flex flex-1 items-center gap-2 font-bold text-lg group-data-[collapsible=icon]:hidden"
+          >
+            Mercer
+          </Link>
+          <SidebarTrigger
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+            title="Toggle sidebar (⌘B)"
+          />
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -51,6 +58,7 @@ export function AppSidebar({ userEmail }: { userEmail: string }) {
           </Button>
         </form>
       </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   );
 }

@@ -19,10 +19,13 @@ import {
   upsertUserDefaults,
   getBidPageData,
   createProposal,
+  createProposalShare,
   createLead,
   createLeadsBatch,
   updateLeadStatus,
   getLead,
+  acceptProposalShare,
+  declineProposalShare,
 } from "./store";
 import { parseCsv, autoMapColumns, mapRowsToLeads } from "./leads/csv";
 import {
@@ -47,6 +50,9 @@ import {
   deleteLineItemSchema,
   updateUserDefaultsSchema,
   generateProposalSchema,
+  createProposalShareSchema,
+  acceptProposalShareSchema,
+  declineProposalShareSchema,
   createLeadSchema,
   importLeadsSchema,
   updateLeadStatusSchema,
@@ -79,7 +85,7 @@ export async function signInAction(formData: FormData) {
     redirect(`/login?error=${encodeURIComponent(error.message)}`);
   }
 
-  redirect("/bids");
+  redirect("/dashboard");
 }
 
 export async function signUpAction(formData: FormData) {
@@ -424,6 +430,58 @@ export async function generateProposalAction(data: { bidId: string }) {
   revalidatePath(`/bids/${bid.id}`);
   revalidatePath("/bids");
   return { error: null, pdfUrl: proposal.pdfUrl };
+}
+
+export async function createProposalShareAction(data: { proposalId: string }) {
+  const result = createProposalShareSchema.safeParse(data);
+  if (!result.success) {
+    return { error: result.error.issues[0]?.message ?? "Invalid input", shareUrl: null };
+  }
+
+  try {
+    const share = await createProposalShare(result.data.proposalId);
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+    return { error: null, shareUrl: `${siteUrl}/p/${share.id}` };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to create share link";
+    return { error: message, shareUrl: null };
+  }
+}
+
+export async function acceptProposalShareAction(formData: FormData) {
+  const result = acceptProposalShareSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    return { error: result.error.issues[0]?.message ?? "Invalid input" };
+  }
+  try {
+    await acceptProposalShare(result.data.slug, {
+      acceptedByName: result.data.acceptedByName,
+      acceptedByTitle: result.data.acceptedByTitle,
+    });
+    revalidatePath(`/p/${result.data.slug}`);
+    revalidatePath("/bids");
+    return { error: null };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to accept proposal";
+    return { error: message };
+  }
+}
+
+export async function declineProposalShareAction(formData: FormData) {
+  const result = declineProposalShareSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    return { error: result.error.issues[0]?.message ?? "Invalid input" };
+  }
+  try {
+    await declineProposalShare(result.data.slug, { reason: result.data.reason });
+    revalidatePath(`/p/${result.data.slug}`);
+    revalidatePath("/bids");
+    return { error: null };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to decline proposal";
+    return { error: message };
+  }
 }
 
 // ── Leads ──

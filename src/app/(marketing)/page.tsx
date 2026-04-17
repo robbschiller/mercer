@@ -21,7 +21,7 @@ type Icon = ComponentType<{ className?: string }>;
 
 export default async function Home() {
   const user = await getSessionUser();
-  if (user) redirect("/bids");
+  if (user) redirect("/dashboard");
 
   return (
     <div className="relative isolate overflow-hidden bg-[var(--color-ink)] text-white">
@@ -58,7 +58,7 @@ function Hero() {
         {/* Top meta row */}
         <div className="flex flex-wrap items-center gap-4 text-white/60">
           <span className="kicker text-[var(--color-amber-soft)]">
-            §&nbsp;01 · Now in field trials with Reno Base
+            §&nbsp;01 · Now in field trials with Renobase
           </span>
           <span className="hidden h-px flex-1 bg-white/10 sm:block" aria-hidden />
           <span className="kicker hidden sm:inline">
@@ -66,17 +66,19 @@ function Hero() {
           </span>
         </div>
 
+        {/* Masthead headline — full container width so each phrase stays on one line */}
+        <h1 className="font-display-editorial text-[clamp(2.5rem,8.8vw,7.75rem)] leading-[0.88] text-white">
+          <span className="block sm:whitespace-nowrap">From trade show list</span>
+          <span className="block italic text-white/95 sm:whitespace-nowrap">
+            to signed deal
+            <span className="not-italic text-[var(--color-amber)]">.</span>
+          </span>
+        </h1>
+
         <div className="grid grid-cols-1 gap-x-10 gap-y-14 lg:grid-cols-12">
-          {/* Headline */}
-          <div className="lg:col-span-8">
-            <h1 className="font-display-editorial text-[clamp(3rem,8.2vw,7.25rem)] leading-[0.9] text-white">
-              From trade show list
-              <br />
-              <span className="italic text-white/95">
-                to signed deal<span className="text-[var(--color-amber)]">.</span>
-              </span>
-            </h1>
-            <p className="mt-10 max-w-xl text-lg leading-relaxed text-white/70 sm:text-xl">
+          {/* Subhead + CTAs */}
+          <div className="lg:col-span-7">
+            <p className="max-w-xl text-lg leading-relaxed text-white/70 sm:text-xl">
               Mercer is the sales platform for commercial multifamily exterior
               renovation. Painting first, with siding, stucco, and envelope on
               deck. Ingest an attendee list, enrich every row with property
@@ -106,7 +108,7 @@ function Hero() {
           </div>
 
           {/* Field-notes card */}
-          <aside className="lg:col-span-4">
+          <aside className="lg:col-span-5">
             <FieldCard />
           </aside>
         </div>
@@ -654,7 +656,7 @@ function Product() {
             </h2>
           </div>
           <p className="max-w-sm text-base leading-relaxed text-[var(--color-ink)]/70">
-            Every capability below is shipping in the Reno Base MVP.
+            Every capability below is shipping in the Renobase MVP.
             Photos-in-proposals and per-salesperson attribution are on deck;
             ERP scope (contracts, schedules, subs) arrives post-validation.
           </p>

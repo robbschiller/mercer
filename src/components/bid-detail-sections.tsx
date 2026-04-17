@@ -7,7 +7,14 @@ import { BuildingList } from "@/components/building-list";
 import { PricingSection } from "@/components/pricing-section";
 import { ProposalList } from "@/components/proposal-list";
 import { formatCurrency } from "@/lib/pricing";
-import type { Bid, Surface, LineItem, Proposal, BuildingWithSqft } from "@/lib/store";
+import type {
+  Bid,
+  Surface,
+  LineItem,
+  Proposal,
+  BuildingWithSqft,
+  ProposalShare,
+} from "@/lib/store";
 import type { PricingResult } from "@/lib/pricing";
 
 type Section = "buildings" | "pricing" | "proposals";
@@ -19,7 +26,9 @@ interface BidDetailSectionsProps {
   lineItems: LineItem[];
   totalSqft: number;
   proposals: Proposal[];
+  proposalShares: { proposalId: string; share: ProposalShare }[];
   pricing: PricingResult;
+  siteUrl: string;
 }
 
 export function BidDetailSections({
@@ -29,7 +38,9 @@ export function BidDetailSections({
   lineItems,
   totalSqft,
   proposals,
+  proposalShares,
   pricing,
+  siteUrl,
 }: BidDetailSectionsProps) {
   const [open, setOpen] = useState<Set<Section>>(() => {
     const initial = new Set<Section>();
@@ -117,8 +128,10 @@ export function BidDetailSections({
       >
         <ProposalList
           proposals={proposals}
+          proposalShares={proposalShares}
           bidId={bid.id}
           pricingComplete={pricing.complete}
+          siteUrl={siteUrl}
         />
       </CollapsibleSection>
     </>

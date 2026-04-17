@@ -92,6 +92,22 @@ export const proposals = pgTable("proposals", {
     .defaultNow(),
 });
 
+export const proposalShares = pgTable("proposal_shares", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  proposalId: uuid("proposal_id")
+    .notNull()
+    .references(() => proposals.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  accessedAt: timestamp("accessed_at", { withTimezone: true }),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  acceptedByName: text("accepted_by_name"),
+  acceptedByTitle: text("accepted_by_title"),
+  declinedAt: timestamp("declined_at", { withTimezone: true }),
+  declineReason: text("decline_reason"),
+});
+
 export const leads = pgTable("leads", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull(),

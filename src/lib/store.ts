@@ -6,6 +6,7 @@ import {
   lineItems,
   userDefaults,
   proposals,
+  proposalShares,
   leads,
 } from "@/db/schema";
 import { eq, desc, and, asc, sql } from "drizzle-orm";
@@ -19,6 +20,7 @@ export type Surface = typeof surfaces.$inferSelect;
 export type LineItem = typeof lineItems.$inferSelect;
 export type UserDefault = typeof userDefaults.$inferSelect;
 export type Proposal = typeof proposals.$inferSelect;
+export type ProposalShare = typeof proposalShares.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
 export type BuildingWithSqft = Building & { totalSqft: number };
 
@@ -198,7 +200,15 @@ export async function getBuildingsForBid(bidId: string) {
 export async function getBidPageData(bidId: string) {
   const user = await requireUser();
 
-  const [bidRows, buildingRows, surfaceRows, lineItemRows, sqftRows, proposalRows] =
+  const [
+    bidRows,
+    buildingRows,
+    surfaceRows,
+    lineItemRows,
+    sqftRows,
+    proposalRows,
+    proposalShareRows,
+  ] =
     await Promise.all([
       db
         .select()
@@ -240,6 +250,12 @@ export async function getBidPageData(bidId: string) {
         .from(proposals)
         .where(eq(proposals.bidId, bidId))
         .orderBy(desc(proposals.createdAt)),
+      db
+        .select({ share: proposalShares, proposalId: proposals.id })
+        .from(proposalShares)
+        .innerJoin(proposals, eq(proposalShares.proposalId, proposals.id))
+        .where(eq(proposals.bidId, bidId))
+        .orderBy(desc(proposalShares.createdAt)),
     ]);
 
   const bid = bidRows[0] ?? null;
@@ -266,6 +282,7 @@ export async function getBidPageData(bidId: string) {
     lineItems: lineItemRows,
     totalSqft: Number(sqftRows[0]?.total ?? 0),
     proposals: proposalRows,
+    proposalShares: proposalShareRows,
   };
 }
 
@@ -599,6 +616,114 @@ export async function createProposal(
     .values({ bidId, snapshot, pdfUrl })
     .returning();
   return rows[0];
+}
+
+export async function createProposalShare(proposalId: string) {
+  const user = await requireUser();
+  const proposalRows = await db
+    .select({ id: proposals.id })
+    .from(proposals)
+    .innerJoin(bids, eq(proposals.bidId, bids.id))
+    .where(and(eq(proposals.id, proposalId), eq(bids.userId, user.id)))
+    .limit(1);
+  if (!proposalRows[0]) throw new Error("Proposal not found");
+
+  const rows = await db
+    .insert(proposalShares)
+    .values({ proposalId })
+    .returning();
+  return rows[0];
+}
+
+export async function getProposalShareBySlug(slug: string) {
+  const rows = await db
+    .select({
+      share: proposalShares,
+      proposal: proposals,
+      bid: bids,
+    })
+    .from(proposalShares)
+    .innerJoin(proposals, eq(proposalShares.proposalId, proposals.id))
+    .innerJoin(bids, eq(proposals.bidId, bids.id))
+    .where(eq(proposalShares.id, slug))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function markProposalShareAccessed(slug: string) {
+  const rows = await db
+    .update(proposalShares)
+    .set({ accessedAt: new Date() })
+    .where(and(eq(proposalShares.id, slug), sql`${proposalShares.accessedAt} is null`))
+    .returning();
+  return rows[0] ?? null;
+}
+
+export async function acceptProposalShare(
+  slug: string,
+  data: { acceptedByName: string; acceptedByTitle: string | null }
+) {
+  const shareRows = await db
+    .select({ share: proposalShares, proposal: proposals })
+    .from(proposalShares)
+    .innerJoin(proposals, eq(proposalShares.proposalId, proposals.id))
+    .where(eq(proposalShares.id, slug))
+    .limit(1);
+  const existing = shareRows[0];
+  if (!existing) throw new Error("Proposal share not found");
+  if (existing.share.acceptedAt || existing.share.declinedAt) {
+    throw new Error("This proposal has already been responded to.");
+  }
+
+  const [updatedShare] = await db
+    .update(proposalShares)
+    .set({
+      acceptedAt: new Date(),
+      acceptedByName: data.acceptedByName,
+      acceptedByTitle: data.acceptedByTitle,
+    })
+    .where(eq(proposalShares.id, slug))
+    .returning();
+
+  await db
+    .update(bids)
+    .set({ status: "won", updatedAt: new Date() })
+    .where(eq(bids.id, existing.proposal.bidId));
+
+  return updatedShare;
+}
+
+export async function declineProposalShare(
+  slug: string,
+  data: { reason: string | null }
+) {
+  const shareRows = await db
+    .select({ share: proposalShares, proposal: proposals })
+    .from(proposalShares)
+    .innerJoin(proposals, eq(proposalShares.proposalId, proposals.id))
+    .where(eq(proposalShares.id, slug))
+    .limit(1);
+  const existing = shareRows[0];
+  if (!existing) throw new Error("Proposal share not found");
+  if (existing.share.acceptedAt || existing.share.declinedAt) {
+    throw new Error("This proposal has already been responded to.");
+  }
+
+  const [updatedShare] = await db
+    .update(proposalShares)
+    .set({
+      declinedAt: new Date(),
+      declineReason: data.reason,
+    })
+    .where(eq(proposalShares.id, slug))
+    .returning();
+
+  await db
+    .update(bids)
+    .set({ status: "lost", updatedAt: new Date() })
+    .where(eq(bids.id, existing.proposal.bidId));
+
+  return updatedShare;
 }
 
 // ── Leads ──
