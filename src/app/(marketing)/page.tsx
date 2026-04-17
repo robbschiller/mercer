@@ -27,6 +27,7 @@ export default async function Home() {
     <div className="relative isolate overflow-hidden bg-[var(--color-ink)] text-white">
       <Hero />
       <Positioning />
+      <WhyNot />
       <Workflow />
       <Product />
       <Principles />
@@ -61,7 +62,7 @@ function Hero() {
           </span>
           <span className="hidden h-px flex-1 bg-white/10 sm:block" aria-hidden />
           <span className="kicker hidden sm:inline">
-            Multifamily&nbsp;·&nbsp;Exterior&nbsp;renovation&nbsp;·&nbsp;Lead&nbsp;→&nbsp;Close
+            Commercial&nbsp;multifamily&nbsp;·&nbsp;Exterior&nbsp;renovation&nbsp;·&nbsp;Painting&nbsp;first
           </span>
         </div>
 
@@ -76,10 +77,10 @@ function Hero() {
               </span>
             </h1>
             <p className="mt-10 max-w-xl text-lg leading-relaxed text-white/70 sm:text-xl">
-              Mercer is the sales platform for exterior renovation contractors
-              bidding multifamily. Ingest an attendee list, enrich every row
-              with property intelligence, build the bid, and close on a
-              shareable link — all in one place.
+              Mercer is the sales platform for commercial multifamily exterior
+              renovation. Painting first, with siding, stucco, and envelope on
+              deck. Ingest an attendee list, enrich every row with property
+              intelligence, build the bid, close on a shareable link.
             </p>
 
             <div className="mt-10 flex flex-wrap items-center gap-3">
@@ -267,7 +268,7 @@ const competitors: Competitor[] = [
     owns: "Aerial measurement",
     owns_short: "measurements",
     blurb:
-      "High-accuracy 3D property reports. Owns the pixels in the sky. Stops at the measurement.",
+      "High-accuracy 3D property reports, including multifamily. Owns the pixels in the sky. Stops at the measurement.",
     tone: "muted",
   },
   {
@@ -275,23 +276,39 @@ const competitors: Competitor[] = [
     owns: "Blueprint takeoff",
     owns_short: "takeoffs",
     blurb:
-      "Digital takeoffs from PDFs and elevations. Only useful when you actually have plans — which you mostly don't.",
+      "Digital takeoffs from PDFs and elevations. Only useful when you actually have plans, which you mostly don't.",
     tone: "muted",
   },
   {
-    name: "Salesforce · Procore",
+    name: "Salesforce · HubSpot",
     owns: "Generic pipeline",
     owns_short: "CRM",
     blurb:
-      "Powerful, infinitely configurable, and built for anyone. Doesn't speak takeoff, building, or multifamily.",
+      "Infinitely configurable, speaks nothing. No concept of a building, a takeoff, a surface, or a multifamily asset.",
+    tone: "muted",
+  },
+  {
+    name: "JobNimbus · AccuLynx",
+    owns: "Roofing CRM",
+    owns_short: "roofing",
+    blurb:
+      "Purpose-built lead-to-close pipelines for roofing, residential and commercial. The pattern proof. The trade is the limit, not the segment.",
+    tone: "muted",
+  },
+  {
+    name: "Procore · BuilderTrend",
+    owns: "Post-sale operations",
+    owns_short: "project ops",
+    blurb:
+      "Schedules, subs, RFIs, punch lists. Start after the contract is signed. Downstream of Mercer, not a substitute.",
     tone: "muted",
   },
   {
     name: "Mercer",
-    owns: "Lead → close",
+    owns: "Commercial multifamily exterior renovation",
     owns_short: "the whole job",
     blurb:
-      "Trade show list in, signed proposal out. Every step in the language of the exterior renovation contractor.",
+      "Trade show list in, signed proposal out. Painting first, siding and envelope next. Every step in the language of the commercial renovation contractor.",
     tone: "highlight",
   },
 ];
@@ -316,13 +333,13 @@ function Positioning() {
             </h2>
           </div>
           <p className="max-w-sm text-base leading-relaxed text-[var(--color-ink)]/70">
-            The exterior renovation contractor working multifamily stitches
-            four tools together and still ends up re-keying property data into
+            The commercial multifamily exterior renovation contractor stitches
+            five tools together and still ends up re-keying property data into
             a spreadsheet. Mercer is the seam.
           </p>
         </div>
 
-        <div className="mt-14 grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-14 grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
           {competitors.map((c) => (
             <CompetitorCard key={c.name} competitor={c} />
           ))}
@@ -330,12 +347,12 @@ function Positioning() {
 
         <div className="mt-14 flex flex-col items-start gap-3 border-t border-[var(--color-parchment-border)] pt-8 md:flex-row md:items-center md:justify-between">
           <p className="max-w-2xl font-display text-xl italic leading-snug text-[var(--color-ink)]/80">
-            &ldquo;Nobody owns the full lead-to-close workflow for the
-            exterior renovation contractor working multifamily. That&rsquo;s
-            the niche.&rdquo;
+            &ldquo;Roofing contractors have JobNimbus and AccuLynx. Everyone
+            else renovating the outside of an occupied commercial property has
+            nothing. That&rsquo;s the niche.&rdquo;
           </p>
           <span className="kicker text-[var(--color-ink)]/50">
-            — Mercer strategy note
+            / Mercer strategy note
           </span>
         </div>
       </div>
@@ -385,6 +402,85 @@ function CompetitorCard({ competitor }: { competitor: Competitor }) {
         {competitor.blurb}
       </p>
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                  WHY NOT                                   */
+/* -------------------------------------------------------------------------- */
+
+type Objection = {
+  target: string;
+  question: string;
+  answer: string;
+};
+
+const objections: Objection[] = [
+  {
+    target: "Salesforce · HubSpot",
+    question: "Why not a generic CRM?",
+    answer:
+      "Infinitely configurable, speaks nothing. Building count, coverage rates, $/sqft, takeoff by surface, footprint enrichment. None of it ships out of the box. Once you've bolted it on with custom objects, you've built a bad version of Mercer at ten times the maintenance cost.",
+  },
+  {
+    target: "Jobber · ServiceTitan",
+    question: "Why not a trades CRM?",
+    answer:
+      "Residential service unit economics. A $900 HVAC tune-up drives every decision in the UX. A $1.2M phased repaint on 49 buildings, sold to a property manager eleven months out, doesn't fit their shape. Their customers aren't property managers.",
+  },
+  {
+    target: "JobNimbus · AccuLynx",
+    question: "Why not the roofing CRMs?",
+    answer:
+      "Closest analogue workflow-wise, and they serve commercial roofing well. But they're roofing-specific. Bid, measurement, and pricing are built around shingles and sloped roofs. They validate the pattern; they leave the rest of commercial exterior renovation wide open.",
+  },
+];
+
+function WhyNot() {
+  return (
+    <section
+      id="why-not"
+      className="relative isolate overflow-hidden bg-[var(--color-parchment-soft)] text-[var(--color-ink)]"
+    >
+      <div className="relative mx-auto w-full max-w-[1400px] px-6 py-24 lg:px-10 lg:py-28">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-3xl">
+            <span className="kicker text-[var(--color-amber)]">
+              §&nbsp;03 · The objections, addressed
+            </span>
+            <h2 className="mt-6 font-display-editorial text-[clamp(2.25rem,5.5vw,4.75rem)] leading-[0.95]">
+              Why not just use
+              <br />
+              <span className="italic">the obvious one?</span>
+            </h2>
+          </div>
+          <p className="max-w-sm text-base leading-relaxed text-[var(--color-ink)]/70">
+            Peers ask Jordan this all the time. The short version of why each
+            usual suspect falls short for commercial multifamily exterior
+            renovation.
+          </p>
+        </div>
+
+        <div className="mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">
+          {objections.map((o) => (
+            <div
+              key={o.target}
+              className="flex flex-col gap-4 rounded-2xl border border-[var(--color-parchment-border)] bg-white p-7"
+            >
+              <span className="kicker text-[var(--color-ink)]/45">
+                {o.target}
+              </span>
+              <h3 className="font-display text-2xl leading-tight">
+                {o.question}
+              </h3>
+              <p className="text-sm leading-relaxed text-[var(--color-ink)]/70">
+                {o.answer}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -446,7 +542,7 @@ const stages: Stage[] = [
     title: "Close",
     tagline: "Ship a link that accepts itself",
     description:
-      "Generate a shareable proposal URL — no login, no PDF attachment in a thread. The customer taps Accept; the bid flips to Won, the lead flips to Won, the pipeline updates in real time.",
+      "Generate a shareable proposal URL. No login, no PDF attachment in a thread. The customer taps Accept; the bid flips to Won, the lead flips to Won, the pipeline updates in real time.",
     icon: FileSignature,
     bullets: [
       "Public /p/[slug] HTML proposal",
@@ -471,7 +567,7 @@ function Workflow() {
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <span className="kicker text-[var(--color-amber-soft)]">
-              §&nbsp;03 · The four-stage arc
+              §&nbsp;04 · The four-stage arc
             </span>
             <h2 className="mt-6 font-display-editorial text-[clamp(2.5rem,6vw,5.25rem)] leading-[0.95] text-white">
               Ingest. Enrich.
@@ -481,7 +577,7 @@ function Workflow() {
           </div>
           <p className="max-w-sm text-base leading-relaxed text-white/65">
             Mercer doesn&apos;t add a new step to your day. It removes three
-            of them — and gives you a single pane of glass from first contact
+            of them, and gives you a single pane of glass from first contact
             to signed deal.
           </p>
         </div>
@@ -551,7 +647,7 @@ function Product() {
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <span className="kicker text-[var(--color-amber)]">
-              §&nbsp;04 · What&rsquo;s in the tin
+              §&nbsp;05 · What&rsquo;s in the tin
             </span>
             <h2 className="mt-6 font-display-editorial text-[clamp(2.25rem,5.5vw,4.75rem)] leading-[0.95]">
               One app. The whole funnel.
@@ -684,6 +780,10 @@ function FeatureCard({
 
 const principles: { title: string; body: string }[] = [
   {
+    title: "Built for the occupied asset.",
+    body: "Buildings are full of tenants. Work is phased around leases, notices, and access. Property managers buy in capex cycles off approved vendor lists. Every product decision starts here.",
+  },
+  {
     title: "Mobile-first, on-site.",
     body: "Contractors use it in the parking lot. Fast inputs, large tap targets, no layouts that hide behind a keyboard.",
   },
@@ -717,7 +817,7 @@ function Principles() {
         <div className="grid grid-cols-1 gap-16 lg:grid-cols-12">
           <div className="lg:col-span-5">
             <span className="kicker text-[var(--color-amber-soft)]">
-              §&nbsp;05 · Build principles
+              §&nbsp;06 · Build principles
             </span>
             <h2 className="mt-6 font-display-editorial text-[clamp(2.25rem,5vw,4.5rem)] leading-[0.95]">
               Built by a contractor&rsquo;s kid.
@@ -777,7 +877,7 @@ function FinalCta() {
         <div className="flex flex-col gap-10 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <span className="kicker text-[var(--color-ink)]/60">
-              §&nbsp;06 · Your move
+              §&nbsp;07 · Your move
             </span>
             <h2 className="mt-6 font-display-editorial text-[clamp(2.5rem,6vw,5.75rem)] leading-[0.92]">
               Bring in your next
@@ -824,12 +924,13 @@ function Footer() {
             <Link href="/" className="flex items-baseline gap-2 text-white">
               <span className="font-display text-2xl">Mercer</span>
               <span className="kicker text-white/40">
-                Sales platform · Exterior renovation
+                Sales platform · Commercial multifamily · Painting first
               </span>
             </Link>
             <p className="mt-5 max-w-sm text-sm leading-relaxed">
-              The sales platform for exterior renovation contractors bidding
-              multifamily. Trade show list in, signed deal out.
+              The sales platform for commercial multifamily exterior
+              renovation. Painting first, siding and envelope next. Trade show
+              list in, signed deal out.
             </p>
           </div>
 
@@ -838,6 +939,7 @@ function Footer() {
             items={[
               ["Workflow", "#workflow"],
               ["Why Mercer", "#positioning"],
+              ["Why not the obvious?", "#why-not"],
               ["Capabilities", "#product"],
             ]}
           />

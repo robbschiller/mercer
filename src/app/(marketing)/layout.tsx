@@ -12,7 +12,7 @@ export default function MarketingLayout({
           <Link
             href="/"
             className="flex items-baseline gap-2 text-white"
-            aria-label="Mercer — home"
+            aria-label="Mercer, home"
           >
             <span className="font-display text-[1.6rem] leading-none tracking-tight font-medium">
               Mercer

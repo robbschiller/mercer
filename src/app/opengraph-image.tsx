@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
 export const alt =
-  "Mercer — From trade show list to signed deal. The sales platform for exterior renovation.";
+  "Mercer. From trade show list to signed deal. The sales platform for commercial multifamily exterior renovation.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -221,8 +221,8 @@ export default async function OpenGraphImage() {
               maxWidth: 640,
             }}
           >
-            The sales platform for exterior renovation contractors bidding
-            multifamily.
+            The sales platform for commercial multifamily exterior renovation.
+            Painting first.
           </span>
 
           <div style={{ display: "flex", gap: 28 }}>
