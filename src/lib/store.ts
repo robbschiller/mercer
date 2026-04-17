@@ -642,3 +642,98 @@ export async function createLead(
     .returning();
   return rows[0];
 }
+
+export async function getLead(id: string) {
+  const user = await requireUser();
+  const rows = await db
+    .select()
+    .from(leads)
+    .where(and(eq(leads.id, id), eq(leads.userId, user.id)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export type LeadImportRow = {
+  name: string;
+  email: string | null;
+  phone: string | null;
+  company: string | null;
+  propertyName: string | null;
+  rawRow: Record<string, string>;
+};
+
+/**
+ * Bulk-insert leads from a CSV import. All rows share the same `sourceTag`
+ * and land with enrichment_status = 'pending' so the enrichment worker can
+ * pick them up. Returns the inserted rows (with ids) for downstream enqueue.
+ */
+export async function createLeadsBatch(
+  rows: LeadImportRow[],
+  sourceTag: string | null
+): Promise<Lead[]> {
+  if (rows.length === 0) return [];
+  const user = await requireUser();
+  return db
+    .insert(leads)
+    .values(
+      rows.map((r) => ({
+        userId: user.id,
+        sourceTag,
+        name: r.name,
+        email: r.email,
+        phone: r.phone,
+        company: r.company,
+        propertyName: r.propertyName,
+        rawRow: r.rawRow,
+        enrichmentStatus: "pending" as const,
+      }))
+    )
+    .returning();
+}
+
+export async function updateLeadEnrichment(
+  id: string,
+  patch: Partial<
+    Pick<
+      Lead,
+      | "resolvedAddress"
+      | "latitude"
+      | "longitude"
+      | "googlePlaceId"
+      | "satelliteImageUrl"
+      | "enrichmentStatus"
+      | "enrichmentError"
+    >
+  >
+) {
+  const user = await requireUser();
+  const rows = await db
+    .update(leads)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(and(eq(leads.id, id), eq(leads.userId, user.id)))
+    .returning();
+  return rows[0] ?? null;
+}
+
+export async function updateLeadStatus(id: string, status: Lead["status"]) {
+  const user = await requireUser();
+  const rows = await db
+    .update(leads)
+    .set({ status, updatedAt: new Date() })
+    .where(and(eq(leads.id, id), eq(leads.userId, user.id)))
+    .returning();
+  return rows[0] ?? null;
+}
+
+/** Distinct source_tag values for the current user (for filter dropdown). */
+export async function getLeadSourceTags(): Promise<string[]> {
+  const user = await requireUser();
+  const rows = await db
+    .selectDistinct({ sourceTag: leads.sourceTag })
+    .from(leads)
+    .where(eq(leads.userId, user.id));
+  return rows
+    .map((r) => r.sourceTag)
+    .filter((t): t is string => !!t)
+    .sort();
+}
