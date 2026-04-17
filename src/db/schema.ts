@@ -92,6 +92,29 @@ export const proposals = pgTable("proposals", {
     .defaultNow(),
 });
 
+export const leads = pgTable("leads", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  sourceTag: text("source_tag"),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  company: text("company"),
+  propertyName: text("property_name"),
+  notes: text("notes").notNull().default(""),
+  status: text("status", {
+    enum: ["new", "quoted", "won", "lost"],
+  })
+    .notNull()
+    .default("new"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const userDefaults = pgTable("user_defaults", {
   userId: uuid("user_id").primaryKey(),
   coverageSqftPerGallon: numeric("coverage_sqft_per_gallon"),

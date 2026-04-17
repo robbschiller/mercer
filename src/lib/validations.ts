@@ -144,3 +144,33 @@ export const updateUserDefaultsSchema = z.object({
 export const generateProposalSchema = z.object({
   bidId: z.string().uuid("Invalid bid ID"),
 });
+
+// ── Leads ──
+
+const optionalText = z
+  .union([z.string(), z.null(), z.undefined()])
+  .transform((v) => {
+    if (v == null) return null;
+    const trimmed = v.trim();
+    return trimmed === "" ? null : trimmed;
+  });
+
+const optionalEmail = z
+  .union([z.string(), z.null(), z.undefined()])
+  .transform((v) => (v == null ? "" : v.trim()))
+  .refine((v) => v === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), {
+    message: "Invalid email address",
+  })
+  .transform((v) => (v === "" ? null : v));
+
+export const createLeadSchema = z.object({
+  name: z.string().trim().min(1, "Name is required"),
+  sourceTag: optionalText,
+  email: optionalEmail,
+  phone: optionalText,
+  company: optionalText,
+  propertyName: optionalText,
+  notes: z
+    .union([z.string(), z.undefined()])
+    .transform((v) => (v ?? "").trim()),
+});

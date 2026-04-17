@@ -2,11 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AnalyticsLoader } from "@/components/analytics-loader";
-import { NavAuth } from "@/components/nav-auth";
-import {
-  SiteHeaderBrand,
-  SiteHeaderNavLinks,
-} from "@/components/site-header-nav";
+import { ThemeProvider } from "@/components/theme-provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -22,21 +18,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} antialiased`}>
-        <div className="min-h-screen flex flex-col">
-          <header className="border-b">
-            <div className="container mx-auto flex h-14 items-center px-4">
-              <SiteHeaderBrand />
-              <nav className="ml-auto flex items-center gap-4">
-                <SiteHeaderNavLinks />
-                <NavAuth />
-              </nav>
-            </div>
-          </header>
-          <main className="flex-1">{children}</main>
-        </div>
-        <AnalyticsLoader />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+          <AnalyticsLoader />
+        </ThemeProvider>
       </body>
     </html>
   );

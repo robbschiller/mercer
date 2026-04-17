@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   Building2,
   Calculator,
@@ -8,6 +9,7 @@ import {
   Ruler,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getSessionUser } from "@/lib/supabase/auth-cache";
 
 const features = [
   {
@@ -48,7 +50,10 @@ const features = [
   },
 ];
 
-export default function Home() {
+export default async function Home() {
+  const user = await getSessionUser();
+  if (user) redirect("/bids");
+
   return (
     <>
       <section className="container mx-auto flex flex-col items-center justify-center gap-6 px-4 py-24 sm:py-32">

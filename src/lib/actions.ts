@@ -19,6 +19,7 @@ import {
   upsertUserDefaults,
   getBidPageData,
   createProposal,
+  createLead,
 } from "./store";
 import { createClient } from "./supabase/server";
 import {
@@ -38,6 +39,7 @@ import {
   deleteLineItemSchema,
   updateUserDefaultsSchema,
   generateProposalSchema,
+  createLeadSchema,
 } from "./validations";
 import { calculateBidPricing } from "./pricing";
 import type { ProposalSnapshot } from "./pdf/types";
@@ -411,4 +413,27 @@ export async function generateProposalAction(data: { bidId: string }) {
   revalidatePath(`/bids/${bid.id}`);
   revalidatePath("/bids");
   return { error: null, pdfUrl: proposal.pdfUrl };
+}
+
+// ── Leads ──
+
+export async function createLeadAction(formData: FormData) {
+  console.log("[createLeadAction] entered, raw form:", formDataToObject(formData));
+  const result = createLeadSchema.safeParse(formDataToObject(formData));
+
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    console.log("[createLeadAction] zod failed:", result.error.issues);
+    redirect(`/leads/new?error=${encodeURIComponent(message)}`);
+  }
+
+  console.log("[createLeadAction] zod ok, creating lead:", result.data);
+  try {
+    const lead = await createLead(result.data);
+    console.log("[createLeadAction] lead created:", lead.id);
+  } catch (err) {
+    console.error("[createLeadAction] createLead threw:", err);
+    throw err;
+  }
+  redirect("/leads");
 }
