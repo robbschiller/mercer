@@ -4,6 +4,41 @@ Running log of in-flight work on the lead-to-close MVP (docs/plan.md). Chronolog
 
 ---
 
+## 2026-04-17 — Phase B2 manual override shipped + plan.md promoted to single source of truth
+
+**Goal:** Close the top open item from `docs/plan.md` → Active Work: a manual override for when Places resolved the wrong building. Also: reconcile AGENTS.md and plan.md so status lives in one place.
+
+### Shipped
+
+- `LeadPropertyOverrideForm` ([src/components/lead-property-override-form.tsx](../src/components/lead-property-override-form.tsx)) — client component wrapping the existing `AddressAutocomplete`. Exposed on the Property card via `?edit=property` query flag on the lead detail page.
+- `overrideLeadProperty` store function ([src/lib/store.ts](../src/lib/store.ts)) — updates `resolved_address / latitude / longitude / google_place_id`, rebuilds `satellite_image_url` via `buildSatelliteProxyPath`, sets `enrichment_status = 'success'`, clears `enrichment_error`.
+- `overrideLeadPropertyAction` ([src/lib/actions.ts](../src/lib/actions.ts)) — redirects back to `/leads/[id]` on success so the edit flag clears; validation errors redirect back with `?edit=property&error=...`.
+- `overrideLeadPropertySchema` ([src/lib/validations.ts](../src/lib/validations.ts)) — reuses `formLatLng` + `formPlaceId`, so the same hidden fields that AddressAutocomplete emits elsewhere flow through.
+- Lead detail page ([src/app/(app)/leads/[id]/page.tsx](<../src/app/(app)/leads/[id]/page.tsx>)) — Property card now has an "Override address" button; in edit mode swaps to the form with an explanatory copy line.
+
+### Verification
+
+1. Navigated to a lead with an existing resolved address (Jennifer Park / Post Alexander).
+2. Opened `?edit=property` — form rendered with the current address preloaded.
+3. Typed a new address ("520 W 5th St, Charlotte, NC"). Google Places blocked autocomplete with `PERMISSION_DENIED: Requests from referer http://localhost:59810/ are blocked.` — the dev key is restricted to `http://localhost:3000/*`. This is a dev-environment artifact, not a code issue; autocomplete works when the key's referer list matches the port, and `AddressAutocomplete` is already used in the bid wizard in production.
+4. Submitted the form anyway to exercise the degraded path (address-only, no suggestion). Redirect went to `/leads/[id]` without the edit flag — action succeeded.
+5. Verified in Postgres: `resolved_address` updated to the new value, `enrichment_status = 'success'`, `latitude / longitude / satellite_image_url` nulled (correct — no coords from Places without a picked suggestion). Restored the row to its original state so the demo data stays clean.
+
+### Plan / docs reconciliation
+
+AGENTS.md had its own "What Is Shipped" / "What Is Still Open" lists that duplicated the checkboxes in plan.md, already drifting. Consolidated:
+
+- plan.md gained a top-level **Active Work — Single Source of Truth** section (Open now / Paused / Decisions needed / Shipped).
+- AGENTS.md's duplicate status lists replaced with a pointer to the Active Work section and a rule that checkbox flips land in the same PR.
+- B1 footprint/sqft items flipped from `[ ]` to `[~]` Paused with a pointer to the 2026-04-16 OSM tuning entry — they're decided-against, not pending.
+- Tech-stack row fixed: CSV parsing is a custom parser in `src/lib/leads/csv.ts`, not Papa Parse.
+
+### Next
+
+Next candidate in "Open now" is **Phase E — /pipeline funnel page**. Phase F demo polish and Phase D2 mailto: are smaller follow-ups.
+
+---
+
 ## 2026-04-16 — Phase A shipped (CSV import + Places enrichment)
 
 **Goal:** Plan Phase A from docs/plan.md — `leads` table + `/leads/import` + enrichment + lead detail — with OSM hidden per the tuning decision.
