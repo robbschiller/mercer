@@ -174,3 +174,16 @@ export const createLeadSchema = z.object({
     .union([z.string(), z.undefined()])
     .transform((v) => (v ?? "").trim()),
 });
+
+export const importLeadsSchema = z.object({
+  sourceTag: optionalText,
+});
+
+export const updateLeadStatusSchema = z.object({
+  id: z.string().uuid("Invalid lead ID"),
+  status: z.enum(["new", "quoted", "won", "lost"]),
+});
+
+export const enrichLeadActionSchema = z.object({
+  id: z.string().uuid("Invalid lead ID"),
+});

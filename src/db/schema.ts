@@ -107,6 +107,18 @@ export const leads = pgTable("leads", {
   })
     .notNull()
     .default("new"),
+  /* ── Enrichment fields (populated asynchronously by enrichLead worker) ── */
+  resolvedAddress: text("resolved_address"),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
+  googlePlaceId: text("google_place_id"),
+  satelliteImageUrl: text("satellite_image_url"),
+  enrichmentStatus: text("enrichment_status", {
+    enum: ["pending", "success", "failed", "skipped"],
+  }),
+  enrichmentError: text("enrichment_error"),
+  /** Untransformed CSV row — keeps columns we didn't map for later use. */
+  rawRow: jsonb("raw_row").$type<Record<string, string>>(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
