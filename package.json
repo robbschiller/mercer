@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "db:push": "drizzle-kit push",
     "db:apply-manual": "bun run scripts/apply-manual-migrations.ts",
     "db:studio": "drizzle-kit studio"
@@ -28,7 +28,7 @@
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.1",
     "lucide-react": "^1.8.0",
-    "next": "^15.3.0",
+    "next": "^16.2.3",
     "next-themes": "^0.4.6",
     "postgres": "^3.4.8",
     "radix-ui": "^1.4.3",
@@ -45,7 +45,7 @@
     "dotenv": "^17.3.1",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9.0.0",
-    "eslint-config-next": "^15.3.0",
+    "eslint-config-next": "^16.2.3",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.0"
   }
