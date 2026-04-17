@@ -28,16 +28,16 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://mercer-bids.vercel.
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Mercer — The sales platform for exterior renovation",
+    default: "Mercer: the sales platform for commercial multifamily exterior renovation",
     template: "%s · Mercer",
   },
   description:
-    "From trade show list to signed deal. Ingest leads, enrich with property intelligence, build bids, and close on a shareable link — purpose-built for exterior renovation contractors bidding multifamily.",
+    "From trade show list to signed deal. Ingest leads, enrich with property intelligence, build bids, and close on a shareable link. Purpose-built for commercial multifamily exterior renovation, painting first.",
   applicationName: "Mercer",
   keywords: [
-    "exterior renovation",
+    "commercial renovation",
     "multifamily bidding",
-    "painting contractor software",
+    "exterior painting contractor software",
     "bid-to-close",
     "property intelligence",
     "contractor CRM",
@@ -45,17 +45,17 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "Mercer",
-    title: "Mercer — From trade show list to signed deal.",
+    title: "Mercer: from trade show list to signed deal.",
     description:
-      "The sales platform for exterior renovation contractors bidding multifamily. Ingest, enrich, bid, close — all in one place.",
+      "The sales platform for commercial multifamily exterior renovation. Ingest, enrich, bid, close, all in one place.",
     url: "/",
     locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Mercer — From trade show list to signed deal.",
+    title: "Mercer: from trade show list to signed deal.",
     description:
-      "The sales platform for exterior renovation contractors bidding multifamily.",
+      "The sales platform for commercial multifamily exterior renovation.",
   },
 };
 

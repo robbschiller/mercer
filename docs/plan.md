@@ -1,30 +1,78 @@
-# Plan: Mercer — From Bid Tool to Sales Platform
+# Plan: Mercer, from Bid Tool to Sales Platform
 
-**The core concept:** An app specifically for exterior renovation contractors bidding multifamily properties. Upload a trade show attendee list, get enriched leads with property intelligence, build bids, send shareable proposals, close deals — all in one place.
+**The core concept:** an app specifically for exterior renovation contractors bidding multifamily properties. Upload a trade show attendee list, get enriched leads with property intelligence, build bids, send shareable proposals, close deals, all in one place.
 
 ---
 
-## Market & Niche
+## Competitive Landscape
 
-**The "measure from blueprints" category** is crowded. STACK, PlanSwift, Groundplan, The EDGE, Buildxact — they all let you upload a PDF floor plan or elevation drawing and do digital takeoffs. The problem for Rob is he almost never has blueprints. The transcript confirmed that 75–80% of his jobs start with a phone call, not a document.
+The software around exterior renovation fragments along two axes: *what stage of the job the tool owns* and *who the tool is built for.* Mapping competitors onto those axes makes the positioning move obvious: the quadrant for **commercial renovation × pre-sale (lead → close)** is empty, and the closest analogue in an adjacent quadrant (roofing-specific CRMs) has built a durable business proving the pattern works.
 
-**The "measure from photos on-site" category** is dominated by Hover. Hover is trained on over 10 million homes and creates precise measurements for roofing, siding, and interiors from a phone scan or blueprint upload. It's genuinely good — but it's built primarily for single-family residential. For multifamily, Hover only generates measurements for the specific unit you captured, not adjacent units — each one must be scanned separately. A 49-building complex like the one in the transcript would be a nightmare workflow.
+### Axis 1: what stage the tool owns
 
-**The "fully remote aerial measurement" category** is dominated by EagleView. They recently launched 3D property intelligence with high-accuracy walls, windows, and door measurements for both residential and commercial properties, and they specifically offer multifamily property reports. EagleView is a massive, well-funded enterprise player. **This is important — the big dog is in the measurement space.**
+**Measurement.** EagleView, Hover, STACK, PlanSwift, Groundplan, The EDGE, Buildxact. These tools turn a property into numbers.
+- *STACK / PlanSwift* require blueprints. Rob almost never has them; 75–80% of his jobs start with a phone call, not a document.
+- *Hover* is genuinely good at single-family residential from a phone scan, but for multifamily it only measures the specific unit you captured, not adjacent buildings. A 49-building complex is a nightmare workflow.
+- *EagleView* is the enterprise incumbent for aerial measurement, including multifamily property reports. Well-funded, high-accuracy, deliberately expensive. Upstream of Mercer: an integration target, not a substitute.
 
-**The "construction CRM" category** is dominated by Procore, but Procore is oriented toward new construction and large general contractors, not renovation trades. Jordan's Salesforce experiment worked functionally but failed operationally because it was too generic — it didn't understand bids, takeoffs, or multifamily workflows. There is no CRM purpose-built for exterior renovation contractors.
+**Pre-sale (lead → close).** Salesforce, HubSpot, Pipedrive, Monday: industry-agnostic. JobNimbus, AccuLynx, Roofr: trade-vertical CRMs built around roofing (residential *and* commercial). Jobber, Housecall Pro, ServiceTitan: residential service dispatch. Each of these owns some version of the pipeline; none of them own it for commercial exterior renovation beyond roofing.
 
-### Where the gap is
+**Post-sale operations.** Procore, BuilderTrend, JobTread, Knowify, Projul. These tools manage what happens after the contract is signed: schedules, subs, RFIs, punch lists, invoicing. They're downstream of Mercer, not a substitute. Most lean ground-up construction or residential remodel; none are purpose-built for occupied commercial renovation.
 
-None of these tools close the loop from **lead acquisition → measurement → bid → proposal → close** for exterior renovation on multifamily. EagleView gives you measurements. STACK lets you do takeoffs from plans. Salesforce and Procore give you pipelines. Nobody connects them, and nobody speaks the language of the exterior repaint contractor.
+### Axis 2: who the tool is built for
 
-That full chain doesn't exist in one tool for this specific trade and property type.
+**Industry-agnostic platforms** (Salesforce, HubSpot, Monday, Pipedrive) are configurable for anything and specialized for nothing. Jordan's Salesforce experiment worked functionally and failed operationally. Salesforce had no concept of a building, a takeoff, a surface, a coverage rate, or a multifamily property. Bolting those concepts on with custom objects turns a $150/user/month CRM into a second full-time engineering job.
+
+**Residential service dispatch** (Jobber, Housecall Pro, ServiceTitan) is built around a homeowner, a technician, and a single-day job. Unit economics (a $900 HVAC tune-up, a $1,500 drain clear) shape every decision in the UX. They don't scale up to a $1.2M phased repaint on a 49-building multifamily asset sold to a regional property manager eleven months out.
+
+**Trade-vertical CRMs for a single exterior trade** (JobNimbus, AccuLynx, Roofr) are the strongest pattern match for what Mercer is building: purpose-built lead-to-close pipelines that speak the native language of one exterior trade, serving that trade across both residential and commercial jobs. The catch: the trade is roofing. Bid flow, measurement model, and pricing are shaped around shingles and sloped roofs, and they don't extend to the other exterior trades (paint, siding, stucco, envelope, concrete restoration, waterproofing) that make up most of a commercial multifamily renovation.
+
+**Ground-up construction** (Procore, Autodesk Construction Cloud) is designed for new buildings, large GCs, and multi-year schedules. Opinions about permitting, bonding, and multi-party coordination are overkill for a renovation trade and underweight on existing-conditions discovery.
+
+**Commercial renovation beyond roofing** has no purpose-built category leader. This is the empty quadrant.
+
+### The closest workflow analogue: roofing
+
+JobNimbus and AccuLynx are the clearest evidence that the Mercer playbook works. Both are vertical CRMs that speak the native language of a single exterior trade (roofing) and serve that trade across residential *and* commercial jobs. AccuLynx alone reportedly serves ten thousand–plus contractors. They prove that a lead-to-close pipeline purpose-built for one exterior trade beats a generic pipeline stitched to a pile of integrations.
+
+The difference is trade surface area, not customer segment. Their bid flow, measurement model, and pricing are built for shingles and sloped roofs; the tools don't extend to paint, siding, stucco, envelope, or the other trades that make up a commercial multifamily renovation. The pattern is correct; the trade is the limit. Commercial exterior renovation beyond roofing has no equivalent category leader.
+
+### The beachhead: commercial multifamily exterior renovation
+
+The near-term product is a purpose-built CRM and bid tool for **commercial multifamily exterior renovation**: the work of refreshing, resurfacing, and retrofitting the outside of occupied multifamily properties. The first supported trade is exterior painting, because that's where the design partner and the validated workflow are. The beachhead is the *category*, not the trade; the lead-to-close spine underneath (CSV import → property enrichment → building-aware bid → shareable accept link → pipeline) is deliberately trade-agnostic.
+
+The wedge matters because:
+
+- **It's defensible.** Salesforce and HubSpot can't out-specialize Mercer without rebuilding their UX around buildings and takeoffs. JobNimbus and AccuLynx won't extend past roofing. The quadrant is genuinely empty.
+- **The category has natural expansion paths.** Painting leads into the adjacent trades a property manager buys in the same capex cycle: siding, stucco, envelope retrofits, concrete restoration, waterproofing, window replacement. Each new trade surface is incremental UX on a shared pipeline, not a new product.
+- **The design partner is in it.** Reno Base is a commercial exterior painting contractor on multifamily today. Painting is the proving ground; the beachhead is the broader category the product is being built to own.
+
+The long-term product is the operating system for commercial renovation. Commercial multifamily exterior, painting first, is the way in.
+
+### The buyer profile
+
+The customer-of-the-customer is a property manager or regional portfolio owner, not a homeowner, not a GC. The implications shape every product decision:
+
+- **Capex cycles.** Buying decisions are made quarters in advance against an annual budget, not reactively.
+- **Approved vendor lists.** Getting onto the list matters more than winning any single bid. The game is relationship, not transaction.
+- **Occupied assets.** Work is phased around leases, tenant notices, and access. Scheduling and communication look nothing like new construction.
+- **Portfolio leverage.** A single win often opens five to fifty similar properties under the same management company.
+
+None of these attributes are first-class concepts in the tools above: generic platforms, residential service CRMs, trade-vertical roofing CRMs, or ground-up construction suites. They are load-bearing for Mercer.
+
+### Why not [the obvious choice]
+
+- **Why not Salesforce / HubSpot?** Infinitely configurable, speaks nothing. Building count, coverage rates, $/sqft, takeoff by surface, footprint enrichment: none of it ships out of the box. Once bolted on, you've built a bad version of Mercer at ten times the maintenance cost.
+- **Why not Jobber / Housecall Pro / ServiceTitan?** Residential service unit economics. A $1.2M phased repaint doesn't fit their shape, and their customers aren't property managers.
+- **Why not JobNimbus / AccuLynx?** Closest analogue workflow-wise, and they serve commercial roofing contractors well. But they're roofing-specific. Bid, measurement, and pricing models are shaped around shingles and sloped roofs. They validate the pattern; they leave the rest of commercial exterior renovation wide open.
+- **Why not Procore / BuilderTrend / JobTread?** Post-sale operations tools. They start *after* the contract is signed and have no opinion about how the lead got there or how the bid got built. Downstream, not competitive.
+- **Why not EagleView / STACK / Hover?** Measurement only. Upstream, potential integration targets, not substitutes.
 
 ### The strategic position in one sentence
 
-**EagleView owns aerial measurement. STACK owns blueprint takeoff. Salesforce owns the generic pipeline. Nobody owns the full lead-to-close workflow for the exterior renovation contractor working multifamily.**
+**Roofing contractors, residential or commercial, have JobNimbus and AccuLynx. Everyone else renovating the outside of an occupied commercial property has nothing. Mercer is that tool, starting with commercial multifamily exterior renovation (painting first) and widening trade-by-trade as the foundation holds.**
 
-That's the niche. You have family in it, domain expertise from day one, a clear beachhead customer in Rob's company, and a committed design partner in Jordan.
+That's the niche. Domain expertise from a family in the trade, a design partner in Jordan at Reno Base, and a category the incumbents are structurally prevented from owning.
 
 ---
 
@@ -45,13 +93,13 @@ The app is deployed on Vercel, uses Supabase for auth, database, and file storag
 
 ## The Shift: From Bid Tool to Sales Platform
 
-Jordan's walkthrough of AQP's full workflow surfaced something important: the bid tool is the middle of a longer funnel. Upstream, Jordan and his team struggle with trade show attendee lists — hundreds of contacts with no phone numbers, no property addresses, no prioritization. Downstream, proposals sent as PandaDoc PDFs disappear into inboxes with no visibility into whether they've been opened, approved, or ignored.
+Jordan's walkthrough of AQP's full workflow surfaced something important: the bid tool is the middle of a longer funnel. Upstream, Jordan and his team struggle with trade show attendee lists: hundreds of contacts with no phone numbers, no property addresses, no prioritization. Downstream, proposals sent as PandaDoc PDFs disappear into inboxes with no visibility into whether they've been opened, approved, or ignored.
 
 Mercer already has the unique ingredient to solve the upstream problem: **property intelligence**. The same Google Places + OSM pipeline that powers Phase 1.5 can be pointed at a raw CSV and turn a list of names into enriched, prioritized, bid-ready leads. That's something no generic CRM can do.
 
 The downstream problem is equally solvable. Replacing the PDF-in-email pattern with a hosted, shareable proposal URL that the customer can accept directly converts Mercer from a document generator into a closing tool.
 
-**This reframes Mercer's positioning.** It's no longer "a better bid tool for painting contractors." It's "the sales platform for exterior renovation — from trade show list to signed deal." The bid engine is the heart; the lead ingestion and deal closure are the arteries.
+**This reframes Mercer's positioning.** It's no longer "a better bid tool for painting contractors." It's "the sales platform for exterior renovation, from trade show list to signed deal." The bid engine is the heart; the lead ingestion and deal closure are the arteries.
 
 ---
 
@@ -79,7 +127,7 @@ The downstream problem is equally solvable. Replacing the PDF-in-email pattern w
 | **PDF** | @react-pdf/renderer |
 | **Hosting** | Vercel |
 | **Analytics** | Vercel Web Analytics |
-| **Maps** | Places API (New) — address autocomplete; Maps Static API — satellite thumbnails |
+| **Maps** | Places API (New) for address autocomplete; Maps Static API for satellite thumbnails |
 | **Building data** | OpenStreetMap Overpass API |
 | **CSV parsing** | Papa Parse (client-side) |
 
@@ -97,7 +145,7 @@ This is a proof of concept, not a production release. It proves the strategic th
 - [ ] **Validate enrichment pipeline on 10 known multifamily properties.** Run company name + property name through Google Places, pull OSM footprints, compare to known sqft. If resolution rate is below ~60% or footprint accuracy is off by more than ~25%, the enrichment pitch needs to be softened in the demo.
 - [ ] **Get a real trade show attendee CSV from Jordan.** Confirm what columns actually show up and what's missing (phone, address, etc.). This shapes the column mapping logic and sets realistic expectations.
 
-### Phase A — Lead Ingestion (Days 1–2)
+### Phase A: Lead Ingestion (Days 1–2)
 
 #### A1. CSV upload
 
@@ -117,7 +165,7 @@ This is a proof of concept, not a production release. It proves the strategic th
 
 **Milestone:** Jordan uploads a real attendee list and sees it as a structured table in the app.
 
-### Phase B — Property Intelligence Enrichment (Days 3–6)
+### Phase B: Property Intelligence Enrichment (Days 3–6)
 
 #### B1. Enrichment worker
 
@@ -125,7 +173,7 @@ This is a proof of concept, not a production release. It proves the strategic th
   - Builds a Places query from company + property name (fall back to company alone if property is empty).
   - Fetches one Google Places result; stores the formatted address, lat/lng, and place_id on the lead.
   - If coordinates resolve, queries Overpass for building footprints within ~75m.
-  - Computes rough exterior sqft using footprint × default story count (2) × perimeter-to-height multiplier (1.3 — use whatever Phase 1.5 validation produced).
+  - Computes rough exterior sqft using footprint × default story count (2) × perimeter-to-height multiplier (1.3, use whatever Phase 1.5 validation produced).
   - Applies user's default $/sqft to generate a preliminary bid estimate.
   - Writes back to the lead row: `resolved_address`, `latitude`, `longitude`, `place_id`, `footprint_sqft`, `est_total_sqft`, `est_bid_amount`, `enrichment_status` (pending / success / needs_review / failed).
 - [ ] Trigger enrichment on import: fire off enrichment for all rows in the batch, update the UI as rows complete.
@@ -139,7 +187,7 @@ This is a proof of concept, not a production release. It proves the strategic th
 
 **Milestone:** Every imported lead is either enriched with property data and a preliminary bid estimate, or clearly flagged as needing manual review.
 
-### Phase C — Lead-to-Bid Conversion (Day 7)
+### Phase C: Lead-to-Bid Conversion (Day 7)
 
 - [ ] Add `lead_id` (nullable) to the `bids` table.
 - [ ] "Create Bid" from a lead pre-populates: property name, address, lat/lng, place_id, and seeds the satellite image URL.
@@ -149,12 +197,12 @@ This is a proof of concept, not a production release. It proves the strategic th
 
 **Milestone:** A user can go from a single row in the lead table to the existing bid creation flow in one click, with all the property data pre-filled.
 
-### Phase D — Shareable Proposal URL (Days 8–10)
+### Phase D: Shareable Proposal URL (Days 8–10)
 
 #### D1. Public proposal page
 
 - [ ] New table `proposal_shares`: id (uuid, used as the public slug), proposal_id, created_at, accepted_at, accepted_by_name, declined_at, decline_reason.
-- [ ] Public route at `/p/[slug]` — no auth required. Renders the proposal in HTML (not PDF).
+- [ ] Public route at `/p/[slug]`, no auth required. Renders the proposal in HTML (not PDF).
 - [ ] Reuse the existing proposal snapshot data. Render property info, per-building breakdown, scope, total price, and satellite image.
 - [ ] Add a prominent Accept / Decline button pair at the bottom of the page.
 - [ ] On Accept: show a lightweight form (customer name, title, optional note), confirm, set `accepted_at` and `accepted_by_name`.
@@ -165,18 +213,18 @@ This is a proof of concept, not a production release. It proves the strategic th
 
 - [ ] "Share Proposal" button on the bid detail page creates a `proposal_shares` row and shows the resulting URL.
 - [ ] "Copy Link" button puts the URL on the clipboard.
-- [ ] "Email Proposal" button opens a `mailto:` link with the customer email (from the originating lead), a pre-filled subject, and a body that includes the proposal URL. No SMTP infrastructure needed for MVP — Jordan sends through his own mail client.
-- [ ] Bid detail page shows the share status: sent date, view count (optional — add only if trivial), accepted/declined status.
+- [ ] "Email Proposal" button opens a `mailto:` link with the customer email (from the originating lead), a pre-filled subject, and a body that includes the proposal URL. No SMTP infrastructure needed for MVP; Jordan sends through his own mail client.
+- [ ] Bid detail page shows the share status: sent date, view count (optional, add only if trivial), accepted/declined status.
 
 #### D3. Status propagation
 
 - [ ] When a proposal is accepted, the bid status flips to "Won" and the originating lead status flips to "Won."
 - [ ] When declined, bid status flips to "Lost" and lead status flips to "Lost."
-- [ ] Confirmation email out of scope for MVP — the status change in the dashboard is enough for the demo.
+- [ ] Confirmation email out of scope for MVP; the status change in the dashboard is enough for the demo.
 
 **Milestone:** A customer receives an email with a URL, opens the proposal in their browser, clicks Accept, and the deal shows as Won in Jordan's pipeline without anyone else touching the system.
 
-### Phase E — Pipeline View (Days 11–12)
+### Phase E: Pipeline View (Days 11–12)
 
 - [ ] `/pipeline` page with five counts: Leads, Quoted, Won, Lost, and Total Pipeline $ Value (sum of est_bid_amount + actual bid amounts).
 - [ ] Filter by source_tag to see the NAA Orlando funnel specifically.
@@ -185,7 +233,7 @@ This is a proof of concept, not a production release. It proves the strategic th
 
 **Milestone:** Jordan sees a single dashboard that tells the story "we imported 247 leads from NAA Orlando, enriched 198 of them, quoted 34, and have closed 8 for $1.2M."
 
-### Phase F — Demo Prep & Polish (Days 13–14)
+### Phase F: Demo Prep & Polish (Days 13–14)
 
 - [ ] End-to-end test with a real attendee CSV and real property addresses. Fix whatever breaks.
 - [ ] Seed Jordan's account with a clean sample import so the demo has real-looking data.
@@ -227,13 +275,13 @@ The two-week MVP is a forcing function for three decisions:
 
 1. **Does Jordan actually use it?** If he runs a real trade show list through the enrichment pipeline and creates bids from it, the lead-to-close thesis is validated. If the enrichment isn't good enough or the workflow doesn't match his reality, the demo exposes that before more is built.
 
-2. **Does this become the first customer of a new business?** Jordan raised the idea of Reno Base being the first customer of something larger — an AI-enabled CRM for renovation contractors. The demo is the artifact that makes that conversation concrete. A working proof of concept is far more persuasive than a pitch deck.
+2. **Does this become the first customer of a new business?** Jordan raised the idea of Reno Base being the first customer of something larger: an AI-enabled CRM for renovation contractors. The demo is the artifact that makes that conversation concrete. A working proof of concept is far more persuasive than a pitch deck.
 
 3. **What's the right next slice?** Likely candidates after the two-week MVP:
    - Proposal photos (Rob's existing request, carryover from Phase 1.5 roadmap)
    - Real email sending + open tracking
    - Customer accounts with historical proposals and colors
-   - The first piece of Jordan's ERP scope — probably a simple "Jobs" view where a won deal becomes a trackable project
+   - The first piece of Jordan's ERP scope, probably a simple "Jobs" view where a won deal becomes a trackable project
 
 Don't commit to the next slice before seeing how Jordan actually uses the MVP.
 
@@ -249,7 +297,7 @@ AI vision analysis on satellite imagery to suggest building count, type, and gro
 
 ### EagleView Integration
 
-Once the product has traction and the workflow is proven, integrate EagleView's API for higher-accuracy measurement data. Property Intelligence is the stepping stone — same UX, same "enter address and get building data" flow, but with higher-accuracy measurements that pre-fill surface dimensions, not just building counts.
+Once the product has traction and the workflow is proven, integrate EagleView's API for higher-accuracy measurement data. Property Intelligence is the stepping stone: same UX, same "enter address and get building data" flow, but with higher-accuracy measurements that pre-fill surface dimensions, not just building counts.
 
 ### Bid Intelligence
 
@@ -257,7 +305,7 @@ Once real project data accumulates, build benchmarking: "typical $/sqft range fo
 
 ### Jordan's ERP Layer
 
-The full downstream workflow — contracts, schedules, expense buckets by takeoff category, sub tracker, punch lists, paint guides, NPS. This is where Mercer could become the operating system for Reno Base (and eventually sell to other renovation contractors). Each piece is its own multi-week scope and should only be tackled after MVP validation and a clear ownership/business-model decision with Jordan.
+The full downstream workflow: contracts, schedules, expense buckets by takeoff category, sub tracker, punch lists, paint guides, NPS. This is where Mercer could become the operating system for Reno Base (and eventually sell to other renovation contractors). Each piece is its own multi-week scope and should only be tackled after MVP validation and a clear ownership/business-model decision with Jordan.
 
 ---
 
@@ -265,12 +313,12 @@ The full downstream workflow — contracts, schedules, expense buckets by takeof
 
 ### New tables
 
-- **`leads`** — id, user_id, source_tag, name, email, company, property_name, raw_row (jsonb), resolved_address, latitude, longitude, place_id, footprint_sqft, est_total_sqft, est_bid_amount, enrichment_status, status, notes, created_at, updated_at.
-- **`proposal_shares`** — id (uuid, public slug), proposal_id, created_at, accessed_at (nullable), accepted_at, accepted_by_name, accepted_by_title, declined_at, decline_reason.
+- **`leads`**: id, user_id, source_tag, name, email, company, property_name, raw_row (jsonb), resolved_address, latitude, longitude, place_id, footprint_sqft, est_total_sqft, est_bid_amount, enrichment_status, status, notes, created_at, updated_at.
+- **`proposal_shares`**: id (uuid, public slug), proposal_id, created_at, accessed_at (nullable), accepted_at, accepted_by_name, accepted_by_title, declined_at, decline_reason.
 
 ### Modified tables
 
-- **`bids`** — add nullable `lead_id` FK to `leads`.
+- **`bids`**: add nullable `lead_id` FK to `leads`.
 
 ### Unchanged tables
 
@@ -285,4 +333,4 @@ The full downstream workflow — contracts, schedules, expense buckets by takeof
 3. Jordan sends a proposal URL (via `mailto:`) to a test customer; the customer opens the URL and clicks Accept without logging in.
 4. Jordan opens the pipeline view and sees the funnel: imported → quoted → won.
 5. The demo can be walked through in under five minutes.
-6. Jordan says one of two things after the demo: "yes, let's keep building this" or "no, here's what's actually the priority" — either answer is a win.
+6. Jordan says one of two things after the demo: "yes, let's keep building this" or "no, here's what's actually the priority". Either answer is a win.
