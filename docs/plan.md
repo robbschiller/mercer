@@ -131,9 +131,9 @@ The downstream problem is equally solvable. Replacing the PDF-in-email pattern w
 | **PDF** | @react-pdf/renderer |
 | **Hosting** | Vercel |
 | **Analytics** | Vercel Web Analytics |
-| **Maps** | Places API (New) for address autocomplete; Maps Static API for satellite thumbnails |
-| **Building data** | OpenStreetMap Overpass API |
-| **CSV parsing** | Papa Parse (client-side) |
+| **Maps** | Places API (New) for address autocomplete and server-side lead enrichment; Maps Static API for satellite thumbnails |
+| **Building data** | OpenStreetMap Overpass API (currently hidden from UI; see Active Work → Paused) |
+| **CSV parsing** | Custom RFC-4180-ish parser in `src/lib/leads/csv.ts` (server-side on import) |
 
 ---
 
@@ -144,17 +144,46 @@ The downstream problem is equally solvable. Replacing the PDF-in-email pattern w
 
 This is a proof of concept, not a production release. It proves the strategic thesis (that Mercer can expand beyond bidding into full sales platform territory) without committing to the full ERP scope Jordan described (contracts, schedules, expense tracking, sub management, punch lists). Those remain future work.
 
-### Implementation Status (Updated Apr 2026)
+## Active Work — Single Source of Truth
 
-- **Completed:** Phase A (lead ingestion), Phase C (lead-to-bid conversion), Phase D (shareable proposal URL + accept/decline + status propagation).
-- **Partially completed:** Phase B (Places-based enrichment and lead detail shipped; footprint-based sqft/estimate fields not yet shipped).
-- **Partially completed:** Phase E (dashboard summary shipped at `/dashboard`; dedicated `/pipeline` funnel page still pending).
-- **Pending:** Phase F demo-polish checklist items.
+This is the live to-do list for the MVP. When a checkbox below flips in this section or in the phase breakdowns further down, update in the same PR (per `AGENTS.md` → Definition Of Done). The phase sections are retained as build context; the authoritative live status is here.
+
+### Open now (ordered by priority)
+
+1. [ ] **Phase E — `/pipeline` funnel page.** Five counts (Leads / Quoted / Won / Lost / Total Pipeline $), source_tag filter, simple Leads → Quoted → Won funnel with conversion rates, each count links to a filtered list. `/dashboard` is the interim surface.
+2. [ ] **Phase F — demo polish**
+   - [ ] Onboarding blurb on `/leads/import`
+   - [ ] Empty states and error messages on the new views
+   - [ ] Seed a clean sample import in Jordan's account
+   - [ ] End-to-end test with a real attendee CSV
+   - [ ] Record a backup 3-minute demo video
+3. [ ] **Phase D2 — `mailto:` Email Proposal shortcut** on bid detail.
+4. [ ] **Phase A2 — sort leads by Est. Bid desc.** Gated on B1 shipping `est_bid_amount`; moot while B1 is paused (see below). If we stay Places-only, replace with sort-by-created-at-desc (already the default).
+
+### Paused / deferred by decision
+
+- **Phase B1 footprint-based sqft + preliminary bid estimate** (`footprint_sqft`, `est_total_sqft`, `est_bid_amount`, `needs_review` state). Day-0 validation showed OSM footprint plausibility ≤ 20% across four tuning variants. OSM is hidden from the UI until we have a private Overpass (env var `OVERPASS_API_URL`) plus a containment-based query strategy. Full analysis: `docs/worklog.md` 2026-04-16 "OSM tuning experiment."
+- **"Photos in proposals"** (Rob's ask). Multi-day feature, stays out of MVP per `docs/plan.md` → What's Deliberately Out; flowchart shows this is load-bearing for the post-demo slice.
+
+### Decisions needed from Tim before proceeding
+
+- [ ] **Production server-side Places API key.** Dev runs on the existing HTTP-referrer-restricted key via a Referer spoof; production `enrichLead` needs a separate IP-restricted key.
+- [ ] **Real trade-show CSV from Jordan** vs. continuing against `scripts/fixtures/trade-show-sample.csv`.
+- [ ] **Supabase email confirmation** — currently on; blocks friction-free demo sign-ups. Keep on, turn off for demo, or pre-create Jordan's account?
+
+### Shipped (summary — authoritative checkboxes live in the phase sections)
+
+- **Phase A** — CSV import with auto-column-mapping, leads list (card + table views), lead detail, enrichment status badges, source-tag filter.
+- **Phase B Places-only slice** — `enrichLead` resolves address + lat/lng + place_id, satellite thumbnail on lead detail, **manual override UX** (B2) on the Property card for fixing mis-resolved addresses.
+- **Phase C** — `bids.lead_id` FK, lead → bid pre-fill, auto lead status `quoted` on proposal, auto `won` / `lost` on public proposal share response.
+- **Phase D** — `/p/[slug]` public proposal page, accept/decline with capture, status propagation to bid and lead, share link + copy-to-clipboard.
+- **Phase E (partial)** — `/dashboard` summary counts.
+- **Infra** — Next.js 16 migration (proxy.ts), AGENTS.md operating guide.
 
 ### Pre-Work (Day 0, before the two-week clock starts)
 
-- [ ] **Validate enrichment pipeline on 10 known multifamily properties.** Run company name + property name through Google Places, pull OSM footprints, compare to known sqft. If resolution rate is below ~60% or footprint accuracy is off by more than ~25%, the enrichment pitch needs to be softened in the demo.
-- [ ] **Get a real trade show attendee CSV from Jordan.** Confirm what columns actually show up and what's missing (phone, address, etc.). This shapes the column mapping logic and sets realistic expectations.
+- [x] **Validate enrichment pipeline on 10 known multifamily properties.** Completed 2026-04-16. Places resolution 10/10 (100%); OSM footprint plausibility 1–2 / 10 across four tuning variants. Decision: ship Places-only, hide OSM. Full report: `docs/worklog.md`.
+- [ ] **Get a real trade show attendee CSV from Jordan.** Still open; built Phase A against `scripts/fixtures/trade-show-sample.csv` in the meantime.
 
 ### Phase A: Lead Ingestion (Days 1–2)
 
@@ -183,10 +212,10 @@ This is a proof of concept, not a production release. It proves the strategic th
 - [x] Server action `enrichLead(leadId)` that:
   - Builds a Places query from company + property name (fall back to company alone if property is empty).
   - [x] Fetches one Google Places result; stores formatted address, lat/lng, and place_id on the lead.
-  - [ ] If coordinates resolve, queries Overpass for building footprints within ~75m.
-  - [ ] Computes rough exterior sqft using footprint × default story count × multiplier.
-  - [ ] Applies user's default $/sqft to generate a preliminary bid estimate.
-  - [ ] Writes `footprint_sqft`, `est_total_sqft`, `est_bid_amount`, and `needs_review` state.
+  - [~] If coordinates resolve, queries Overpass for building footprints within ~75m. *Paused — OSM hidden from UI, see Active Work → Paused.*
+  - [~] Computes rough exterior sqft using footprint × default story count × multiplier. *Paused — same reason.*
+  - [~] Applies user's default $/sqft to generate a preliminary bid estimate. *Paused — same reason.*
+  - [~] Writes `footprint_sqft`, `est_total_sqft`, `est_bid_amount`, and `needs_review` state. *Paused — same reason.*
 - [x] Trigger enrichment on import for inserted rows.
 - [x] Display enrichment status in the lead list/detail (pending/success/failed/skipped).
 
@@ -194,7 +223,7 @@ This is a proof of concept, not a production release. It proves the strategic th
 
 - [x] `/leads/[id]` page showing contact info, resolved address, satellite thumbnail, notes, and enrichment state.
 - [x] "Create Bid" button that takes the user into the existing bid creation flow.
-- [ ] Manual override on enriched fields in case the auto-resolved address is wrong.
+- [x] Manual override on enriched fields in case the auto-resolved address is wrong. *Shipped via `?edit=property` on the lead detail page; reuses `AddressAutocomplete` so picking a new suggestion captures lat/lng and rebuilds the satellite preview.*
 
 **Milestone:** Every imported lead is either enriched with property data and a preliminary bid estimate, or clearly flagged as needing manual review.
 

@@ -10,48 +10,23 @@ This file keeps human contributors and AI agents aligned on Mercer.
 
 ## Source Of Truth
 
-- Strategy and roadmap: `docs/plan.md`
-- This project operating guide: `AGENTS.md`
-- Database schema: `src/db/schema.ts`
-- Manual migrations: `drizzle/manual/*.sql`
+- **Strategy, roadmap, and live to-do list: `docs/plan.md` → "Active Work".** This is the single source of truth for what is shipped, what is open, what is paused, and what is blocked on decisions from the team. Do not duplicate status here.
+- Session-by-session log of how work got done: `docs/worklog.md`.
+- This operating guide: `AGENTS.md`.
+- Database schema: `src/db/schema.ts`. Manual migrations: `drizzle/manual/*.sql`.
 
 If this file and another doc conflict, update the docs in the same PR and call it out.
 
-## What Is Shipped (High Confidence)
-
-- Repositioned marketing site and metadata social cards.
-- Leads import flow and lead list/detail views.
-- Enrichment baseline with Places + resolved address + coordinates + status.
-- Bid workflow, pricing, PDF generation.
-- Proposal sharing with public route `p/[slug]`, accept/decline, and status updates.
-- Phase C linkage:
-  - `bids.lead_id` relationship
-  - create bid from lead prefill
-  - lead status progression from proposal events
-- App dashboard at `/dashboard`.
-- Next.js 16 migration (including `src/proxy.ts`).
-
-## What Is Still Open
-
-- Phase B property-intelligence completion:
-  - `footprint_sqft`
-  - `est_total_sqft`
-  - `est_bid_amount`
-  - clearer `needs_review` handling and manual override UX
-- Phase E dedicated `/pipeline` page with funnel math and filtered drill-down.
-- Demo polish items from Phase F in `docs/plan.md`.
-
 ## Team Workflow (Two Contributors)
 
-1. Keep one primary priority at a time.
-2. Start each session by reading:
-   - `AGENTS.md`
-   - `docs/plan.md`
+1. Keep one primary priority at a time. Pull it from `docs/plan.md` → "Active Work → Open now."
+2. Start each session by reading `AGENTS.md` then `docs/plan.md` → "Active Work."
 3. Before coding, state:
    - what you are changing
    - why now
-   - which roadmap checkbox it maps to
-4. End each working block with a handoff note (template below).
+   - which roadmap checkbox it maps to (quote the line from `docs/plan.md`)
+4. When a checkbox flips, update `docs/plan.md` in the same PR. Move the item out of "Open now" into "Shipped" (or update its state in the phase section below).
+5. End each working block with a handoff note (template below).
 
 ## Handoff Template (Required)
 
@@ -103,5 +78,5 @@ A task is not done unless all applicable items pass:
 
 Use this at the top of a new AI session:
 
-"Read `AGENTS.md` and `docs/plan.md`. Summarize shipped vs remaining MVP work in 6 bullets max, then propose the highest-leverage next task and implement it with verification."
+"Read `AGENTS.md`, then `docs/plan.md` → 'Active Work' section. Summarize the live state (shipped, open, paused, decisions needed) in 6 bullets max, pick the highest-leverage item from 'Open now', and implement it with verification. Update the matching checkbox in `docs/plan.md` in the same PR."
 
