@@ -1,5 +1,13 @@
 import { db } from "@/db";
-import { bids, buildings, surfaces, lineItems, userDefaults, proposals } from "@/db/schema";
+import {
+  bids,
+  buildings,
+  surfaces,
+  lineItems,
+  userDefaults,
+  proposals,
+  leads,
+} from "@/db/schema";
 import { eq, desc, and, asc, sql } from "drizzle-orm";
 import { getSessionUser } from "@/lib/supabase/auth-cache";
 import { computeTotalSqft } from "@/lib/dimensions";
@@ -11,6 +19,7 @@ export type Surface = typeof surfaces.$inferSelect;
 export type LineItem = typeof lineItems.$inferSelect;
 export type UserDefault = typeof userDefaults.$inferSelect;
 export type Proposal = typeof proposals.$inferSelect;
+export type Lead = typeof leads.$inferSelect;
 export type BuildingWithSqft = Building & { totalSqft: number };
 
 async function requireUser() {
@@ -588,6 +597,48 @@ export async function createProposal(
   const rows = await db
     .insert(proposals)
     .values({ bidId, snapshot, pdfUrl })
+    .returning();
+  return rows[0];
+}
+
+// ── Leads ──
+
+export async function getLeads() {
+  const user = await requireUser();
+  return db
+    .select()
+    .from(leads)
+    .where(eq(leads.userId, user.id))
+    .orderBy(desc(leads.createdAt));
+}
+
+export async function createLead(
+  data: Pick<Lead, "name"> &
+    Partial<
+      Pick<
+        Lead,
+        | "sourceTag"
+        | "email"
+        | "phone"
+        | "company"
+        | "propertyName"
+        | "notes"
+      >
+    >
+) {
+  const user = await requireUser();
+  const rows = await db
+    .insert(leads)
+    .values({
+      userId: user.id,
+      name: data.name,
+      sourceTag: data.sourceTag ?? null,
+      email: data.email ?? null,
+      phone: data.phone ?? null,
+      company: data.company ?? null,
+      propertyName: data.propertyName ?? null,
+      notes: data.notes ?? "",
+    })
     .returning();
   return rows[0];
 }
