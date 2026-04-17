@@ -86,8 +86,12 @@ The bid-to-proposal workflow is complete and live at mercer-bids.vercel.app. The
 - Generate a client-facing proposal PDF with per-building breakdowns and optional satellite imagery.
 - Track bid status (draft / sent / won / lost) with automatic status updates.
 - OpenStreetMap footprints on bid detail when coordinates are available.
+- Lead ingestion (`/leads/import`) with CSV parsing, source tags, enrichment status, and lead detail views.
+- Lead-to-bid conversion with prefilled `/bids/new?leadId=...` and bid-to-lead linkage.
+- Shareable proposal pages at `/p/[slug]` with accept/decline actions and status propagation.
+- App dashboard (`/dashboard`) with lead and bid summary metrics.
 
-The app is deployed on Vercel, uses Supabase for auth, database, and file storage, and is built with Next.js 15, React 19, and Tailwind CSS 4.
+The app is deployed on Vercel, uses Supabase for auth, database, and file storage, and is built with Next.js 16, React 19, and Tailwind CSS 4.
 
 ---
 
@@ -118,7 +122,7 @@ The downstream problem is equally solvable. Replacing the PDF-in-email pattern w
 
 | Layer | Choice |
 |-------|--------|
-| **Frontend** | Next.js 15 (App Router), React 19 |
+| **Frontend** | Next.js 16 (App Router), React 19 |
 | **Backend** | Next.js (Server Components, Server Actions) |
 | **Data** | Postgres via Supabase, Drizzle ORM |
 | **Auth** | Supabase Auth |
@@ -140,6 +144,13 @@ The downstream problem is equally solvable. Replacing the PDF-in-email pattern w
 
 This is a proof of concept, not a production release. It proves the strategic thesis (that Mercer can expand beyond bidding into full sales platform territory) without committing to the full ERP scope Jordan described (contracts, schedules, expense tracking, sub management, punch lists). Those remain future work.
 
+### Implementation Status (Updated Apr 2026)
+
+- **Completed:** Phase A (lead ingestion), Phase C (lead-to-bid conversion), Phase D (shareable proposal URL + accept/decline + status propagation).
+- **Partially completed:** Phase B (Places-based enrichment and lead detail shipped; footprint-based sqft/estimate fields not yet shipped).
+- **Partially completed:** Phase E (dashboard summary shipped at `/dashboard`; dedicated `/pipeline` funnel page still pending).
+- **Pending:** Phase F demo-polish checklist items.
+
 ### Pre-Work (Day 0, before the two-week clock starts)
 
 - [ ] **Validate enrichment pipeline on 10 known multifamily properties.** Run company name + property name through Google Places, pull OSM footprints, compare to known sqft. If resolution rate is below ~60% or footprint accuracy is off by more than ~25%, the enrichment pitch needs to be softened in the demo.
@@ -149,19 +160,19 @@ This is a proof of concept, not a production release. It proves the strategic th
 
 #### A1. CSV upload
 
-- [ ] `leads` table: id, user_id, source_tag (text), name, company, email, property_name, raw_row (jsonb), status (enum: new / quoted / won / lost), created_at.
-- [ ] Upload page at `/leads/import` with a file picker accepting `.csv`.
-- [ ] Parse CSV client-side with Papa Parse, show a preview of the first 10 rows before committing the import.
-- [ ] Hardcoded column mapping UI: map detected columns to Name, Email, Company, Property Name. Unmapped columns are stored on `raw_row` for later.
-- [ ] Source tag input: single text field ("NAA Orlando 2026") applied to every row in the import.
-- [ ] Bulk insert to `leads` table on confirm. No deduplication in MVP.
+- [x] `leads` table: id, user_id, source_tag (text), name, company, email, property_name, raw_row (jsonb), status (enum: new / quoted / won / lost), created_at.
+- [x] Upload page at `/leads/import` with a file picker accepting `.csv`.
+- [x] Parse CSV client-side with Papa Parse and preview imported rows before commit.
+- [x] Column auto-mapping for Name, Email, Company, Property Name. Unmapped columns are stored on `raw_row`.
+- [x] Source tag input applied to imported rows.
+- [x] Bulk insert to `leads` table on confirm. No deduplication in MVP.
 
 #### A2. Lead list view
 
-- [ ] `/leads` page with a table: Name, Company, Property, Est. Sqft, Est. Bid, Status, Actions.
+- [x] `/leads` page with table/card views including Name, Company, Property, source, enrichment, and status.
 - [ ] Sort by Est. Bid descending by default so biggest opportunities surface first.
-- [ ] Filter by source_tag.
-- [ ] Status dropdown (inline edit): New / Quoted / Won / Lost.
+- [x] Filter by source_tag.
+- [x] Status dropdown/edit flow: New / Quoted / Won / Lost.
 
 **Milestone:** Jordan uploads a real attendee list and sees it as a structured table in the app.
 
@@ -169,31 +180,31 @@ This is a proof of concept, not a production release. It proves the strategic th
 
 #### B1. Enrichment worker
 
-- [ ] Server action `enrichLead(leadId)` that:
+- [x] Server action `enrichLead(leadId)` that:
   - Builds a Places query from company + property name (fall back to company alone if property is empty).
-  - Fetches one Google Places result; stores the formatted address, lat/lng, and place_id on the lead.
-  - If coordinates resolve, queries Overpass for building footprints within ~75m.
-  - Computes rough exterior sqft using footprint × default story count (2) × perimeter-to-height multiplier (1.3, use whatever Phase 1.5 validation produced).
-  - Applies user's default $/sqft to generate a preliminary bid estimate.
-  - Writes back to the lead row: `resolved_address`, `latitude`, `longitude`, `place_id`, `footprint_sqft`, `est_total_sqft`, `est_bid_amount`, `enrichment_status` (pending / success / needs_review / failed).
-- [ ] Trigger enrichment on import: fire off enrichment for all rows in the batch, update the UI as rows complete.
-- [ ] Display enrichment status in the lead list: a spinner while pending, a badge when complete, a "needs review" flag if resolution failed.
+  - [x] Fetches one Google Places result; stores formatted address, lat/lng, and place_id on the lead.
+  - [ ] If coordinates resolve, queries Overpass for building footprints within ~75m.
+  - [ ] Computes rough exterior sqft using footprint × default story count × multiplier.
+  - [ ] Applies user's default $/sqft to generate a preliminary bid estimate.
+  - [ ] Writes `footprint_sqft`, `est_total_sqft`, `est_bid_amount`, and `needs_review` state.
+- [x] Trigger enrichment on import for inserted rows.
+- [x] Display enrichment status in the lead list/detail (pending/success/failed/skipped).
 
 #### B2. Lead detail view
 
-- [ ] `/leads/[id]` page showing: contact info, resolved address, satellite thumbnail (reuse existing satellite proxy), footprint count and total sqft, est. bid amount, notes field.
-- [ ] "Create Bid" button that takes the user into the existing bid creation flow.
+- [x] `/leads/[id]` page showing contact info, resolved address, satellite thumbnail, notes, and enrichment state.
+- [x] "Create Bid" button that takes the user into the existing bid creation flow.
 - [ ] Manual override on enriched fields in case the auto-resolved address is wrong.
 
 **Milestone:** Every imported lead is either enriched with property data and a preliminary bid estimate, or clearly flagged as needing manual review.
 
 ### Phase C: Lead-to-Bid Conversion (Day 7)
 
-- [ ] Add `lead_id` (nullable) to the `bids` table.
-- [ ] "Create Bid" from a lead pre-populates: property name, address, lat/lng, place_id, and seeds the satellite image URL.
-- [ ] The bid carries `lead_id` so conversion can be tracked.
-- [ ] Back-reference on the lead detail page: "This lead has a bid in progress → [Bid #]".
-- [ ] Auto-update lead status to "Quoted" when a proposal is generated from that bid.
+- [x] Add `lead_id` (nullable) to the `bids` table.
+- [x] "Create Bid" from a lead pre-populates: property name, address, lat/lng, place_id, and notes/client defaults.
+- [x] The bid carries `lead_id` so conversion can be tracked.
+- [x] Back-reference on the lead detail page: linked bid action.
+- [x] Auto-update lead status to "Quoted" when a proposal is generated from that bid.
 
 **Milestone:** A user can go from a single row in the lead table to the existing bid creation flow in one click, with all the property data pre-filled.
 
@@ -201,25 +212,25 @@ This is a proof of concept, not a production release. It proves the strategic th
 
 #### D1. Public proposal page
 
-- [ ] New table `proposal_shares`: id (uuid, used as the public slug), proposal_id, created_at, accepted_at, accepted_by_name, declined_at, decline_reason.
-- [ ] Public route at `/p/[slug]`, no auth required. Renders the proposal in HTML (not PDF).
-- [ ] Reuse the existing proposal snapshot data. Render property info, per-building breakdown, scope, total price, and satellite image.
-- [ ] Add a prominent Accept / Decline button pair at the bottom of the page.
-- [ ] On Accept: show a lightweight form (customer name, title, optional note), confirm, set `accepted_at` and `accepted_by_name`.
-- [ ] On Decline: show a form (optional reason dropdown: Price / Timing / Chose Another Vendor / Other + note field), confirm, set `declined_at` and `decline_reason`.
-- [ ] Post-acceptance screen: "Thanks, {salesperson name} will be in touch to schedule next steps."
+- [x] New table `proposal_shares`: id (uuid, public slug), proposal_id, created_at, accepted_at, accepted_by_name, declined_at, decline_reason (plus accessed_at/accepted_by_title).
+- [x] Public route at `/p/[slug]`, no auth required. Renders proposal summary in HTML.
+- [x] Reuse proposal snapshot data and render key pricing/scope details.
+- [x] Add Accept / Decline actions on the public page.
+- [x] On Accept: capture customer name/title and persist acceptance.
+- [x] On Decline: capture optional reason and persist decline.
+- [x] Post-response state shown in-page.
 
 #### D2. Send proposal flow
 
-- [ ] "Share Proposal" button on the bid detail page creates a `proposal_shares` row and shows the resulting URL.
-- [ ] "Copy Link" button puts the URL on the clipboard.
-- [ ] "Email Proposal" button opens a `mailto:` link with the customer email (from the originating lead), a pre-filled subject, and a body that includes the proposal URL. No SMTP infrastructure needed for MVP; Jordan sends through his own mail client.
-- [ ] Bid detail page shows the share status: sent date, view count (optional, add only if trivial), accepted/declined status.
+- [x] Share action on bid detail creates a `proposal_shares` row and shows URL.
+- [x] Copy-to-clipboard behavior for share URL.
+- [ ] "Email Proposal" `mailto:` shortcut.
+- [x] Bid detail shows share status (open/accepted/declined) and URL.
 
 #### D3. Status propagation
 
-- [ ] When a proposal is accepted, the bid status flips to "Won" and the originating lead status flips to "Won."
-- [ ] When declined, bid status flips to "Lost" and lead status flips to "Lost."
+- [x] When accepted, bid status flips to "Won" and originating lead status flips to "Won."
+- [x] When declined, bid status flips to "Lost" and originating lead status flips to "Lost."
 - [ ] Confirmation email out of scope for MVP; the status change in the dashboard is enough for the demo.
 
 **Milestone:** A customer receives an email with a URL, opens the proposal in their browser, clicks Accept, and the deal shows as Won in Jordan's pipeline without anyone else touching the system.
@@ -230,6 +241,7 @@ This is a proof of concept, not a production release. It proves the strategic th
 - [ ] Filter by source_tag to see the NAA Orlando funnel specifically.
 - [ ] Simple funnel visual: Leads → Quoted → Won, with conversion rates between each stage.
 - [ ] Link each count to a filtered view of the underlying records.
+- [x] Lightweight dashboard at `/dashboard` with lead and bid summary counts shipped as an interim step.
 
 **Milestone:** Jordan sees a single dashboard that tells the story "we imported 247 leads from NAA Orlando, enriched 198 of them, quoted 34, and have closed 8 for $1.2M."
 
