@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { createBid, getUserDefaults, updateBidPricing } from "../store";
+import { createBid, getUserDefaults, updateBidPricing, updateLeadStatus } from "../store";
 import { createBidSchema } from "../validations";
 
 export async function createBidAction(formData: FormData) {
@@ -14,19 +14,27 @@ export async function createBidAction(formData: FormData) {
     redirect(`/bids/new?error=${encodeURIComponent(message)}`);
   }
 
-  const [bid, defaults] = await Promise.all([
-    createBid(result.data),
-    getUserDefaults(),
-  ]);
+  let created: { bid: Awaited<ReturnType<typeof createBid>>; defaults: Awaited<ReturnType<typeof getUserDefaults>> } | null = null;
+  try {
+    const [bid, defaults] = await Promise.all([createBid(result.data), getUserDefaults()]);
+    created = { bid, defaults };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to create bid";
+    redirect(`/bids/new?error=${encodeURIComponent(message)}`);
+  }
 
-  if (defaults) {
-    await updateBidPricing(bid.id, {
-      coverageSqftPerGallon: defaults.coverageSqftPerGallon,
-      pricePerGallon: defaults.pricePerGallon,
-      laborRatePerUnit: defaults.laborRatePerUnit,
-      marginPercent: defaults.marginPercent,
+  if (created?.defaults) {
+    await updateBidPricing(created.bid.id, {
+      coverageSqftPerGallon: created.defaults.coverageSqftPerGallon,
+      pricePerGallon: created.defaults.pricePerGallon,
+      laborRatePerUnit: created.defaults.laborRatePerUnit,
+      marginPercent: created.defaults.marginPercent,
     });
   }
 
-  redirect(`/bids/${bid.id}`);
+  if (result.data.leadId) {
+    await updateLeadStatus(result.data.leadId, "quoted");
+  }
+
+  redirect(`/bids/${created!.bid.id}`);
 }

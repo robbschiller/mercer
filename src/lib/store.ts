@@ -111,11 +111,22 @@ export async function getBid(id: string) {
 
 export async function createBid(
   data: Pick<Bid, "propertyName" | "address" | "clientName" | "notes"> &
-    Partial<Pick<Bid, "latitude" | "longitude" | "googlePlaceId">>
+    Partial<Pick<Bid, "latitude" | "longitude" | "googlePlaceId" | "leadId">>
 ) {
   const user = await requireUser();
   const lat = data.latitude ?? null;
   const lng = data.longitude ?? null;
+  let leadId: string | null = data.leadId ?? null;
+  if (leadId) {
+    const leadRows = await db
+      .select({ id: leads.id })
+      .from(leads)
+      .where(and(eq(leads.id, leadId), eq(leads.userId, user.id)))
+      .limit(1);
+    if (!leadRows[0]) {
+      throw new Error("Lead not found");
+    }
+  }
   const rows = await db
     .insert(bids)
     .values({
@@ -126,6 +137,7 @@ export async function createBid(
       latitude: lat,
       longitude: lng,
       googlePlaceId: data.googlePlaceId ?? null,
+      leadId,
       satelliteImageUrl: buildSatelliteProxyPath(lat, lng),
       userId: user.id,
     })
@@ -690,6 +702,18 @@ export async function acceptProposalShare(
     .set({ status: "won", updatedAt: new Date() })
     .where(eq(bids.id, existing.proposal.bidId));
 
+  const [bidRow] = await db
+    .select({ leadId: bids.leadId })
+    .from(bids)
+    .where(eq(bids.id, existing.proposal.bidId))
+    .limit(1);
+  if (bidRow?.leadId) {
+    await db
+      .update(leads)
+      .set({ status: "won", updatedAt: new Date() })
+      .where(eq(leads.id, bidRow.leadId));
+  }
+
   return updatedShare;
 }
 
@@ -722,6 +746,18 @@ export async function declineProposalShare(
     .update(bids)
     .set({ status: "lost", updatedAt: new Date() })
     .where(eq(bids.id, existing.proposal.bidId));
+
+  const [bidRow] = await db
+    .select({ leadId: bids.leadId })
+    .from(bids)
+    .where(eq(bids.id, existing.proposal.bidId))
+    .limit(1);
+  if (bidRow?.leadId) {
+    await db
+      .update(leads)
+      .set({ status: "lost", updatedAt: new Date() })
+      .where(eq(leads.id, bidRow.leadId));
+  }
 
   return updatedShare;
 }
@@ -774,6 +810,17 @@ export async function getLead(id: string) {
     .select()
     .from(leads)
     .where(and(eq(leads.id, id), eq(leads.userId, user.id)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getLatestBidForLead(leadId: string) {
+  const user = await requireUser();
+  const rows = await db
+    .select({ id: bids.id, status: bids.status, updatedAt: bids.updatedAt })
+    .from(bids)
+    .where(and(eq(bids.userId, user.id), eq(bids.leadId, leadId)))
+    .orderBy(desc(bids.updatedAt))
     .limit(1);
   return rows[0] ?? null;
 }
