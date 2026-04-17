@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getLead } from "@/lib/store";
+import { getLead, getLatestBidForLead } from "@/lib/store";
 import { enrichLeadAction, updateLeadStatusAction } from "@/lib/actions";
 import { SatellitePreview } from "@/components/satellite-preview";
 import { Badge } from "@/components/ui/badge";
@@ -41,7 +41,7 @@ export default async function LeadDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const lead = await getLead(id);
+  const [lead, linkedBid] = await Promise.all([getLead(id), getLatestBidForLead(id)]);
   if (!lead) notFound();
 
   const canShowSatellite =
@@ -188,6 +188,11 @@ export default async function LeadDetailPage({
       </Card>
 
       <div className="mt-6 flex items-center justify-end gap-2">
+        {linkedBid ? (
+          <Button variant="outline" asChild>
+            <Link href={`/bids/${linkedBid.id}`}>View linked bid</Link>
+          </Button>
+        ) : null}
         <Button asChild>
           <Link href={`/bids/new?leadId=${lead.id}`}>Create bid from lead</Link>
         </Button>

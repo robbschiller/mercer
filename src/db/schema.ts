@@ -12,6 +12,7 @@ import {
 export const bids = pgTable("bids", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull(),
+  leadId: uuid("lead_id"),
   propertyName: text("property_name").notNull(),
   address: text("address").notNull(),
   latitude: doublePrecision("latitude"),

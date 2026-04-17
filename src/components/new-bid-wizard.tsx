@@ -21,6 +21,17 @@ type ResolvedPlace = {
   displayName: string | null;
 };
 
+type InitialLeadPrefill = {
+  id: string;
+  propertyName: string;
+  address: string;
+  clientName: string;
+  notes: string;
+  latitude: number | null;
+  longitude: number | null;
+  googlePlaceId: string | null;
+};
+
 const emptyResolved: ResolvedPlace = {
   address: "",
   lat: null,
@@ -35,13 +46,34 @@ function suggestedPropertyName(r: ResolvedPlace): string {
   return first || "";
 }
 
-export function NewBidWizard({ errorMessage }: { errorMessage?: string | null }) {
+export function NewBidWizard({
+  errorMessage,
+  initialLead,
+}: {
+  errorMessage?: string | null;
+  initialLead?: InitialLeadPrefill | null;
+}) {
+  const seeded = Boolean(initialLead);
   const [phase, setPhase] = useState<"address" | "confirm" | "details">(
-    "address"
+    seeded ? "details" : "address"
   );
   const [addressFieldKey, setAddressFieldKey] = useState(0);
-  const [resolved, setResolved] = useState<ResolvedPlace>(emptyResolved);
-  const [propertyName, setPropertyName] = useState("");
+  const [resolved, setResolved] = useState<ResolvedPlace>(
+    seeded
+      ? {
+          address: initialLead!.address,
+          lat: initialLead!.latitude,
+          lng: initialLead!.longitude,
+          placeId: initialLead!.googlePlaceId,
+          displayName: initialLead!.propertyName || null,
+        }
+      : emptyResolved
+  );
+  const [propertyName, setPropertyName] = useState(
+    initialLead?.propertyName ?? ""
+  );
+  const [clientName, setClientName] = useState(initialLead?.clientName ?? "");
+  const [notes, setNotes] = useState(initialLead?.notes ?? "");
   const seededPropertyNameForConfirmRef = useRef(false);
 
   useEffect(() => {
@@ -202,6 +234,7 @@ export function NewBidWizard({ errorMessage }: { errorMessage?: string | null })
 
       {phase === "details" ? (
         <form action={createBidAction} className="flex flex-col gap-4">
+          <input type="hidden" name="leadId" value={initialLead?.id ?? ""} />
           <input type="hidden" name="address" value={resolved.address} />
           <input
             type="hidden"
@@ -253,6 +286,8 @@ export function NewBidWizard({ errorMessage }: { errorMessage?: string | null })
             <Input
               id="clientName"
               name="clientName"
+              value={clientName}
+              onChange={(e) => setClientName(e.target.value)}
               placeholder="Acme Property Management"
               required
             />
@@ -263,6 +298,8 @@ export function NewBidWizard({ errorMessage }: { errorMessage?: string | null })
             <Textarea
               id="notes"
               name="notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
               placeholder="Number of buildings, special conditions, etc."
               rows={3}
             />

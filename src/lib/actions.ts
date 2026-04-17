@@ -427,6 +427,10 @@ export async function generateProposalAction(data: { bidId: string }) {
     await updateBid(bid.id, { status: "sent" });
   }
 
+  if (bid.leadId) {
+    await updateLeadStatus(bid.leadId, "quoted");
+  }
+
   revalidatePath(`/bids/${bid.id}`);
   revalidatePath("/bids");
   return { error: null, pdfUrl: proposal.pdfUrl };

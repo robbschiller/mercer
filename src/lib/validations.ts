@@ -24,6 +24,11 @@ const formPlaceId = z.preprocess((val: unknown) => {
   return String(val);
 }, z.union([z.string().min(1), z.null()]));
 
+const formOptionalUuid = z.preprocess((val: unknown) => {
+  if (val === "" || val === undefined || val === null) return null;
+  return String(val);
+}, z.union([z.string().uuid("Invalid lead ID"), z.null()]));
+
 export const createBidSchema = z.object({
   propertyName: z.string().min(1, "Property name is required"),
   address: z.string().min(1, "Address is required"),
@@ -32,6 +37,7 @@ export const createBidSchema = z.object({
   latitude: formLatLng,
   longitude: formLatLng,
   googlePlaceId: formPlaceId,
+  leadId: formOptionalUuid,
 });
 
 export const updateBidSchema = z.object({
