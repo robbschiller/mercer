@@ -20,7 +20,15 @@ import {
   getBidPageData,
   createProposal,
   createLead,
+  createLeadsBatch,
+  updateLeadStatus,
+  getLead,
 } from "./store";
+import { parseCsv, autoMapColumns, mapRowsToLeads } from "./leads/csv";
+import {
+  runEnrichmentForBatch,
+  runEnrichmentForLead,
+} from "./leads/enrichment-runner";
 import { createClient } from "./supabase/server";
 import {
   signInSchema,
@@ -40,6 +48,9 @@ import {
   updateUserDefaultsSchema,
   generateProposalSchema,
   createLeadSchema,
+  importLeadsSchema,
+  updateLeadStatusSchema,
+  enrichLeadActionSchema,
 } from "./validations";
 import { calculateBidPricing } from "./pricing";
 import type { ProposalSnapshot } from "./pdf/types";
@@ -436,4 +447,92 @@ export async function createLeadAction(formData: FormData) {
     throw err;
   }
   redirect("/leads");
+}
+
+/**
+ * Import leads from a CSV file upload.
+ *
+ * Expected form fields:
+ *   - file: File (text/csv)
+ *   - sourceTag: string (optional)
+ *
+ * Flow: parse CSV → auto-map columns → bulk insert with enrichment_status
+ * "pending" → kick off enrichment worker inline (Places-only). Redirects to
+ * /leads so the user sees the new rows. Enrichment runs during the action
+ * so by the time the redirect resolves, satellite previews are populated.
+ */
+export async function importLeadsAction(formData: FormData) {
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    redirect(`/leads/import?error=${encodeURIComponent("Select a CSV file")}`);
+  }
+
+  const parsedMeta = importLeadsSchema.safeParse({
+    sourceTag: formData.get("sourceTag"),
+  });
+  if (!parsedMeta.success) {
+    const message = parsedMeta.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/leads/import?error=${encodeURIComponent(message)}`);
+  }
+
+  const text = await (file as File).text();
+  const { headers, rows } = parseCsv(text);
+
+  if (headers.length === 0 || rows.length === 0) {
+    redirect(
+      `/leads/import?error=${encodeURIComponent("CSV appears empty or malformed")}`
+    );
+  }
+
+  const mapping = autoMapColumns(headers);
+  if (!mapping.name) {
+    redirect(
+      `/leads/import?error=${encodeURIComponent(
+        `Could not find a name column. Headers seen: ${headers.join(", ")}`
+      )}`
+    );
+  }
+
+  const leadsToInsert = mapRowsToLeads(rows, mapping);
+  if (leadsToInsert.length === 0) {
+    redirect(
+      `/leads/import?error=${encodeURIComponent("No rows with a name value")}`
+    );
+  }
+
+  const inserted = await createLeadsBatch(leadsToInsert, parsedMeta.data.sourceTag ?? null);
+
+  // Enrichment runs inline so the user sees resolved addresses on the next page.
+  // If this grows unwieldy we can switch to a fire-and-forget pattern with
+  // waitUntil() on Vercel, but for <100 rows / Places call it's fine.
+  try {
+    await runEnrichmentForBatch(inserted);
+  } catch (err) {
+    console.error("[importLeadsAction] enrichment batch error:", err);
+  }
+
+  revalidatePath("/leads");
+  redirect(`/leads?imported=${inserted.length}`);
+}
+
+export async function updateLeadStatusAction(formData: FormData) {
+  const result = updateLeadStatusSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    throw new Error(result.error.issues[0]?.message ?? "Invalid input");
+  }
+  await updateLeadStatus(result.data.id, result.data.status);
+  revalidatePath("/leads");
+  revalidatePath(`/leads/${result.data.id}`);
+}
+
+export async function enrichLeadAction(formData: FormData) {
+  const result = enrichLeadActionSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    throw new Error(result.error.issues[0]?.message ?? "Invalid input");
+  }
+  const lead = await getLead(result.data.id);
+  if (!lead) throw new Error("Lead not found");
+  await runEnrichmentForLead(lead);
+  revalidatePath(`/leads/${lead.id}`);
+  revalidatePath("/leads");
 }
