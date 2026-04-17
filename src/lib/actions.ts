@@ -24,6 +24,7 @@ import {
   createLeadsBatch,
   updateLeadStatus,
   getLead,
+  overrideLeadProperty,
   acceptProposalShare,
   declineProposalShare,
 } from "./store";
@@ -57,6 +58,7 @@ import {
   importLeadsSchema,
   updateLeadStatusSchema,
   enrichLeadActionSchema,
+  overrideLeadPropertySchema,
 } from "./validations";
 import { calculateBidPricing } from "./pricing";
 import type { ProposalSnapshot } from "./pdf/types";
@@ -597,4 +599,29 @@ export async function enrichLeadAction(formData: FormData) {
   await runEnrichmentForLead(lead);
   revalidatePath(`/leads/${lead.id}`);
   revalidatePath("/leads");
+}
+
+/**
+ * Manual override when Places picked the wrong building. Takes a new address
+ * + lat / lng / place_id (posted by AddressAutocomplete's hidden fields) and
+ * writes them onto the lead. Redirects back to /leads/[id] on success so the
+ * client-side edit flag (?edit=property) clears.
+ */
+export async function overrideLeadPropertyAction(formData: FormData) {
+  const result = overrideLeadPropertySchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(
+      `/leads/${formData.get("id")}?edit=property&error=${encodeURIComponent(message)}`
+    );
+  }
+  await overrideLeadProperty(result.data.id, {
+    resolvedAddress: result.data.address,
+    latitude: result.data.latitude,
+    longitude: result.data.longitude,
+    googlePlaceId: result.data.googlePlaceId,
+  });
+  revalidatePath(`/leads/${result.data.id}`);
+  revalidatePath("/leads");
+  redirect(`/leads/${result.data.id}`);
 }

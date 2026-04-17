@@ -150,16 +150,15 @@ This is the live to-do list for the MVP. When a checkbox below flips in this sec
 
 ### Open now (ordered by priority)
 
-1. [ ] **Phase B2 — manual override UX on enriched fields.** When Places returns a wrong or zip-level match, the user needs a way to edit address / lat / lng on the lead detail page. Load-bearing because Day-0 validation (see `docs/worklog.md` 2026-04-16) showed Places resolution is 100% but not always the *right* building.
-2. [ ] **Phase E — `/pipeline` funnel page.** Five counts (Leads / Quoted / Won / Lost / Total Pipeline $), source_tag filter, simple Leads → Quoted → Won funnel with conversion rates, each count links to a filtered list. `/dashboard` is the interim surface.
-3. [ ] **Phase F — demo polish**
+1. [ ] **Phase E — `/pipeline` funnel page.** Five counts (Leads / Quoted / Won / Lost / Total Pipeline $), source_tag filter, simple Leads → Quoted → Won funnel with conversion rates, each count links to a filtered list. `/dashboard` is the interim surface.
+2. [ ] **Phase F — demo polish**
    - [ ] Onboarding blurb on `/leads/import`
    - [ ] Empty states and error messages on the new views
    - [ ] Seed a clean sample import in Jordan's account
    - [ ] End-to-end test with a real attendee CSV
    - [ ] Record a backup 3-minute demo video
-4. [ ] **Phase D2 — `mailto:` Email Proposal shortcut** on bid detail.
-5. [ ] **Phase A2 — sort leads by Est. Bid desc.** Gated on B1 shipping `est_bid_amount`; moot while B1 is paused (see below). If we stay Places-only, replace with sort-by-created-at-desc (already the default).
+3. [ ] **Phase D2 — `mailto:` Email Proposal shortcut** on bid detail.
+4. [ ] **Phase A2 — sort leads by Est. Bid desc.** Gated on B1 shipping `est_bid_amount`; moot while B1 is paused (see below). If we stay Places-only, replace with sort-by-created-at-desc (already the default).
 
 ### Paused / deferred by decision
 
@@ -175,7 +174,7 @@ This is the live to-do list for the MVP. When a checkbox below flips in this sec
 ### Shipped (summary — authoritative checkboxes live in the phase sections)
 
 - **Phase A** — CSV import with auto-column-mapping, leads list (card + table views), lead detail, enrichment status badges, source-tag filter.
-- **Phase B Places-only slice** — `enrichLead` resolves address + lat/lng + place_id, satellite thumbnail on lead detail.
+- **Phase B Places-only slice** — `enrichLead` resolves address + lat/lng + place_id, satellite thumbnail on lead detail, **manual override UX** (B2) on the Property card for fixing mis-resolved addresses.
 - **Phase C** — `bids.lead_id` FK, lead → bid pre-fill, auto lead status `quoted` on proposal, auto `won` / `lost` on public proposal share response.
 - **Phase D** — `/p/[slug]` public proposal page, accept/decline with capture, status propagation to bid and lead, share link + copy-to-clipboard.
 - **Phase E (partial)** — `/dashboard` summary counts.
@@ -224,7 +223,7 @@ This is the live to-do list for the MVP. When a checkbox below flips in this sec
 
 - [x] `/leads/[id]` page showing contact info, resolved address, satellite thumbnail, notes, and enrichment state.
 - [x] "Create Bid" button that takes the user into the existing bid creation flow.
-- [ ] Manual override on enriched fields in case the auto-resolved address is wrong. *Top of Active Work; load-bearing per Day-0 findings.*
+- [x] Manual override on enriched fields in case the auto-resolved address is wrong. *Shipped via `?edit=property` on the lead detail page; reuses `AddressAutocomplete` so picking a new suggestion captures lat/lng and rebuilds the satellite preview.*
 
 **Milestone:** Every imported lead is either enriched with property data and a preliminary bid estimate, or clearly flagged as needing manual review.
 
