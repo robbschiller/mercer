@@ -10,7 +10,7 @@ Session-by-session implementation notes: [`docs/worklog.md`](worklog.md). Contri
 
 ## Product snapshot (today)
 
-The deployed app proves **lead → bid → shareable proposal → accept/decline → pipeline visibility** with Places-based lead enrichment, manual overrides, and dashboard funnel metrics. It does **not** yet ship the AI-native agents described in the PRD (qualification agent, capture/takeoff agent, scope reconciliation, negotiation agent, NL reporting). See **PRD §8 — What’s built today** for the authoritative list.
+The deployed app is **Phase 0**: a proof of the data model and the non-AI surfaces for **lead → bid → shareable proposal → accept/decline → pipeline visibility**, with Places-based lead enrichment, manual overrides, and dashboard funnel metrics. PRD §1 reframes the product as an **AI-native workflow engine with record-keeping** (not a system of record with AI bolted on). **None of the AI-native operations in PRD §5 ship yet**: no qualification agent, no capture/takeoff agent, no scope reconciliation, no negotiation agent, no NL reporting. Phase 1 starts from here. See **PRD §8** for the authoritative shipped list.
 
 ---
 
@@ -20,12 +20,12 @@ These rows connect **near-term repo work** to **PRD sections**. “Next” is su
 
 | PRD area | § | Shipped (high level) | Gap / next |
 |----------|---|----------------------|------------|
-| Lead capture & qualification | 5.1 | CSV import, mapping, source tags, Places enrichment, lead list/detail, statuses, manual address override | PRD wants **qualified** pipeline + **ranking/briefs** — today enrichment is Places/satellite, not full qualification agent (`qualification_score`, briefs). |
-| Capture & takeoff | 5.2 | Manual bid flow: buildings, surfaces, pricing, PDF proposal | PRD **Milestone 1**: capture-first takeoff agent — not started. |
-| Scope reconciliation | 5.3 | — | Not started (structured scope object + agent). |
-| Proposal as live surface | 5.4 | Public `/p/[slug]`, accept/decline, share link, status propagation | **mailto:** shortcut (PRD §5.4); photos/hover/comments/negotiation deferred per PRD. |
-| Project layer | 5.5 | — | Auto **project on accept** + project UI not built (PRD Phase 1 project slice). |
-| Pipeline & reporting | 5.6 | Dashboard funnel, drill-downs, proposal-based $ | NL query surface deferred; **qualified** stage naming vs app’s lead statuses — reconcile when qualification ships. |
+| Lead capture & qualification | 5.1 | CSV import, mapping, source tags, Places enrichment, lead list/detail, statuses, manual address override | PRD wants a **qualification agent**: portfolio resolution, public-data pull, paint-timing score, generated brief, confidence-scored ranking (`qualification_score`, `qualification_brief`, `agent_run_id`). Today’s enrichment is Places/satellite only. |
+| Capture & takeoff | 5.2 | Manual bid flow: buildings, surfaces, pricing, PDF proposal | PRD **Milestone 1**: mobile capture + vision-based takeoff agent with confidence-scored draft, form as edit surface, graceful fallback to manual. Not started. |
+| Scope reconciliation | 5.3 | — | PRD **Milestone 2**: structured scope object with `source_type`/`source_ref`, spec-PDF parsing, customer-request ingestion, `scope_flag` UI, reconciliation agent. Not started. |
+| Proposal as live surface | 5.4 | Public `/p/[slug]`, accept/decline, share link, status propagation | Near term: **`mailto:`** shortcut. PRD **Milestone 4**: hover-to-source, structured comments, scope-change requests handled by a **negotiation agent**, property-manager-facing status page post-acceptance. Property Manager (PRD §3) is the load-bearing customer-of-the-customer. |
+| Project layer | 5.5 | — | Phase 1 narrow slice per PRD §5.5: auto-create project on accept, status / dates / sub / notes, proposal URL becomes project status page. Not started. Ops-layer agents (expense reconciliation, change orders, punch-lists, paint guides) are Milestone 5. |
+| Pipeline & reporting | 5.6 | Dashboard funnel, drill-downs, proposal-based $ | NL query surface deferred. **Qualified** stage naming vs app’s lead statuses: reconcile when qualification agent ships. |
 
 ---
 
@@ -35,10 +35,14 @@ Capability milestones from the PRD — **not calendar sprints**. Update this tab
 
 | Milestone | PRD §9 | Focus | Status |
 |-----------|--------|-------|--------|
-| M1 Capture-first bidding | §9 | Mobile capture, vision takeoff draft, evals | Not started |
-| M2 Scope reconciliation | §9 | Structured scope + gap agent | Not started |
-| M3 Lead qualification agent | §9 | Ranked pipeline + briefs | Not started |
-| M4 Proposal live surface (full) | §9 | Comments, scope-change negotiation | Partially (basic public proposal + accept/decline shipped) |
+| M1 Capture-first bidding | §9 | Mobile capture, vision takeoff draft, ground-truth evals, fallback to manual | Not started. Gates everything downstream per PRD. |
+| M2 Scope reconciliation | §9 | Structured scope object, spec/capture/request ingestion, gap agent | Not started |
+| M3 Lead qualification agent | §9 | Portfolio resolution, paint-timing score, briefs, ranked pipeline | Not started |
+| M4 Proposal live surface (full) | §9 | Hover-to-source, comments, scope-change negotiation agent, post-accept status page | Partially (basic public proposal + accept/decline shipped) |
+| M5 AI-native ops, first slice | §9 | Candidate: **expense reconciliation agent** (Sherwin-Williams invoices → takeoff buckets → grounded overrun answers for Jordan) | Not started; exit criteria defined during the milestone, gated on M1–M4 |
+| M6 Voice-first contractor interface | §9 | Benny’s capstone: voice-driven quote flow that collapses the upstream agents | Not committed in shape until M1–M5 land |
+
+**Out of scope indefinitely (PRD §9):** accounting/tax/payroll, new construction, residential service dispatch, roofing-specific workflows, configurability outside commercial multifamily exterior.
 
 ---
 
@@ -63,11 +67,26 @@ Update this section in the same PR when status changes ([`AGENTS.md`](../AGENTS.
 - **Photos in proposals (Rob’s ask)** — multi-day; post-demo / PRD deferred bucket.
 - **XLSX import** — cancelled; CSV-only.
 
-### Decisions needed
+### Decisions needed (near-term / demo)
 
-- [ ] **Production server-side Places API key** for `enrichLead` (vs dev referrer-restricted key).
+- [ ] **Production server-side Places API key** for `enrichLead` (vs dev referrer-restricted key). PRD §10 Q9.
 - [ ] **Real trade-show CSV from Jordan** vs [`scripts/fixtures/trade-show-sample.csv`](../scripts/fixtures/trade-show-sample.csv).
-- [ ] **Supabase email confirmation** — on vs off vs pre-seeded demo account for frictionless demos.
+- [ ] **Supabase email confirmation** — on vs off vs pre-seeded demo account for frictionless demos. PRD §10 Q10.
+
+### Decisions blocking Milestone 1 / Phase 1 (PRD §10)
+
+Tracked here so the plan is honest about what must resolve before the AI-native milestones start. These are **not** demo blockers, but they gate real execution.
+
+- [ ] **Vision model selection** (PRD §10 Q1): pick Claude / GPT-4o / Gemini via evals against Rob’s ground-truth set. Gates M1.
+- [ ] **Evals platform** (PRD §10 Q4): custom vs. Braintrust vs. LangSmith. Ground-truth dataset is the hard part.
+- [ ] **Ground-truth dataset scale** (PRD §10 Q8): ~30 complete bids with captures, takeoffs, final numbers. Rob has bids, not captures: a dedicated capture pass on existing properties may be required before M1 formally starts.
+- [ ] **Building-footprint provider** (PRD §10 Q6): Microsoft GlobalMLBuildingFootprints, ATTOM, EagleView low tier, or defer entirely and rely on capture-derived dimensions. Related to the paused Phase B1.
+- [ ] **Business model** (PRD §10 Q11): Reno Base internal tool vs first customer of a new business. Changes multi-tenancy, billing, onboarding. Needed before M5.
+- [ ] **Unit economics target** (PRD §10 Q12): compute cost per bid vs subscription tier. Sensitivity analysis with real M1 numbers.
+- [ ] **Co-founder split** (PRD §10 Q13): working agreement with brother on decision-making, code review, release cadence, agent/eval stack ownership. In writing before M2.
+- [ ] **Agent framework vs direct calls** (PRD §10 Q3): start direct; revisit at M2 scope-reconciliation complexity.
+- [ ] **Confidence-score calibration** (PRD §10 Q5): thresholds → UI states (show / flag / suppress). Needs real M1 data to tune.
+- [ ] **Where contractors edit agent output: inline vs dedicated review view** (PRD §10 Q16). Biggest UX decision in M1; gate on prototyping.
 
 ### Pre-work checklist
 
@@ -137,11 +156,12 @@ The following tracked the original **lead-to-close POC** build. Items are **hist
 
 ## Risks & demo notes (short)
 
-- **Enrichment**: Places-only path validated; OSM paused — demo story is “resolved address + satellite,” not footprint-accurate sqft estimates.
-- **Data quality**: sparse CSVs still need manual address override on lead detail — keep that visible in demo.
-- **Scope creep**: park non-PRD asks in backlog; PRD §5–§9 defines the north star.
+- **Enrichment**: Places-only path validated; OSM paused, so demo story is “resolved address + satellite,” not footprint-accurate sqft estimates.
+- **Data quality**: sparse CSVs still need manual address override on lead detail, keep that visible in demo.
+- **Scope creep**: park non-PRD asks in backlog. PRD §5 (product scope), §9 (roadmap), and §12 (build principles) define the north star; §9 "Out of scope indefinitely" is the explicit no-list.
+- **Architectural-stance risk**: the PRD is explicit that bolting AI onto a system of record is the wrong product. As Phase 1 work lands, check each feature against PRD §1 and §12: if it looks like human data entry is the origination point, it is probably the wrong shape.
 
-For longer narrative (competitive landscape, Jordan walkthrough context, post-demo decisions), see **PRD §4–§7** and **§10** if present.
+For longer narrative (personas incl. the Property Manager customer-of-the-customer, competitive landscape, AI architecture principles, open questions), see **PRD §3, §4, §6, §10**.
 
 ---
 
