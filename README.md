@@ -1,69 +1,145 @@
 # Mercer
 
-Bid multifamily exteriors from the parking lot.
+The AI-native sales platform for commercial multifamily exterior renovation.
 
-Mercer is a web app for exterior renovation contractors bidding multifamily properties. Instead of measuring with a tape and re-entering everything into a spreadsheet at home, Mercer lets you create bids on-site — log measurements per building type, calculate materials and labor, and generate a proposal PDF before you leave the property.
+Mercer takes a contractor from a trade-show attendee list to a signed deal to a closed-out project on one spine: ingest leads, enrich them, build a bid, send a live proposal the customer can sign on the web, and track the resulting project through punch-out — with a public status page the property manager can keep open.
 
-## Current State
+The deployed product today (Phase 0) is the non-AI substrate of that workflow: lead pipeline, manual bid build, public proposal with accept/decline, project tracking. Phase 1 adds the AI-native operations on top of this same data model. See [`docs/prd.md`](docs/prd.md) for the full product vision and [`docs/plan.md`](docs/plan.md) for what is shipped, in flight, and paused.
 
-Mercer is a working MVP with the full bid-to-proposal workflow complete:
+## Surfaces
 
-- **Auth** — Sign up and sign in with email (via Supabase)
-- **Bids** — Create, list, view, edit, and delete bids with property name, address, client, notes, and status tracking (draft / sent / won / lost). Bid list cards show building count, total sqft, grand total, and last proposal date.
-- **New bid flow** — Start with the property address only. After choosing a Places result (when configured), a satellite snapshot and suggested property name help confirm the site; then enter client, notes, and submit.
-- **Address autocomplete** — On new bid and bid edit, property address uses Google Places when `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is set (formatted address + optional lat/lng, place ID, and display name for suggestions). Without a key, the field falls back to a normal text input.
-- **Satellite preview** — When `GOOGLE_MAPS_STATIC_API_KEY` is set (server-only) and the bid has coordinates, a Maps Static API satellite image is shown on the new-bid confirmation step and on the bid summary card (proxied via `/api/maps/satellite` so the key stays off the client).
-- **Buildings** — Add building types to a bid with labels and counts (e.g. "Six unit 3-story x 25"). Expand/collapse to manage surfaces.
-- **Surfaces** — Add paintable surfaces per building with dimension factor input (e.g. "90 x 33" = 2,970 sqft). Surface presets for common names (Front, Back, Posts, Porch Ceilings, etc.). Running sqft totals per building and across the bid.
-- **Pricing engine** — Enter coverage (sqft/gal), price per gallon, labor rate ($/sqft), and margin (%). Live calculation shows gallons needed, material cost, labor cost, and grand total as you type.
-- **Custom line items** — Add per-bid costs like pressure washing, dumpster rental, or scaffolding.
-- **Company defaults** — Pricing inputs save back to user defaults automatically. New bids inherit the latest defaults. Optional settings page for direct adjustment.
-- **Proposal PDF** — Generate a client-facing PDF with property info, per-building sqft breakdown, scope, and total price. Each proposal is stored with a frozen snapshot so edits to the bid don't change what was sent. Download previous proposals from the bid detail page. Status auto-updates to "Sent" on first generation.
-- **Collapsible cards** — Bid detail sections (info, buildings, pricing, proposals) collapse to read-only summaries and expand inline for editing. All sections can be open simultaneously.
-- **Error handling** — Loading skeletons, error boundaries, and not-found pages throughout.
-- **Analytics** — Vercel Web Analytics
+| Route group | Purpose | Notable pages |
+| ----------- | ------- | ------------- |
+| `(marketing)` | Public landing page; redirects to `/dashboard` if signed in | `/` |
+| `(auth)` | Branded sign-in / sign-up shell that mirrors the marketing surface, with the Mercer wordmark linking back to `/` | `/login`, `/signup` |
+| `(app)` | Authenticated app behind a sidebar shell | `/dashboard`, `/leads`, `/leads/[id]`, `/leads/import`, `/leads/new`, `/bids`, `/bids/[id]`, `/bids/new`, `/projects`, `/projects/[id]`, `/settings` |
+| Public sharing | No-auth proposal/status page | `/p/[slug]` (proposal pre-acceptance, project status page post-acceptance) |
+| Auth callback | Supabase OAuth redirect handler | `/auth/callback` |
+| Image proxy | Server-side Maps Static fetch (key never reaches the browser) | `/api/maps/satellite` |
 
-## What's Next
+## Current capabilities
 
-**Property Intelligence** — The headline feature for the next phase:
+### Leads
+- CSV import with auto-mapping, source tags, and a clean sample fixture for demos.
+- Lead list with card and table views, filters by status and source.
+- Lead enrichment via Google Places (resolves the contractor's office address, lat/lng, and Place ID; satellite imagery is *not* generated at the lead layer — that belongs to the bid).
+- Lead detail with manual override, status workflow (`new` / `quoted` / `won` / `lost`), and a one-click "Create bid from lead" handoff.
 
-- Satellite preview and proposal PDF property image when Static API is configured; **OpenStreetMap building footprints** on bid detail (Overpass API, optional `OVERPASS_API_URL`)
-- Automated building detection using OpenStreetMap footprint data and AI vision analysis (GPT-4o / Gemini) to suggest building count, types, and similarity grouping
-- Pre-populated building list that the contractor reviews and accepts — reducing manual setup time significantly
+### Bids
+- Wizard-style new-bid flow: address → confirm with optional satellite snapshot → details.
+- Buildings + surfaces with factor-group dimension entry, presets for common surface names, and live sqft rollups per building and per bid.
+- Pricing engine: coverage (sqft/gal), price per gallon, labor rate ($/sqft), and margin (%) compute gallons, material, labor, and grand total live as you type.
+- Per-bid line items (pressure washing, dumpster rental, scaffolding, etc.).
+- Company defaults: pricing inputs auto-save to user defaults; new bids inherit the latest defaults.
+- OpenStreetMap building footprints (Overpass) shown on bid detail when coordinates exist.
+- Proposal PDFs generated with `@react-pdf/renderer`, stored as frozen snapshots in Supabase Storage so subsequent bid edits don't change what was sent.
 
-**Workflow Efficiency** — Duplicate buildings, clone bids, surface set templates, and proposal sharing via email or link.
+### Public proposal + project status page
+- Each proposal generates a shareable `/p/[slug]` URL with no login required.
+- Pre-acceptance: full proposal view with explicit accept / decline actions that propagate status back through the bid and lead atomically.
+- Post-acceptance: the same URL pivots to a **project status page** (status badge, schedule, on-site assignment, public updates only, original-proposal summary) so the property manager can keep one bookmark across the lifecycle.
 
-**Polish** — Mobile responsiveness audit, confirm-before-delete dialogs, numeric validation, and onboarding hints.
+### Project layer
+- `projects` row created **atomically** on bid acceptance (not a separate manual step) and surfaced as a "Project created" badge on the bid page.
+- `/projects` list view with status filters and per-status counts.
+- `/projects/[id]` detail page with a state-machine UI (`not_started` → `in_progress` → `punch_out` → `complete`, plus `on_hold` and an explicit reopen from `complete` that clears the actual end date).
+- `actual_start_date` and `actual_end_date` auto-stamp on first transition into `in_progress` / `complete`.
+- Editable target dates, assigned subcontractor, crew lead, and notes.
+- Append-only `project_updates` feed with a per-entry `visible_on_public_url` opt-in (internal-by-default).
 
-See `docs/` for the full [plan](docs/plan.md) and [EagleView integration plan](docs/eagleview-integration-plan.md).
+### Dashboard
+- Funnel and source filters drilling down into `/leads?status=…&source=…`.
+- Open vs won pipeline dollars derived from latest proposal totals per bid.
+- Project rollup card (active, overdue, per-status counts) linking into `/projects?status=…`.
 
-## Tech Stack
+### Brand and theming
+- Marketing landing page on a custom ink + amber + blueprint palette with a Fraunces editorial display headline.
+- Theme-aware `(auth)` shell (parchment in light mode, ink in dark mode) sharing the marketing texture and wordmark.
+- Light brand accents in the app: Fraunces page titles and an `amber` button variant on the most-primary CTA per surface; the rest of the app stays neutral so dense data flows stay legible.
 
-| Layer     | Technology                          |
-| --------- | ----------------------------------- |
-| Framework | Next.js 15 (App Router)             |
-| UI        | React 19, Tailwind CSS 4, Radix UI  |
-| Database  | PostgreSQL via Supabase              |
-| ORM       | Drizzle ORM                          |
-| Auth      | Supabase Auth                        |
-| Validation| Zod                                  |
-| PDF       | @react-pdf/renderer                  |
-| Storage   | Supabase Storage                     |
-| Analytics | Vercel Web Analytics                 |
-| Maps / OSM | Google Maps (Places + Static, optional); OpenStreetMap via Overpass (no key; optional custom `OVERPASS_API_URL`) |
-| Language  | TypeScript                           |
-| Hosting   | Vercel                               |
+For status of every roadmap item (shipped, in flight, paused, decisions blocking the AI-native milestones), see [`docs/plan.md`](docs/plan.md). For the underlying product vision, personas, and the case for AI-native vs system-of-record, see [`docs/prd.md`](docs/prd.md).
 
-## Getting Started
+## Tech stack
+
+| Layer | Technology |
+| ----- | ---------- |
+| Framework | Next.js 16 (App Router, RSC, server actions) |
+| UI | React 19, Tailwind CSS 4, shadcn-style primitives over Radix UI |
+| Fonts | Geist (sans), JetBrains Mono, Fraunces (variable display) via `next/font` |
+| Database | PostgreSQL via Supabase |
+| ORM | Drizzle ORM (`drizzle-orm`, `drizzle-kit`, `postgres` driver) |
+| Auth | Supabase Auth |
+| Validation | Zod |
+| PDF | `@react-pdf/renderer` |
+| Storage | Supabase Storage |
+| Geospatial | `@turf/area`, `@turf/helpers`; OpenStreetMap via Overpass |
+| Maps | Google Maps Platform: Places API (New) for autocomplete, Maps Static API for satellite (server-side, proxied) |
+| Theming | `next-themes` |
+| Analytics | Vercel Web Analytics |
+| Language | TypeScript |
+| Hosting | Vercel |
+
+## Repository layout
+
+```
+src/
+├── app/
+│   ├── (marketing)/             # Public landing page + marketing layout
+│   ├── (auth)/                  # /login, /signup with branded shell + wordmark home link
+│   ├── (app)/                   # Authenticated app behind sidebar
+│   │   ├── dashboard/
+│   │   ├── leads/               # list, [id], import, new
+│   │   ├── bids/                # list, [id], new (wizard)
+│   │   ├── projects/            # list, [id]
+│   │   └── settings/
+│   ├── p/[slug]/                # Public proposal → project status page
+│   ├── api/maps/satellite/      # Server-side Maps Static proxy
+│   ├── auth/callback/           # Supabase OAuth redirect
+│   ├── globals.css              # Tailwind + brand tokens (ink/parchment/amber/blueprint)
+│   └── layout.tsx               # Root: ThemeProvider, Geist + JetBrains Mono + Fraunces
+├── components/
+│   ├── ui/                      # Reusable primitives (button with amber variant, card, input, sidebar, …)
+│   ├── app-sidebar*.tsx         # Authenticated sidebar nav
+│   ├── new-bid-wizard.tsx       # Address → confirm → details flow
+│   ├── bid-*.tsx, building-*.tsx, surface-*.tsx, pricing-*.tsx, line-item-*.tsx
+│   ├── proposal-list.tsx        # Generate + share + history
+│   ├── public-proposal-response.tsx # Accept/decline form on /p/[slug]
+│   ├── osm-footprints-section.tsx
+│   ├── satellite-preview.tsx    # Reads from /api/maps/satellite
+│   ├── theme-provider.tsx, theme-toggle.tsx
+│   └── page-loading.tsx         # Per-surface skeletons
+├── db/
+│   ├── schema.ts                # Drizzle tables: leads, bids, buildings, surfaces, line_items, user_defaults, proposals, proposal_shares, projects, project_updates
+│   └── index.ts
+├── lib/
+│   ├── actions.ts               # Server actions (auth, lead/bid/project CRUD, share + accept/decline, proposal generation)
+│   ├── store.ts                 # Data access layer + state-machine helpers (allowedProjectStatusTransitions, etc.)
+│   ├── validations.ts           # Zod schemas for every form
+│   ├── status-meta.ts           # LEAD_STATUSES / BID_STATUSES / PROJECT_STATUSES + label/variant helpers
+│   ├── pricing.ts               # Pricing calculation engine
+│   ├── dimensions.ts            # Sqft from factor groups
+│   ├── pdf/                     # React-PDF proposal template + render wrapper + ProposalSnapshot type
+│   ├── leads/                   # CSV parsing + enrichment helpers
+│   ├── osm/                     # Overpass queries + cached footprint fetch
+│   └── supabase/                # Client/server helpers + auth cache
+├── proxy.ts                     # Next.js proxy (replaces middleware.ts)
+drizzle/
+└── manual/                      # Hand-written additive SQL migrations (001 → 009)
+docs/
+├── prd.md                       # Product requirements: vision, personas, scope, milestones, AI principles
+├── plan.md                      # Live execution tracker (shipped / open / paused / decisions)
+├── worklog.md                   # Session-by-session implementation notes (newest at top)
+└── build-plans/                 # Archived per-feature plans
+AGENTS.md                        # Contributor + AI-agent operating guide
+```
+
+## Getting started
 
 ### Prerequisites
-
-- [Node.js](https://nodejs.org/) (v18+)
-- [Bun](https://bun.sh/) (package manager)
-- A [Supabase](https://supabase.com/) project (provides PostgreSQL, auth, and storage)
+- [Bun](https://bun.sh/) (package manager + script runner)
+- A [Supabase](https://supabase.com/) project (PostgreSQL, auth, and storage)
 
 ### 1. Clone and install
-
 ```sh
 git clone https://github.com/robbschiller/mercer.git
 cd mercer
@@ -71,130 +147,75 @@ bun install
 ```
 
 ### 2. Configure environment variables
-
 Copy the example env file and fill in your Supabase credentials:
-
 ```sh
 cp .env.local.example .env.local
 ```
 
-You'll need three values from your Supabase project dashboard:
-
-| Variable                         | Where to find it                          |
-| -------------------------------- | ----------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`       | Project Settings → API → Project URL      |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | Project Settings → API → anon public key  |
-| `DATABASE_URL`                   | Project Settings → Database → Connection string (use the pooler / Transaction mode URI on port 6543) |
-
-Optional, for address autocomplete:
+Required:
 
 | Variable | Where to find it |
 | -------- | ---------------- |
-| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials → Create API key → restrict to **HTTP referrers** (e.g. `http://localhost:3000/*`, your production origin). Enable **Maps JavaScript API** and **Places API (New)** (address autocomplete uses the new Places Data API, not the legacy Places widget). Billing must be enabled on the project. After changing `.env.local`, restart `bun run dev`. |
-| `GOOGLE_MAPS_STATIC_API_KEY` | **Server-only** key for [Maps Static API](https://developers.google.com/maps/documentation/maps-static/overview) (satellite thumbnails). Create a separate key, enable **Maps Static API**, and restrict it appropriately (e.g. IP for your hosting provider, or API restriction to Static API only). Used by `/api/maps/satellite`; never exposed to the browser. Optional — without it, satellite previews are skipped with a short message. |
-| `OVERPASS_API_URL` | Optional. Base URL for the [Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API) interpreter (default: `https://overpass-api.de/api/interpreter`). Used server-side for building footprint lookup on bid detail. Public instances are rate-limited; use your own for heavy use. |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → API → Project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API → anon public key |
+| `DATABASE_URL` | Supabase → Project Settings → Database → Connection string (pooler / Transaction mode, port `6543`) |
 
-### 3. Push the database schema
+Optional:
 
-```sh
-bun run db:push
-```
+| Variable | Purpose |
+| -------- | ------- |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Browser-side Places autocomplete on bid address fields. Restrict to **HTTP referrers** in the Google Cloud Console; enable **Maps JavaScript API** and **Places API (New)**. Without it, the address field falls back to a plain text input. |
+| `GOOGLE_MAPS_STATIC_API_KEY` | **Server-only** key for [Maps Static API](https://developers.google.com/maps/documentation/maps-static/overview) (satellite thumbnails on bid detail and the new-bid confirm step). Used through `/api/maps/satellite`; never exposed to the client. Without it, satellite previews are skipped. |
+| `NEXT_PUBLIC_APP_URL` | Public origin (no trailing slash). Used when generating proposals so the PDF can fetch the satellite image server-side. On Vercel, `VERCEL_URL` is used if unset; set this for a stable canonical URL (e.g. a custom domain). |
+| `OVERPASS_API_URL` | Overpass interpreter base URL (default `https://overpass-api.de/api/interpreter`). Use a self-hosted Overpass for heavy traffic. |
 
-This uses Drizzle Kit to create the tables (`bids`, `buildings`, `surfaces`, `line_items`, `user_defaults`, `proposals`) in your Supabase Postgres instance. The `bids` table includes optional `latitude`, `longitude`, and `google_place_id` for Places-backed addresses.
-
-`drizzle.config.ts` loads `.env` then `.env.local` so `DATABASE_URL` is available (Drizzle does not use Next.js env loading). If push fails with a missing URL error, confirm `DATABASE_URL` exists in `.env.local`.
-
-**If `db:push` crashes** with `TypeError: Cannot read properties of undefined (reading 'replace')`, that is a [known drizzle-kit + Supabase introspection bug](https://github.com/drizzle-team/drizzle-orm/issues/3766). Use:
-
+### 3. Apply the database schema
+We rely on hand-written additive SQL migrations in [`drizzle/manual/`](drizzle/manual/) (one per change, never edited after merge). Apply them all in order:
 ```sh
 bun run db:apply-manual
 ```
 
-That runs every `drizzle/manual/*.sql` file in order (see [drizzle/manual/README.md](drizzle/manual/README.md)). You can also paste SQL into the Supabase SQL editor, e.g.:
+This creates `leads`, `bids`, `buildings`, `surfaces`, `line_items`, `user_defaults`, `proposals`, `proposal_shares`, `projects`, and `project_updates`, along with the supporting indexes.
 
-```sql
-ALTER TABLE bids ADD COLUMN IF NOT EXISTS latitude double precision;
-ALTER TABLE bids ADD COLUMN IF NOT EXISTS longitude double precision;
-ALTER TABLE bids ADD COLUMN IF NOT EXISTS google_place_id text;
-```
+`drizzle-kit push` is also available (`bun run db:push`) but **prefer the manual migrations** — push is known to crash against Supabase introspection on some schemas, and we use additive SQL as the source of truth per [`AGENTS.md`](AGENTS.md) → "Database Change Rules."
 
 ### 4. Set up Supabase Storage
-
 In your Supabase dashboard:
-
-1. Go to **Storage** and create a bucket named `proposals` (toggle **Public bucket** on)
-2. Add an **INSERT** policy for `authenticated` users with check: `bucket_id = 'proposals'`
-3. Add a **SELECT** policy for `anon, authenticated` with using: `bucket_id = 'proposals'`
+1. **Storage** → create a bucket named `proposals` (toggle **Public bucket** on).
+2. Add an **INSERT** policy for `authenticated` users with `bucket_id = 'proposals'`.
+3. Add a **SELECT** policy for `anon, authenticated` with `bucket_id = 'proposals'`.
 
 ### 5. Run the dev server
-
 ```sh
 bun run dev
 ```
-
 Open [http://localhost:3000](http://localhost:3000).
 
 ## Scripts
 
-| Script       | Command               | Purpose                              |
-| ------------ | --------------------- | ------------------------------------ |
-| `dev`        | `next dev`            | Start the development server         |
-| `build`      | `next build`          | Create a production build            |
-| `start`      | `next start`          | Run the production server            |
-| `lint`       | `next lint`           | Run ESLint                           |
-| `db:push`         | `drizzle-kit push`                    | Push schema changes to the database  |
-| `db:apply-manual` | `bun run scripts/apply-manual-migrations.ts` | Apply `drizzle/manual/*.sql` when `db:push` fails |
-| `db:studio`       | `drizzle-kit studio`                  | Open Drizzle Studio for DB inspection|
+| Script | Command | Purpose |
+| ------ | ------- | ------- |
+| `dev` | `next dev` | Development server |
+| `build` | `next build` | Production build |
+| `start` | `next start` | Production server |
+| `lint` | `eslint . --ext .js,.jsx,.ts,.tsx` | ESLint |
+| `db:push` | `drizzle-kit push` | Push Drizzle schema to the database (prefer manual migrations) |
+| `db:apply-manual` | `bun run scripts/apply-manual-migrations.ts` | Run every `drizzle/manual/*.sql` in order |
+| `db:studio` | `drizzle-kit studio` | Open Drizzle Studio for DB inspection |
 
-## Project Structure
+## Definition of done
 
-```
-src/
-├── app/                         # Next.js App Router pages
-│   ├── auth/callback/           # OAuth redirect handler
-│   ├── api/maps/satellite/      # Proxied Maps Static API (satellite) images
-│   ├── bids/                    # Bid list, create, and detail pages
-│   │   ├── [id]/                # Bid detail with buildings, surfaces, pricing, proposals
-│   │   └── new/                 # New bid wizard (address → confirm → details)
-│   ├── login/                   # Login page
-│   ├── settings/                # Company pricing defaults
-│   └── signup/                  # Signup page
-├── components/
-│   ├── ui/                      # Reusable primitives (button, card, input, etc.)
-│   ├── address-autocomplete.tsx # Google Places address field (optional API key)
-│   ├── new-bid-wizard.tsx      # Staged create flow with satellite confirmation
-│   ├── satellite-preview.tsx   # Satellite image via /api/maps/satellite
-│   ├── osm-footprints-section.tsx # OSM building outlines (Overpass) on bid detail
-│   ├── bid-detail-sections.tsx  # Collapsible buildings/pricing/proposals sections
-│   ├── bid-summary.tsx          # Collapsible bid info with dirty tracking
-│   ├── building-list.tsx        # Buildings list with add form
-│   ├── building-card.tsx        # Expandable building with surfaces
-│   ├── pricing-section.tsx      # Pricing form + line items
-│   ├── pricing-form.tsx         # Rate inputs with live calculation
-│   ├── line-item-list.tsx       # Custom line items CRUD
-│   ├── proposal-list.tsx        # Proposal generation + history
-│   ├── dimension-input.tsx      # Factor-group dimension entry
-│   ├── surface-presets.tsx      # Common surface name dropdown
-│   ├── defaults-form.tsx        # Settings page defaults form
-│   └── ...                      # Add/edit forms, submit button, nav
-├── db/
-│   ├── schema.ts                # Drizzle table definitions
-│   └── index.ts                 # Database client (singleton)
-└── lib/
-    ├── osm/
-    │   └── overpass.ts          # OpenStreetMap Overpass queries + cached footprint fetch
-    ├── actions.ts               # Server actions (auth, CRUD, pricing, proposals)
-    ├── store.ts                 # Data access layer
-    ├── validations.ts           # Zod schemas for all inputs
-    ├── pricing.ts               # Pricing calculation engine
-    ├── dimensions.ts            # Sqft computation from dimension groups
-    ├── pdf/                     # PDF generation
-    │   ├── proposal-template.tsx # React-PDF document layout
-    │   ├── generate.tsx         # renderToBuffer wrapper
-    │   └── types.ts             # ProposalSnapshot type
-    └── supabase/                # Supabase client helpers and middleware
-docs/
-├── plan.md                      # Market analysis, roadmap, tech stack, and data model
-├── eagleview-integration-plan.md # EagleView API integration plan (Phase 3)
-└── build-plans/                 # Detailed feature build plans
-```
+Per [`AGENTS.md`](AGENTS.md), a change is not done until:
+- `bunx tsc --noEmit` passes
+- `bun run lint` passes (warnings only if already known and documented)
+- `bun run build` passes
+- Schema changes ship with a new file in `drizzle/manual/`
+- [`docs/plan.md`](docs/plan.md) is updated when a roadmap status changes
+
+## Further reading
+
+- [`docs/prd.md`](docs/prd.md) — vision, personas, AI architecture principles, full scope, milestones, open questions
+- [`docs/plan.md`](docs/plan.md) — live execution tracker (shipped / open / paused / decisions)
+- [`docs/worklog.md`](docs/worklog.md) — session-by-session implementation notes
+- [`AGENTS.md`](AGENTS.md) — contributor and AI-agent operating guide
+- [`drizzle/manual/README.md`](drizzle/manual/README.md) — manual migration conventions
