@@ -53,12 +53,28 @@ Update this section in the same PR when status changes ([`AGENTS.md`](../AGENTS.
 ### Open now (priority order)
 
 1. [ ] **Phase F — demo polish**
-   - [ ] Onboarding blurb on `/leads/import`
-   - [ ] Empty states and error messages on key views
+   - [x] Onboarding blurb on `/leads/import`
+   - [x] Empty states and error messages on key views
    - [ ] Seed a clean sample import for Jordan’s account
-   - [ ] End-to-end test with a real attendee CSV
+   - [x] End-to-end test with a real attendee CSV (2026-BAAA list in [`docs/2026-BAAA-Trade-Show-Attendee-List.csv`](2026-BAAA-Trade-Show-Attendee-List.csv), imported cleanly)
    - [ ] Record a backup 3-minute demo video
 2. [ ] **Phase A2 — sort leads by estimated bid** — gated on footprint/estimate fields (Phase B1). While B1 is paused, optional: explicit **sort by created date** control if product wants sort without estimates.
+
+### Enrichment rethink (open)
+
+Finding from Jordan's BAAA 2026 CSV (2026-04-19): the import path is solid, but the current enrichment step (Places office-address lookup keyed on `company`) under-delivered. **The `Address / City / State / Zip` columns in the CSV are the attendee's registered office (a management-company office or an onsite leasing office), not a bid-able multifamily property.** We cannot use them to drive footprint/takeoff/satellite for a bid: the physical property Jordan would paint is not in the CSV and has to be captured separately.
+
+What the CSV *is* useful for is **grouping and rolling up attendee data by management office** (`Management Company + City`). Example: multiple Greystar attendees spread across Tampa, Clearwater, Trinity, etc., each representing a different local office or onsite team. One office relationship plausibly unlocks multiple properties.
+
+Directions to evaluate (not yet committed, PRD §10 Q6 related):
+
+- **[shipped]** Roll leads together by management office on `/leads` (filter + group view) so Jordan works one office at a time instead of 1,224 individual rows. Group key is `Management Company + City`, pulled from `lead.rawRow.City` (no schema change).
+- **[shipped]** Role-weighted contact ranking inside each office group (Owner / Regional > Community Manager > Maintenance Supervisor > Assistant / Leasing Manager > Corporate > Leasing / Maintenance Tech > support roles), reading `Role with Company` out of `rawRow`. Top row in each group is tagged "Top contact" when role rank ≤ 3.
+- Portfolio count per `Management Company` (how many properties / how many offices in this CSV), surfaced on the lead detail and on the group header.
+- Separate "property capture" flow that happens *after* a lead is qualified: Jordan picks a specific community managed by this office, then capture + takeoff runs against the actual multifamily address (PRD M1 / M2 territory).
+- Generate a per-office qualification brief (PRD M3), keyed on `management company + office city + contact roles + portfolio size`, not on Places.
+
+Next step before writing more code: pick one or two directions beyond the group view and measure whether they change which offices Jordan would actually follow up on.
 
 ### Paused / deferred by decision
 
@@ -69,7 +85,7 @@ Update this section in the same PR when status changes ([`AGENTS.md`](../AGENTS.
 ### Decisions needed (near-term / demo)
 
 - [ ] **Production server-side Places API key** for `enrichLead` (vs dev referrer-restricted key). PRD §10 Q9.
-- [ ] **Real trade-show CSV from Jordan** vs [`scripts/fixtures/trade-show-sample.csv`](../scripts/fixtures/trade-show-sample.csv).
+- [x] **Real trade-show CSV from Jordan** — received (BAAA 2026 list, 1,224 rows). Import path works; enrichment value was limited because the CSV already carries the property street address and the Places lookup resolved to management-company HQ instead. See *Enrichment rethink* below.
 - [ ] **Supabase email confirmation** — on vs off vs pre-seeded demo account for frictionless demos. PRD §10 Q10.
 
 ### Decisions blocking Milestone 1 / Phase 1 (PRD §10)
