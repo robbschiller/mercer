@@ -4,6 +4,35 @@ Running log of in-flight work on the lead-to-close MVP (docs/plan.md). Chronolog
 
 ---
 
+## 2026-04-19 — Strip satellite from leads + tighten the basic flow
+
+**Goal:** Re-scope the lead surface so "lead address" is conceptually the company's office, not the property to paint. Satellite imagery and property-address capture belong to the bid stage; the lead layer should be rock-solid in its most basic form (contact info, office address from Places, status, fast path to "Create bid from lead").
+
+### Shipped
+
+- **Lead enrichment runner ([src/lib/leads/enrichment-runner.ts](../src/lib/leads/enrichment-runner.ts))** — `runEnrichmentForLead` no longer writes `satelliteImageUrl`; it only persists `resolvedAddress / latitude / longitude / googlePlaceId` on success. Dropped the `buildSatelliteProxyPath` import.
+- **Override stack removed** — deleted `overrideLeadProperty` from [src/lib/store.ts](../src/lib/store.ts), `overrideLeadPropertyAction` from [src/lib/actions.ts](../src/lib/actions.ts), `overrideLeadPropertySchema` from [src/lib/validations.ts](../src/lib/validations.ts), and the entire `src/components/lead-property-override-form.tsx` component. The override was a property-being-painted UX bolted onto the lead; that concern belongs to the bid. If Places resolves the wrong office, today's recovery is `Re-run enrichment`.
+- **Lead detail trimmed ([src/app/(app)/leads/[id]/page.tsx](<../src/app/(app)/leads/[id]/page.tsx>))** — dropped the `SatellitePreview` card, the `LeadPropertyOverrideForm` branch, the `?edit=property` / `?error` search-param plumbing, and the `AddressAutocomplete` dependency. Renamed the `Property` card to **Office address** with copy that says so explicitly: "Resolved from the company name via Google Places. The property to bid on is captured when you create a bid." Kept `Re-run enrichment` as the sole recovery affordance.
+- **Copy updates** — post-import success banner on `/leads` now reads "Office addresses appear on each card where Google Places resolved the company"; `/leads/import` card description and "What happens next" bullets reframed around office-address resolution instead of property + satellite preview.
+
+### Kept intentionally
+
+- **DB columns** — `leads.satellite_image_url`, `leads.latitude`, `leads.longitude`, `leads.google_place_id`, `leads.resolved_address`, `leads.enrichment_status`, `leads.enrichment_error` all remain. No migration. Historical rows keep their satellite URLs; new rows just leave `satellite_image_url` NULL. We'll rethink lead-side Places enrichment later without being blocked by an irreversible schema change.
+- **Bid stack untouched** — `SatellitePreview`, `new-bid-wizard`, `bid-summary`, `satellite-pdf.ts`, `/api/maps/satellite`, and `bids.satellite_image_url` continue to work exactly as before.
+- **Places resolution logic** — `resolveLeadViaPlaces` in `src/lib/enrichment/enrich-lead.ts` is unchanged; the OSM/footprint code there is dead-but-cached for a future revisit.
+
+### Verification
+
+- `bunx tsc --noEmit` — clean.
+- `bun run lint` — only the pre-existing warnings; nothing new.
+- `bun run build` — green; route table unchanged.
+
+### Next
+
+Back to Phase F demo polish per `docs/plan.md` → Open now. Lead onboarding / empty states / seeded sample import.
+
+---
+
 ## 2026-04-19 — Perf & DX hardening pass
 
 **Goal:** Work through the audit list of refactor / perf items the platform had accumulated. Bias was toward small-to-medium changes that compound (caching correctness, fewer correlated subqueries, leaner client bundle, single source of truth for status enums) over file-splitting refactors that need their own scoping.

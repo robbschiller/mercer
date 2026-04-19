@@ -12,7 +12,6 @@
 
 import { resolveLeadViaPlaces } from "@/lib/enrichment/enrich-lead";
 import { updateLeadEnrichment, type Lead } from "@/lib/store";
-import { buildSatelliteProxyPath } from "@/lib/maps/satellite-path";
 
 export async function runEnrichmentForLead(lead: Lead): Promise<void> {
   const company = lead.company ?? "";
@@ -58,10 +57,6 @@ export async function runEnrichmentForLead(lead: Lead): Promise<void> {
       latitude: place.latitude,
       longitude: place.longitude,
       googlePlaceId: place.placeId,
-      satelliteImageUrl: buildSatelliteProxyPath(
-        place.latitude,
-        place.longitude
-      ),
       enrichmentError: null,
     });
   } catch (e) {

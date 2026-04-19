@@ -83,8 +83,9 @@ export default async function LeadsPage({
 
       {imported && (
         <div className="mb-4 rounded-md border border-emerald-600/30 bg-emerald-600/5 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-400">
-          Imported {imported} lead{imported === "1" ? "" : "s"}. Enrichment is
-          complete — resolved addresses appear on each card below.
+          Imported {imported} lead{imported === "1" ? "" : "s"}. Office
+          addresses appear on each card where Google Places resolved the
+          company.
         </div>
       )}
 
