@@ -20,14 +20,8 @@ import { SubmitButton } from "@/components/submit-button";
 import { SatellitePreview } from "@/components/satellite-preview";
 import { StatusSelect } from "@/components/status-select";
 import { buildGoogleMapsUrl } from "@/lib/maps/google-maps-url";
+import { bidStatusLabel } from "@/lib/status-meta";
 import type { Bid } from "@/lib/store";
-
-const statusLabels: Record<string, string> = {
-  draft: "Draft",
-  sent: "Sent",
-  won: "Won",
-  lost: "Lost",
-};
 
 function toNum(v: unknown): number | null {
   if (v == null) return null;
@@ -273,7 +267,7 @@ export function BidSummary({ bid }: { bid: Bid }) {
               <div className="flex items-center gap-2">
                 <CardTitle className="text-base">{bid.propertyName}</CardTitle>
                 <Badge variant="secondary" className="shrink-0">
-                  {statusLabels[bid.status] ?? bid.status}
+                  {bidStatusLabel(bid.status)}
                 </Badge>
               </div>
               <CardDescription>

@@ -14,27 +14,11 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { SubmitButton } from "@/components/submit-button";
-
-const statusLabels: Record<string, string> = {
-  new: "New",
-  quoted: "Quoted",
-  won: "Won",
-  lost: "Lost",
-};
-
-const statusVariant: Record<string, "default" | "secondary" | "outline"> = {
-  new: "secondary",
-  quoted: "outline",
-  won: "default",
-  lost: "secondary",
-};
-
-const enrichmentLabels: Record<string, string> = {
-  pending: "Enriching…",
-  success: "Enriched",
-  failed: "Enrichment failed",
-  skipped: "Skipped",
-};
+import {
+  enrichmentLabel,
+  leadStatusLabel,
+  leadStatusVariant,
+} from "@/lib/status-meta";
 
 export default async function LeadDetailPage({
   params,
@@ -73,12 +57,12 @@ export default async function LeadDetailPage({
           )}
         </div>
         <div className="flex flex-col items-end gap-2">
-          <Badge variant={statusVariant[lead.status] ?? "secondary"}>
-            {statusLabels[lead.status] ?? lead.status}
+          <Badge variant={leadStatusVariant(lead.status)}>
+            {leadStatusLabel(lead.status)}
           </Badge>
           {lead.enrichmentStatus && (
             <span className="text-xs text-muted-foreground">
-              {enrichmentLabels[lead.enrichmentStatus] ?? lead.enrichmentStatus}
+              {enrichmentLabel(lead.enrichmentStatus)}
             </span>
           )}
         </div>

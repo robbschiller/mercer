@@ -1,4 +1,12 @@
 import Link from "next/link";
+import { Fraunces } from "next/font/google";
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-fraunces",
+  display: "swap",
+  axes: ["SOFT", "WONK", "opsz"],
+});
 
 export default function MarketingLayout({
   children,
@@ -6,7 +14,9 @@ export default function MarketingLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-[var(--color-ink)] text-white">
+    <div
+      className={`${fraunces.variable} min-h-screen bg-[var(--color-ink)] text-white`}
+    >
       <header className="absolute inset-x-0 top-0 z-20">
         <div className="mx-auto flex h-20 w-full max-w-[1400px] items-center gap-6 px-6 lg:px-10">
           <Link

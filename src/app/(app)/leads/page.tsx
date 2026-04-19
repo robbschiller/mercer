@@ -12,30 +12,15 @@ import { Badge } from "@/components/ui/badge";
 import { MapPin } from "lucide-react";
 import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { parseViewMode } from "@/lib/view-mode";
+import {
+  LEAD_STATUSES,
+  type LeadStatus,
+  enrichmentLabel,
+  leadStatusLabel,
+  leadStatusVariant,
+} from "@/lib/status-meta";
 
-const statusVariant: Record<string, "default" | "secondary" | "outline"> = {
-  new: "secondary",
-  quoted: "outline",
-  won: "default",
-  lost: "secondary",
-};
-
-const statusLabels: Record<string, string> = {
-  new: "New",
-  quoted: "Quoted",
-  won: "Won",
-  lost: "Lost",
-};
-
-const enrichmentLabels: Record<string, string> = {
-  pending: "Enriching…",
-  success: "Enriched",
-  failed: "Enrichment failed",
-  skipped: "Skipped",
-};
-
-const LEAD_STATUSES = ["new", "quoted", "won", "lost"] as const;
-type LeadFilterStatus = (typeof LEAD_STATUSES)[number];
+type LeadFilterStatus = LeadStatus;
 
 function parseLeadStatus(value: string | undefined): LeadFilterStatus | null {
   if (!value) return null;
@@ -133,10 +118,10 @@ export default async function LeadsPage({
               status: null,
             })}
           />
-          {(LEAD_STATUSES as readonly LeadFilterStatus[]).map((st) => (
+          {LEAD_STATUSES.map((st) => (
             <SourceChip
               key={st}
-              label={statusLabels[st]}
+              label={leadStatusLabel(st)}
               active={statusFilter === st}
               href={buildLeadsHref({
                 source: source ?? null,
@@ -226,8 +211,8 @@ function LeadsCards({ leads }: { leads: Lead[] }) {
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between gap-2">
                 <CardTitle className="text-base">{lead.name}</CardTitle>
-                <Badge variant={statusVariant[lead.status] ?? "secondary"}>
-                  {statusLabels[lead.status] ?? lead.status}
+                <Badge variant={leadStatusVariant(lead.status)}>
+                  {leadStatusLabel(lead.status)}
                 </Badge>
               </div>
               {(lead.company || lead.propertyName) && (
@@ -264,8 +249,7 @@ function LeadsCards({ leads }: { leads: Lead[] }) {
                   )}
                   {lead.enrichmentStatus && (
                     <span className={enrichmentClass(lead.enrichmentStatus)}>
-                      {enrichmentLabels[lead.enrichmentStatus] ??
-                        lead.enrichmentStatus}
+                      {enrichmentLabel(lead.enrichmentStatus)}
                     </span>
                   )}
                 </div>
@@ -325,16 +309,15 @@ function LeadsTable({ leads }: { leads: Lead[] }) {
                 <Td>
                   {lead.enrichmentStatus ? (
                     <span className={enrichmentClass(lead.enrichmentStatus)}>
-                      {enrichmentLabels[lead.enrichmentStatus] ??
-                        lead.enrichmentStatus}
+                      {enrichmentLabel(lead.enrichmentStatus)}
                     </span>
                   ) : (
                     <span className="text-muted-foreground/60">—</span>
                   )}
                 </Td>
                 <Td>
-                  <Badge variant={statusVariant[lead.status] ?? "secondary"}>
-                    {statusLabels[lead.status] ?? lead.status}
+                  <Badge variant={leadStatusVariant(lead.status)}>
+                    {leadStatusLabel(lead.status)}
                   </Badge>
                 </Td>
               </tr>

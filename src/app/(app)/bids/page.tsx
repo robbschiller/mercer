@@ -12,20 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ViewModeToggle } from "@/components/view-mode-toggle";
 import { parseViewMode } from "@/lib/view-mode";
-
-const statusVariant: Record<string, "default" | "secondary" | "outline"> = {
-  draft: "secondary",
-  sent: "outline",
-  won: "default",
-  lost: "secondary",
-};
-
-const statusLabels: Record<string, string> = {
-  draft: "Draft",
-  sent: "Sent",
-  won: "Won",
-  lost: "Lost",
-};
+import { bidStatusLabel, bidStatusVariant } from "@/lib/status-meta";
 
 type BidSummary = Awaited<ReturnType<typeof getBidsWithSummary>>[number];
 
@@ -100,8 +87,8 @@ function BidsCards({ bids }: { bids: BidSummary[] }) {
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-2">
                   <CardTitle className="text-base">{bid.propertyName}</CardTitle>
-                  <Badge variant={statusVariant[bid.status] ?? "secondary"}>
-                    {statusLabels[bid.status] ?? bid.status}
+                  <Badge variant={bidStatusVariant(bid.status)}>
+                    {bidStatusLabel(bid.status)}
                   </Badge>
                 </div>
                 <CardDescription>
@@ -196,8 +183,8 @@ function BidsTable({ bids }: { bids: BidSummary[] }) {
                     {grandTotal != null ? formatCurrency(grandTotal) : "—"}
                   </Td>
                   <Td>
-                    <Badge variant={statusVariant[bid.status] ?? "secondary"}>
-                      {statusLabels[bid.status] ?? bid.status}
+                    <Badge variant={bidStatusVariant(bid.status)}>
+                      {bidStatusLabel(bid.status)}
                     </Badge>
                   </Td>
                   <Td muted>
