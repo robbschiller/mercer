@@ -1,5 +1,6 @@
 import { unstable_cache } from "next/cache";
-import { area, polygon } from "@turf/turf";
+import { area } from "@turf/area";
+import { polygon } from "@turf/helpers";
 
 /** Search radius around bid center (meters). Smaller = faster Overpass responses. */
 export const OSM_AROUND_RADIUS_M = 75;

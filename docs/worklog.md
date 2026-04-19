@@ -4,6 +4,47 @@ Running log of in-flight work on the lead-to-close MVP (docs/plan.md). Chronolog
 
 ---
 
+## 2026-04-19 — Perf & DX hardening pass
+
+**Goal:** Work through the audit list of refactor / perf items the platform had accumulated. Bias was toward small-to-medium changes that compound (caching correctness, fewer correlated subqueries, leaner client bundle, single source of truth for status enums) over file-splitting refactors that need their own scoping.
+
+### Shipped
+
+- **Cache invalidation correctness ([`src/lib/actions.ts`](../src/lib/actions.ts))** — `createProposalShareAction`, `generateProposal`, and accept/decline now `revalidatePath` the bid detail page, `/bids`, `/dashboard`, and (when a `leadId` is present) `/leads` + the lead detail page. Removed the `console.log` block from `createLeadAction` and added the missing `/leads` + `/dashboard` revalidation there.
+- **Defer DB write off the public proposal GET ([`src/app/p/[slug]/page.tsx`](<../src/app/p/[slug]/page.tsx>))** — `markProposalShareAccessed` is now wrapped in `next/server`'s `after()` and short-circuits when `share.accessedAt` is already set, so the customer-facing page no longer eats a write per render.
+- **`drizzle/manual/007_perf_indexes.sql`** — added foreign-key + composite indexes Postgres was not auto-creating: `bids(user_id, updated_at desc)`, `buildings(bid_id)`, `surfaces(building_id)`, `line_items(bid_id)`, `proposals(bid_id, created_at desc)`. Verified usage with `EXPLAIN` (had to `SET enable_seqscan = off` because dev DB is too small for the planner to bother — they will engage in production).
+- **`getBidsWithSummary` rewritten ([`src/lib/store.ts`](../src/lib/store.ts))** — replaced four correlated subqueries per row with two joined aggregate subqueries (building count + total sqft, latest proposal). Proper multi-tenant scoping inside the subqueries.
+- **Dashboard over-fetch fixed ([`src/app/(app)/dashboard/page.tsx`](<../src/app/(app)/dashboard/page.tsx>))** — added `getBidStatusCounts()` and `getLeadStatusCounts({ sourceTag })` SQL aggregates; dashboard no longer pulls every bid + every lead row to compute four counters. When a `?source=` filter is active we only fetch the unscoped lead totals once.
+- **Accept/decline atomicity ([`src/lib/store.ts`](../src/lib/store.ts))** — collapsed the four sequential queries inside `acceptProposalShare` / `declineProposalShare` into a single shared `respondToProposalShare` helper wrapped in `db.transaction(...)`, joining `proposals → bids` upfront so the lead-id lookup is in the transaction too.
+- **Status enums + UI labels deduplicated ([`src/lib/status-meta.ts`](../src/lib/status-meta.ts))** — single source of truth for `BID_STATUSES`, `LEAD_STATUSES`, `ENRICHMENT_STATUSES` and their badge labels/variants. Drizzle schema (`src/db/schema.ts`), Zod validators (`src/lib/validations.ts`), and four consumer pages now derive from this module instead of redeclaring 4-key maps inline.
+- **Bundle: drop `@turf/turf` umbrella** — switched `osm/overpass.ts` and `enrichment/enrich-lead.ts` to scoped `@turf/area` + `@turf/helpers` and removed the umbrella from `package.json`.
+- **Bundle: drop `radix-ui` umbrella** — `sheet.tsx`, `separator.tsx`, `tooltip.tsx`, `sidebar.tsx` switched to scoped `@radix-ui/*` packages; the umbrella package (which transitively pulled in *every* Radix primitive) is gone. Added `@radix-ui/react-separator` and `@radix-ui/react-tooltip` as the two scoped deps that weren't already present.
+- **Marketing-only Fraunces ([`src/app/layout.tsx`](../src/app/layout.tsx) + [`src/app/(marketing)/layout.tsx`](<../src/app/(marketing)/layout.tsx>))** — Fraunces (variable + 3 axes: SOFT/WONK/opsz) is the heaviest font asset and was loading on every app route despite only being used for the marketing display headline. Moved the `next/font/google` call into the marketing segment layout so `/dashboard`, `/bids`, `/leads`, `/p/*` no longer pay for it.
+- **Satellite preview uses `next/image` ([`src/components/satellite-preview.tsx`](../src/components/satellite-preview.tsx))** — swapped raw `<img>` for `next/image` with `unoptimized` (the URL is already a proxied / cached Google Static endpoint), preserving the existing `onError` fallback.
+
+### Verification
+
+- `bunx tsc --noEmit` — clean.
+- `bun run lint` — 6 pre-existing warnings (unused lucide icons in marketing, unused vars in `scripts/validate-enrichment.ts`, missing `alt` in `pdf/proposal-template.tsx`); no new ones.
+- `bun run build` — green; route table unchanged.
+- Spot-checked `getBidStatusCounts()` / `getLeadStatusCounts()` against direct `SELECT status, count(*) GROUP BY status` queries against the dev DB — counts match.
+
+### Deferred (audit items not addressed in this pass)
+
+These are real wins but each needs its own focused PR:
+
+- **Split `src/lib/store.ts` (~1100 lines)** and **`src/lib/actions.ts` (~600 lines)** into per-domain modules. Both are stable but unwieldy; a mechanical split would generate a giant import-rewrite diff that obscures real changes.
+- **Marketing landing page is a single ~1010-line RSC** — would benefit from extracting hero / workflow / positioning / footer sections into separate files; tied to icon-tree-shaking.
+- **`BidDetailSections` client island receives the full bid graph + `NewBidWizard` + `AddressAutocomplete` heavy client subtree** — should be re-scoped so the DB writes happen in actions and only the form bits are client. Needs UX validation.
+- **`components/ui/sidebar.tsx` is ~726 lines of shadcn boilerplate** — low ROI to trim unless we find specific dead code.
+- **No `next/image` rollout for content imagery** — no real assets exist yet; revisit when marketing visuals land.
+
+### Next
+
+Highest leverage remaining items in *Open now* (per `docs/plan.md`): Phase F demo polish + Phase D2 `mailto:` shortcut. Perf/DX work above does not flip any plan checkboxes; the plan file already abstracts perf work behind the milestone roadmap.
+
+---
+
 ## 2026-04-17 — Phase B2 manual override shipped + plan.md promoted to single source of truth
 
 **Goal:** Close the top open item from `docs/plan.md` → Active Work: a manual override for when Places resolved the wrong building. Also: reconcile AGENTS.md and plan.md so status lives in one place.

@@ -22,7 +22,8 @@
  * Places + Overpass. The caller decides what to persist.
  */
 
-import { area, polygon } from "@turf/turf";
+import { area } from "@turf/area";
+import { polygon } from "@turf/helpers";
 
 const PLACES_TEXT_SEARCH_URL =
   "https://places.googleapis.com/v1/places:searchText";

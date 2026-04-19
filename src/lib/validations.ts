@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BID_STATUSES, LEAD_STATUSES } from "./status-meta";
 
 export const signInSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -10,7 +11,7 @@ export const signUpSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
-const bidStatusEnum = z.enum(["draft", "sent", "won", "lost"]);
+const bidStatusEnum = z.enum(BID_STATUSES);
 
 /** Empty / missing → null so updates clear coords; valid number → number. */
 const formLatLng = z.preprocess((val: unknown) => {
@@ -214,7 +215,7 @@ export const importLeadsSchema = z.object({
 
 export const updateLeadStatusSchema = z.object({
   id: z.string().uuid("Invalid lead ID"),
-  status: z.enum(["new", "quoted", "won", "lost"]),
+  status: z.enum(LEAD_STATUSES),
 });
 
 export const enrichLeadActionSchema = z.object({

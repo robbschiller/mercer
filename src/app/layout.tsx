@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Fraunces, Geist, JetBrains_Mono } from "next/font/google";
+import { Geist, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AnalyticsLoader } from "@/components/analytics-loader";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -8,13 +8,6 @@ const geist = Geist({
   subsets: ["latin"],
   variable: "--font-geist",
   display: "swap",
-});
-
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  variable: "--font-fraunces",
-  display: "swap",
-  axes: ["SOFT", "WONK", "opsz"],
 });
 
 const jetbrainsMono = JetBrains_Mono({
@@ -67,7 +60,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geist.variable} ${fraunces.variable} ${jetbrainsMono.variable} font-sans antialiased`}
+        className={`${geist.variable} ${jetbrainsMono.variable} font-sans antialiased`}
       >
         <ThemeProvider
           attribute="class"

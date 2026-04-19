@@ -696,103 +696,75 @@ export async function markProposalShareAccessed(slug: string) {
   return rows[0] ?? null;
 }
 
+async function respondToProposalShare(
+  slug: string,
+  outcome: "won" | "lost",
+  patch: Partial<typeof proposalShares.$inferInsert>
+) {
+  return db.transaction(async (tx) => {
+    const shareRows = await tx
+      .select({
+        share: proposalShares,
+        bidId: proposals.bidId,
+        leadId: bids.leadId,
+      })
+      .from(proposalShares)
+      .innerJoin(proposals, eq(proposalShares.proposalId, proposals.id))
+      .innerJoin(bids, eq(bids.id, proposals.bidId))
+      .where(eq(proposalShares.id, slug))
+      .limit(1);
+    const existing = shareRows[0];
+    if (!existing) throw new Error("Proposal share not found");
+    if (existing.share.acceptedAt || existing.share.declinedAt) {
+      throw new Error("This proposal has already been responded to.");
+    }
+
+    const now = new Date();
+    const [updatedShare] = await tx
+      .update(proposalShares)
+      .set(patch)
+      .where(eq(proposalShares.id, slug))
+      .returning();
+
+    await tx
+      .update(bids)
+      .set({ status: outcome, updatedAt: now })
+      .where(eq(bids.id, existing.bidId));
+
+    if (existing.leadId) {
+      await tx
+        .update(leads)
+        .set({ status: outcome, updatedAt: now })
+        .where(eq(leads.id, existing.leadId));
+    }
+
+    return {
+      share: updatedShare,
+      bidId: existing.bidId,
+      leadId: existing.leadId ?? null,
+    };
+  });
+}
+
 export async function acceptProposalShare(
   slug: string,
   data: { acceptedByName: string; acceptedByTitle: string | null }
 ) {
-  const shareRows = await db
-    .select({ share: proposalShares, proposal: proposals })
-    .from(proposalShares)
-    .innerJoin(proposals, eq(proposalShares.proposalId, proposals.id))
-    .where(eq(proposalShares.id, slug))
-    .limit(1);
-  const existing = shareRows[0];
-  if (!existing) throw new Error("Proposal share not found");
-  if (existing.share.acceptedAt || existing.share.declinedAt) {
-    throw new Error("This proposal has already been responded to.");
-  }
-
-  const [updatedShare] = await db
-    .update(proposalShares)
-    .set({
-      acceptedAt: new Date(),
-      acceptedByName: data.acceptedByName,
-      acceptedByTitle: data.acceptedByTitle,
-    })
-    .where(eq(proposalShares.id, slug))
-    .returning();
-
-  await db
-    .update(bids)
-    .set({ status: "won", updatedAt: new Date() })
-    .where(eq(bids.id, existing.proposal.bidId));
-
-  const [bidRow] = await db
-    .select({ leadId: bids.leadId })
-    .from(bids)
-    .where(eq(bids.id, existing.proposal.bidId))
-    .limit(1);
-  if (bidRow?.leadId) {
-    await db
-      .update(leads)
-      .set({ status: "won", updatedAt: new Date() })
-      .where(eq(leads.id, bidRow.leadId));
-  }
-
-  return {
-    share: updatedShare,
-    bidId: existing.proposal.bidId,
-    leadId: bidRow?.leadId ?? null,
-  };
+  return respondToProposalShare(slug, "won", {
+    acceptedAt: new Date(),
+    acceptedByName: data.acceptedByName,
+    acceptedByTitle: data.acceptedByTitle,
+  });
 }
 
 export async function declineProposalShare(
   slug: string,
   data: { reason: string | null }
 ) {
-  const shareRows = await db
-    .select({ share: proposalShares, proposal: proposals })
-    .from(proposalShares)
-    .innerJoin(proposals, eq(proposalShares.proposalId, proposals.id))
-    .where(eq(proposalShares.id, slug))
-    .limit(1);
-  const existing = shareRows[0];
-  if (!existing) throw new Error("Proposal share not found");
-  if (existing.share.acceptedAt || existing.share.declinedAt) {
-    throw new Error("This proposal has already been responded to.");
-  }
-
-  const [updatedShare] = await db
-    .update(proposalShares)
-    .set({
-      declinedAt: new Date(),
-      declineReason: data.reason,
-    })
-    .where(eq(proposalShares.id, slug))
-    .returning();
-
-  await db
-    .update(bids)
-    .set({ status: "lost", updatedAt: new Date() })
-    .where(eq(bids.id, existing.proposal.bidId));
-
-  const [bidRow] = await db
-    .select({ leadId: bids.leadId })
-    .from(bids)
-    .where(eq(bids.id, existing.proposal.bidId))
-    .limit(1);
-  if (bidRow?.leadId) {
-    await db
-      .update(leads)
-      .set({ status: "lost", updatedAt: new Date() })
-      .where(eq(leads.id, bidRow.leadId));
-  }
-
-  return {
-    share: updatedShare,
-    bidId: existing.proposal.bidId,
-    leadId: bidRow?.leadId ?? null,
-  };
+  return respondToProposalShare(slug, "lost", {
+    declinedAt: new Date(),
+    declineReason: data.reason,
+  });
 }
 
 // ── Status count aggregates (cheap GROUP BY for dashboard) ──

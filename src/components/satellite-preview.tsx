@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { buildSatelliteProxyPath } from "@/lib/maps/satellite-path";
 
@@ -53,13 +54,14 @@ export function SatellitePreview({
 
   return (
     <div className={cn("flex flex-col gap-1", className)}>
-      {/* eslint-disable-next-line @next/next/no-img-element -- proxied Google Static API; dynamic query */}
-      <img
+      <Image
         src={src}
         alt="Satellite view of the property"
-        className="w-full rounded-md border border-border object-cover"
+        className="h-auto w-full rounded-md border border-border object-cover"
         width={width}
         height={height}
+        loading="lazy"
+        unoptimized
         onError={() => setFailed(true)}
       />
       <p className="text-[10px] text-muted-foreground">Map imagery © Google</p>

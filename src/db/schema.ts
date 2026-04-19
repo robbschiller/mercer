@@ -8,6 +8,11 @@ import {
   numeric,
   doublePrecision,
 } from "drizzle-orm/pg-core";
+import {
+  BID_STATUSES,
+  LEAD_STATUSES,
+  ENRICHMENT_STATUSES,
+} from "@/lib/status-meta";
 
 export const bids = pgTable("bids", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -21,9 +26,7 @@ export const bids = pgTable("bids", {
   satelliteImageUrl: text("satellite_image_url"),
   clientName: text("client_name").notNull(),
   notes: text("notes").notNull().default(""),
-  status: text("status", {
-    enum: ["draft", "sent", "won", "lost"],
-  })
+  status: text("status", { enum: BID_STATUSES })
     .notNull()
     .default("draft"),
   coverageSqftPerGallon: numeric("coverage_sqft_per_gallon"),
@@ -119,9 +122,7 @@ export const leads = pgTable("leads", {
   company: text("company"),
   propertyName: text("property_name"),
   notes: text("notes").notNull().default(""),
-  status: text("status", {
-    enum: ["new", "quoted", "won", "lost"],
-  })
+  status: text("status", { enum: LEAD_STATUSES })
     .notNull()
     .default("new"),
   /* ── Enrichment fields (populated asynchronously by enrichLead worker) ── */
@@ -130,9 +131,7 @@ export const leads = pgTable("leads", {
   longitude: doublePrecision("longitude"),
   googlePlaceId: text("google_place_id"),
   satelliteImageUrl: text("satellite_image_url"),
-  enrichmentStatus: text("enrichment_status", {
-    enum: ["pending", "success", "failed", "skipped"],
-  }),
+  enrichmentStatus: text("enrichment_status", { enum: ENRICHMENT_STATUSES }),
   enrichmentError: text("enrichment_error"),
   /** Untransformed CSV row — keeps columns we didn't map for later use. */
   rawRow: jsonb("raw_row").$type<Record<string, string>>(),
