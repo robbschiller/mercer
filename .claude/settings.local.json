@@ -15,7 +15,10 @@
       "Bash(bunx --bun shadcn@latest add sidebar --yes)",
       "Bash(yes n *)",
       "Bash(bun --env-file=.env.local -e \"import\\('./src/db'\\).then\\(async \\({ db }\\) => { const { leads } = await import\\('./src/db/schema'\\); const rows = await db.select\\(\\).from\\(leads\\); console.log\\(JSON.stringify\\(rows, null, 2\\)\\); process.exit\\(0\\); }\\)\")",
-      "Bash(kill 44129)"
+      "Bash(kill 44129)",
+      "Bash(git submodule *)",
+      "Bash(git worktree *)",
+      "Bash(./node_modules/.bin/tsc --noEmit)"
     ]
   }
 }

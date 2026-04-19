@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { getProjects } from "@/lib/store";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardContent,
   CardHeader,
   CardTitle,
   CardDescription,
@@ -56,7 +58,7 @@ export default async function ProjectsPage({
   return (
     <div className="container mx-auto px-4 py-8 flex flex-col gap-6">
       <header>
-        <h1 className="font-display text-3xl font-medium tracking-tight">
+        <h1 className="text-3xl font-medium tracking-tight">
           Projects
         </h1>
         <p className="text-sm text-muted-foreground">
@@ -90,13 +92,22 @@ export default async function ProjectsPage({
       {projects.length === 0 ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">No projects yet</CardTitle>
+            <CardTitle className="text-base">
+              {filter ? "No matching projects" : "No projects yet"}
+            </CardTitle>
             <CardDescription>
               {filter
                 ? `No projects in “${projectStatusLabel(filter)}” right now.`
                 : "Projects appear here automatically when a property manager accepts a proposal."}
             </CardDescription>
           </CardHeader>
+          {filter && (
+            <CardContent>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/projects">Clear filter</Link>
+              </Button>
+            </CardContent>
+          )}
         </Card>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

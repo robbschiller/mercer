@@ -18,10 +18,12 @@ import {
 
 export default async function BidPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
-  const { id } = await params;
+  const [{ id }, { error }] = await Promise.all([params, searchParams]);
   const [data, project] = await Promise.all([
     getBidPageData(id),
     getProjectByBidId(id),
@@ -65,6 +67,12 @@ export default async function BidPage({
           <Link href="/bids">&larr; Bids</Link>
         </Button>
       </div>
+
+      {error && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
 
       <BidSummary bid={bid} />
 
