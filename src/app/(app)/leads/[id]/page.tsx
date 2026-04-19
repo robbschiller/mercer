@@ -2,8 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getLead, getLatestBidForLead } from "@/lib/store";
 import { enrichLeadAction, updateLeadStatusAction } from "@/lib/actions";
-import { SatellitePreview } from "@/components/satellite-preview";
-import { LeadPropertyOverrideForm } from "@/components/lead-property-override-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,19 +20,20 @@ import {
 
 export default async function LeadDetailPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ edit?: string; error?: string }>;
 }) {
   const { id } = await params;
-  const { edit, error } = await searchParams;
-  const [lead, linkedBid] = await Promise.all([getLead(id), getLatestBidForLead(id)]);
+  const [lead, linkedBid] = await Promise.all([
+    getLead(id),
+    getLatestBidForLead(id),
+  ]);
   if (!lead) notFound();
 
-  const canShowSatellite =
-    lead.latitude != null && lead.longitude != null;
-  const isEditingProperty = edit === "property";
+  const showRerun =
+    !lead.enrichmentStatus ||
+    lead.enrichmentStatus === "failed" ||
+    lead.enrichmentStatus === "skipped";
 
   return (
     <div className="container mx-auto max-w-3xl px-4 py-8">
@@ -104,82 +103,32 @@ export default async function LeadDetailPage({
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Property</CardTitle>
-            {lead.enrichmentStatus === "success" && !isEditingProperty ? (
-              <CardDescription className="text-xs">
-                Resolved via Google Places — confirm on-site or override below.
-              </CardDescription>
-            ) : null}
-            {isEditingProperty ? (
-              <CardDescription className="text-xs">
-                Enter the correct property address. Lat/lng and satellite
-                preview will update automatically.
-              </CardDescription>
-            ) : null}
+            <CardTitle className="text-base">Office address</CardTitle>
+            <CardDescription className="text-xs">
+              Resolved from the company name via Google Places. The property to
+              bid on is captured when you create a bid.
+            </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-2 text-sm">
-            {isEditingProperty ? (
-              <>
-                {error && (
-                  <p className="text-xs text-destructive">{error}</p>
-                )}
-                <LeadPropertyOverrideForm
-                  leadId={lead.id}
-                  initialAddress={lead.resolvedAddress ?? ""}
-                  initialLat={lead.latitude}
-                  initialLng={lead.longitude}
-                  initialPlaceId={lead.googlePlaceId}
-                />
-              </>
+            {lead.resolvedAddress ? (
+              <p>{lead.resolvedAddress}</p>
             ) : (
-              <>
-                {lead.resolvedAddress ? (
-                  <p>{lead.resolvedAddress}</p>
-                ) : (
-                  <p className="text-muted-foreground/60">Not resolved yet</p>
-                )}
-                {lead.enrichmentError && (
-                  <p className="text-xs text-destructive">
-                    {lead.enrichmentError}
-                  </p>
-                )}
-                <div className="flex items-center gap-2 pt-2 flex-wrap">
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href={`/leads/${lead.id}?edit=property`}>
-                      Override address
-                    </Link>
-                  </Button>
-                  {(!lead.enrichmentStatus ||
-                    lead.enrichmentStatus === "failed" ||
-                    lead.enrichmentStatus === "skipped") && (
-                    <form action={enrichLeadAction}>
-                      <input type="hidden" name="id" value={lead.id} />
-                      <SubmitButton variant="outline" size="sm">
-                        Re-run enrichment
-                      </SubmitButton>
-                    </form>
-                  )}
-                </div>
-              </>
+              <p className="text-muted-foreground/60">Not resolved yet</p>
+            )}
+            {lead.enrichmentError && (
+              <p className="text-xs text-destructive">{lead.enrichmentError}</p>
+            )}
+            {showRerun && (
+              <form action={enrichLeadAction} className="pt-2">
+                <input type="hidden" name="id" value={lead.id} />
+                <SubmitButton variant="outline" size="sm">
+                  Re-run enrichment
+                </SubmitButton>
+              </form>
             )}
           </CardContent>
         </Card>
       </div>
-
-      {canShowSatellite && (
-        <Card className="mt-4">
-          <CardHeader>
-            <CardTitle className="text-base">Satellite preview</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SatellitePreview
-              lat={lead.latitude!}
-              lng={lead.longitude!}
-              satellitePath={lead.satelliteImageUrl}
-            />
-          </CardContent>
-        </Card>
-      )}
 
       <Card className="mt-4">
         <CardHeader>

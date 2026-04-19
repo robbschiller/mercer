@@ -33,9 +33,10 @@ export default async function ImportLeadsPage({
         <CardHeader>
           <CardTitle>Import leads from CSV</CardTitle>
           <CardDescription>
-            Upload a trade show attendee list. We&apos;ll map the columns
-            automatically (Name, Email, Phone, Company, Property) and enrich
-            each row with a resolved property address and satellite preview.
+            Upload a trade show attendee list. We&apos;ll auto-map the columns
+            (Name, Email, Phone, Company, Property) and look up each
+            company&apos;s office address via Google Places so you have context
+            before you reach out.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -82,10 +83,13 @@ export default async function ImportLeadsPage({
               <ul className="list-disc pl-4 space-y-0.5">
                 <li>Rows without a name are skipped</li>
                 <li>
-                  Each row is enriched via Google Places using{" "}
-                  <code>property</code> + <code>company</code>
+                  Each row&apos;s office address is resolved via Google Places
+                  using <code>company</code> (plus <code>property</code> if
+                  present)
                 </li>
-                <li>Enrichment runs inline — expect a brief wait on large imports</li>
+                <li>
+                  Enrichment runs inline — expect a brief wait on large imports
+                </li>
               </ul>
             </div>
 

@@ -960,39 +960,6 @@ export async function updateLeadEnrichment(
   return rows[0] ?? null;
 }
 
-/**
- * Manual override of a lead's resolved property. Used when Places picked the
- * wrong building (zip-level match, mis-resolved on company name, etc.). Sets
- * enrichment_status = 'success' and rebuilds the satellite_image_url proxy
- * path to match the new coords.
- */
-export async function overrideLeadProperty(
-  id: string,
-  data: {
-    resolvedAddress: string;
-    latitude: number | null;
-    longitude: number | null;
-    googlePlaceId: string | null;
-  }
-): Promise<Lead | null> {
-  const user = await requireUser();
-  const rows = await db
-    .update(leads)
-    .set({
-      resolvedAddress: data.resolvedAddress,
-      latitude: data.latitude,
-      longitude: data.longitude,
-      googlePlaceId: data.googlePlaceId,
-      satelliteImageUrl: buildSatelliteProxyPath(data.latitude, data.longitude),
-      enrichmentStatus: "success",
-      enrichmentError: null,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(leads.id, id), eq(leads.userId, user.id)))
-    .returning();
-  return rows[0] ?? null;
-}
-
 export async function updateLeadStatus(id: string, status: Lead["status"]) {
   const user = await requireUser();
   const rows = await db

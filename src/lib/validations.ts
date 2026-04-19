@@ -221,11 +221,3 @@ export const updateLeadStatusSchema = z.object({
 export const enrichLeadActionSchema = z.object({
   id: z.string().uuid("Invalid lead ID"),
 });
-
-export const overrideLeadPropertySchema = z.object({
-  id: z.string().uuid("Invalid lead ID"),
-  address: z.string().trim().min(1, "Address is required"),
-  latitude: formLatLng,
-  longitude: formLatLng,
-  googlePlaceId: formPlaceId,
-});
