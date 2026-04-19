@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -33,7 +34,16 @@ export default async function SharedProposalPage({
   const record = await getProposalShareBySlug(slug);
   if (!record) notFound();
 
-  await markProposalShareAccessed(slug);
+  if (!record.share.accessedAt) {
+    after(async () => {
+      try {
+        await markProposalShareAccessed(slug);
+      } catch (err) {
+        console.error("[shared-proposal] markProposalShareAccessed failed", err);
+      }
+    });
+  }
+
   const snapshot = getSnapshot(record.proposal.snapshot);
   if (!snapshot) notFound();
 

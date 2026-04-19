@@ -435,6 +435,11 @@ export async function generateProposalAction(data: { bidId: string }) {
 
   revalidatePath(`/bids/${bid.id}`);
   revalidatePath("/bids");
+  revalidatePath("/dashboard");
+  if (bid.leadId) {
+    revalidatePath(`/leads/${bid.leadId}`);
+    revalidatePath("/leads");
+  }
   return { error: null, pdfUrl: proposal.pdfUrl };
 }
 
@@ -447,6 +452,8 @@ export async function createProposalShareAction(data: { proposalId: string }) {
   try {
     const share = await createProposalShare(result.data.proposalId);
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+    revalidatePath(`/bids/${share.bidId}`);
+    revalidatePath("/bids");
     return { error: null, shareUrl: `${siteUrl}/p/${share.id}` };
   } catch (error) {
     const message =
@@ -461,12 +468,18 @@ export async function acceptProposalShareAction(formData: FormData) {
     return { error: result.error.issues[0]?.message ?? "Invalid input" };
   }
   try {
-    await acceptProposalShare(result.data.slug, {
+    const { bidId, leadId } = await acceptProposalShare(result.data.slug, {
       acceptedByName: result.data.acceptedByName,
       acceptedByTitle: result.data.acceptedByTitle,
     });
     revalidatePath(`/p/${result.data.slug}`);
+    revalidatePath(`/bids/${bidId}`);
     revalidatePath("/bids");
+    revalidatePath("/dashboard");
+    if (leadId) {
+      revalidatePath(`/leads/${leadId}`);
+      revalidatePath("/leads");
+    }
     return { error: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to accept proposal";
@@ -480,9 +493,17 @@ export async function declineProposalShareAction(formData: FormData) {
     return { error: result.error.issues[0]?.message ?? "Invalid input" };
   }
   try {
-    await declineProposalShare(result.data.slug, { reason: result.data.reason });
+    const { bidId, leadId } = await declineProposalShare(result.data.slug, {
+      reason: result.data.reason,
+    });
     revalidatePath(`/p/${result.data.slug}`);
+    revalidatePath(`/bids/${bidId}`);
     revalidatePath("/bids");
+    revalidatePath("/dashboard");
+    if (leadId) {
+      revalidatePath(`/leads/${leadId}`);
+      revalidatePath("/leads");
+    }
     return { error: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to decline proposal";
@@ -493,23 +514,16 @@ export async function declineProposalShareAction(formData: FormData) {
 // ── Leads ──
 
 export async function createLeadAction(formData: FormData) {
-  console.log("[createLeadAction] entered, raw form:", formDataToObject(formData));
   const result = createLeadSchema.safeParse(formDataToObject(formData));
 
   if (!result.success) {
     const message = result.error.issues[0]?.message ?? "Invalid input";
-    console.log("[createLeadAction] zod failed:", result.error.issues);
     redirect(`/leads/new?error=${encodeURIComponent(message)}`);
   }
 
-  console.log("[createLeadAction] zod ok, creating lead:", result.data);
-  try {
-    const lead = await createLead(result.data);
-    console.log("[createLeadAction] lead created:", lead.id);
-  } catch (err) {
-    console.error("[createLeadAction] createLead threw:", err);
-    throw err;
-  }
+  await createLead(result.data);
+  revalidatePath("/leads");
+  revalidatePath("/dashboard");
   redirect("/leads");
 }
 
