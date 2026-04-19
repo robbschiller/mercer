@@ -39,7 +39,7 @@ Existing tools fragment the workflow and assume human data entry at every step: 
 - Replacing accounting, tax, or payroll software. Mercer reports on job financials; QuickBooks stays downstream.
 - **Building a chat-first product.** Chat is a tool the product uses internally for agent orchestration; it is not the interface. The contractor does not "ask the AI for a bid." The contractor captures a property and reviews a draft.
 - **Human-first data entry as the primary UX.** Forms exist as the edit surface for AI-generated drafts, not as the origination point for new records. If a workflow still looks like a spreadsheet in Mercer, we've built the wrong thing.
-- **Configurability as a core product value.** Opinions about the workflow are the product. The AI layer is what adapts to a contractor's specifics; the UI does not need to.
+- **Configurability as a core product value.** Opinions about the workflow are the product. The AI layer is what adapts to a contractor's specifics; the UI does not need to. Field sets on leads, bids, and projects are opinionated and uniform across tenants — see §6.1-§6.3 for the definitive field list. There is no per-contractor custom-fields system in Phase 1.
 - **Generative output for numeric fields.** Square footage, material costs, labor hours, and totals are computed deterministically from structured inputs. LLMs orchestrate, read, summarize, and explain; they do not produce the numbers the business runs on.
 
 ---
@@ -248,27 +248,80 @@ PDF export remains available for property managers who insist. It is not the pri
 
 ### 5.5 Project Layer
 
-When a bid is accepted, the deal becomes a **project**. The scope is deliberately narrow in Phase 1 (status, dates, sub, notes) and expands in later milestones as the AI-native ops layer is built. The point of starting narrow is not to defer ops indefinitely — it's to prove the handoff from pre-sale to post-sale lives in one system before layering agent operations on top of it.
+When a bid is accepted, the deal becomes a **project**. The scope is deliberately narrow in Phase 1 (status, dates, sub, notes, status-page pivot) and expands in later milestones as the AI-native ops layer is built. The point of starting narrow is not to defer ops indefinitely — it's to prove the handoff from pre-sale to post-sale lives in one system before layering agent operations on top of it.
 
-**Capabilities (Phase 1)**
-- Automatic project creation on bid acceptance
-- Project detail view linked to bid, lead, proposal, and capture
-- Project status: not started / in progress / punch-out / complete
-- Scheduled start and end dates (target and actual)
-- Assigned subcontractor (freeform or from a minimal sub list)
-- Freeform notes and structured updates
-- The proposal URL from §5.4 becomes the project status page post-acceptance: auto-posted crew photos, schedule updates, weekly summaries
+#### Lifecycle and trigger
 
-**Deferred — but AI-native when built (see §9 Milestone 5)**
-- Expense reconciliation agent (Jordan's "why are we over by $10K on paint?" as a grounded query against invoices and takeoff buckets)
-- Change-order workflow driven by voice dictation + LLM structuring
-- Pre-con and post-con walk checklists auto-generated from the capture and scope
-- Punch-list seeding from capture + scope, with photos linking back to specific line items
-- Auto-generated paint guides from project records
-- NPS collection and analysis
-- Draw schedules and invoicing
-- Damage tracking
-- Sub performance patterns (who goes over, who under, on what trade types)
+Project creation is **automatic on acceptance**. The instant `proposal_share.accepted_at` is set, a `project` row is created in the same database transaction that flips the bid to `won` and the lead to `won`. There is no separate "convert to project" step for the contractor — the moment the property manager signs, the deal is a project. One project per bid; if a previously-declined share is re-accepted, the existing project is updated rather than duplicated. Defensive `ON CONFLICT DO NOTHING` on `bid_id` makes the create idempotent under any race.
+
+A bid that has not been accepted has no project. A bid that is later marked declined keeps any project that was previously created (post-acceptance state changes, including unwinding a deal, are project-side concerns rather than bid-side ones).
+
+#### State machine
+
+Five states. Linear primary path with one off-ramp and one explicit reopen:
+
+```
+not_started → in_progress → punch_out → complete ──┐
+                    ↓             ↑                │
+                 on_hold ─────────┘                │
+                    ↑                              │
+                    └──────── reopen ──────────────┘
+```
+
+- `not_started` (default on creation)
+- `in_progress` — entering this state stamps `actual_start_date` if not already set
+- `punch_out` — open issues and final walks; entering does not clear `actual_start_date`
+- `complete` — entering this state stamps `actual_end_date` if not already set. Can be **reopened** to `punch_out` (typical: walk-list items resurface) or back to `in_progress` (substantive rework). Reopening clears `actual_end_date` so the next entry into `complete` re-stamps it; `actual_start_date` is preserved through the reopen.
+- `on_hold` — side state reachable from any non-terminal state and exitable back to `in_progress` (typical: weather, owner pause, sub availability)
+
+Transitions are **manual** from the project detail page. There are no magical state flips driven by external events in Phase 1 (no calendar integration auto-starting jobs, no sub-portal events advancing punch-out). The intent is to keep the state machine honest while the team is small and the surface is new.
+
+#### What the project inherits vs. what it owns
+
+The bid is the **contract artifact**. It does not become editable just because work has started. The project owns the operational metadata around delivery.
+
+*Inherited by reference, immutable from the project's perspective:*
+
+- The bid record (scope, price, satellite, captures, spec documents, scope items, scope flags, line items)
+- The proposal snapshot (the exact frozen version the property manager accepted)
+- The lead (if the bid was created from one)
+- All capture artifacts, spec documents, and customer requests attached to the bid
+
+*Owned by the project (mutable post-creation):*
+
+- `target_start_date`, `target_end_date`
+- `actual_start_date`, `actual_end_date`
+- `assigned_sub`, `crew_lead_name`
+- `status`
+- Freeform `notes`
+- A feed of `project_update` records (see data model in §6)
+
+#### Public status-page pivot (Slice 3)
+
+The same `/p/[slug]` URL the property manager used to accept the proposal becomes the project status page post-acceptance — same slug, same no-auth access, same single bookmark for the lifetime of the relationship. Post-accept, the URL renders:
+
+- The frozen scope and price from the accepted proposal (read-only)
+- Schedule (target start/end, actual start/end)
+- Current status with a human-readable label
+- The feed of `project_update` records flagged `visible_on_public_url = true` (auto-posted crew photos, schedule updates, weekly summaries; private contractor-side updates stay internal)
+
+This is the property-manager retention surface. They never need to log in, install anything, or learn a new tool to know what's happening on their property — and five years later, when they need the paint colors, the URL is still there.
+
+#### Scope changes after acceptance
+
+Out of scope for Phase 1. The bid is frozen at acceptance; the proposal snapshot is the legal artifact; the project surface is for delivery metadata, not scope edits. If the property manager needs a scope change after acceptance, the Phase 1 mechanism is **off-system conversation** plus, if needed, a **new bid**. Mid-project scope edits within the existing project record are not supported and should not be quietly enabled — that's a change-order workflow and it's deferred (see below).
+
+#### Deferred — AI-native when built (see §9 Milestone 5)
+
+- **Expense reconciliation agent.** Jordan's "why are we over by $10K on paint?" as a grounded query against invoices and takeoff buckets.
+- **Change-order workflow** driven by voice dictation + LLM structuring. This is where the post-acceptance scope-change story actually gets built.
+- **Pre-con and post-con walk checklists** auto-generated from the capture and scope.
+- **Punch-list seeding** from capture + scope, with photos linking back to specific line items.
+- **Auto-generated paint guides** from project records.
+- **NPS collection and analysis.**
+- **Draw schedules and invoicing.**
+- **Damage tracking.**
+- **Sub performance patterns** (who goes over, who under, on what trade types).
 
 ### 5.6 Pipeline and Reporting
 
@@ -311,11 +364,194 @@ Primary entities, with AI-native additions called out:
 | proposal_share | id (slug), proposal_id, accessed_at, accepted_at, accepted_by_name, accepted_by_title, declined_at, decline_reason | proposal_comments |
 | **proposal_comment** | id, proposal_share_id, scope_item_id (nullable), author_name, body, created_at | — |
 | **scope_change_request** | id, proposal_share_id, original_scope_snapshot, requested_change_description, negotiation_agent_run_id, proposed_revised_bid, status | — |
-| project | id, bid_id, status, target_start_date, target_end_date, actual_start_date, actual_end_date, assigned_sub, notes | project_updates |
-| project_update | id, project_id, created_at, author, body, **source_type** (human/crew_auto/agent) | — |
+| project | id, bid_id (unique), user_id, status (`not_started`/`in_progress`/`punch_out`/`complete`/`on_hold`), target_start_date, target_end_date, actual_start_date, actual_end_date, assigned_sub, crew_lead_name, **accepted_by_name**, **accepted_by_title**, **accepted_at**, notes | project_updates (full spec: §6.3) |
+| project_update | id, project_id, **author_type** (human/crew_auto/agent), author_name, body, attachments_ref (jsonb), **visible_on_public_url** (bool), created_at | — (full spec: §6.3.1) |
 | **agent_run** | id, agent_type, inputs_ref, outputs_ref, model, prompt_version, started_at, completed_at, confidence_metrics (jsonb), cost_usd | — |
 
 The `agent_run` table is load-bearing. Every agent operation produces a record with enough traceability to replay, debug, and evaluate. Without this, the product becomes impossible to improve and impossible to trust.
+
+The §6 table above is the relationship map. The three subsections below — §6.1, §6.2, §6.3 — are the **definitive field spec** for the three primary workflow entities (lead, bid, project). Field sets are deliberately uniform across tenants. There is no per-contractor customization of which fields exist; see §2 (non-goals) and §12 (build principles).
+
+Convention used in each subsection:
+
+- *Identity* — primary key, ownership, timestamps
+- *Business* — domain-meaningful columns the product surfaces
+- *Workflow state* — status enums, transitions
+- *Agent layer* — fields populated by AI agents (often aspirational and flagged with the milestone they unlock)
+
+Field shapes call out type, nullability, and a one-line purpose note. Aspirational fields not yet in the live schema are flagged inline with the milestone that introduces them.
+
+### 6.1 Lead fields
+
+Grounded in the current `leads` table. The lead is the **company-level opportunity**: who you're trying to win work from. Property-being-painted information lives on the bid, not the lead.
+
+*Identity*
+
+- `id` (uuid, PK) — server-generated.
+- `user_id` (uuid, not null) — owner; cross-user reads are forbidden.
+- `created_at`, `updated_at` (timestamptz, not null) — audit timestamps.
+
+*Contact*
+
+- `name` (text, not null) — primary contact at the company. The only required identity field; everything else can be missing on a sparse trade-show row.
+- `email` (text, nullable).
+- `phone` (text, nullable).
+
+*Company context*
+
+- `company` (text, nullable) — management company / property group name. The qualification agent (Milestone 3) keys off this to resolve the portfolio.
+- `property_name` (text, nullable) — a specific property the contact mentioned. Hint, not a foreign key; the bid captures the actual property to bid on.
+- `source_tag` (text, nullable) — per-import provenance ("NAA Orlando 2026", "inbound 2026-04-12", "outbound — Sherwin rep referral").
+- `raw_row` (jsonb, nullable) — unmapped CSV columns from import, kept verbatim for later use.
+- `notes` (text, not null, default `''`) — freeform contractor notes.
+
+*Resolved office address (Places-only)*
+
+This is the **company's office** address, not a property to bid on. Resolved by the synchronous Places lookup in the import pipeline.
+
+- `resolved_address` (text, nullable) — formatted address from Google Places.
+- `latitude`, `longitude` (double precision, nullable) — coordinates of the office.
+- `google_place_id` (text, nullable) — Places identifier for re-lookup.
+
+*Enrichment state*
+
+- `enrichment_status` (text enum, nullable) — `idle | pending | success | failed | skipped`.
+- `enrichment_error` (text, nullable) — last error message when status is `failed`.
+
+*Historical, no longer written for new leads*
+
+- `satellite_image_url` (text, nullable) — kept on the table for back-compat with rows imported before the satellite-strip pass; never written for new leads. Deliberate no-migration decision documented in the worklog. New code should not read this column on the lead.
+
+*Qualification — aspirational, Milestone 3*
+
+- `qualification_score` (numeric, nullable) — 0–100 confidence-weighted ranking from the qualification agent.
+- `qualification_brief` (text, nullable) — generated brief covering portfolio, paint timing, public-data signals.
+- `agent_run_id` (uuid, nullable, FK → `agent_run.id`) — pointer to the run that produced the brief, for traceability.
+
+*Workflow*
+
+- `status` (text enum, not null, default `new`) — `new | qualified | quoted | won | lost`. Note `qualified` is reserved for the qualification-agent-driven flow (Milestone 3); pre-Milestone-3 leads jump straight from `new` to `quoted` on first bid.
+
+### 6.2 Bid fields
+
+Grounded in the current `bids`, `buildings`, `surfaces`, and `line_items` tables. The bid is the **property-level opportunity** and, post-acceptance, the **contract artifact**. It does not become editable post-acceptance; project-side delivery metadata lives on the project (§6.3).
+
+*Identity*
+
+- `id` (uuid, PK).
+- `user_id` (uuid, not null) — owner.
+- `lead_id` (uuid, nullable, FK → `leads.id`) — bids can exist without a lead (cold inbound, walk-in).
+- `created_at`, `updated_at` (timestamptz, not null).
+
+*Property — the thing being painted*
+
+Distinct from the lead's office address. Captured at bid creation via the address-autocomplete flow.
+
+- `property_name` (text, not null) — display name on the proposal.
+- `address` (text, not null) — formatted address.
+- `latitude`, `longitude` (double precision, nullable) — coordinates of the property.
+- `google_place_id` (text, nullable) — Places identifier.
+- `satellite_image_url` (text, nullable) — proxy URL for the satellite tile shown in the bid summary and on the proposal.
+
+*Client*
+
+- `client_name` (text, not null) — buyer-side primary contact for this bid. Intentionally thin in Phase 1; richer client-contact fields (email, phone, role, ownership group) are deferred until the qualification agent lands in Milestone 3 and structured client objects become useful.
+
+*Pricing inputs*
+
+Each overrides the corresponding `user_defaults` value when set; nulls fall back to defaults.
+
+- `coverage_sqft_per_gallon` (numeric, nullable).
+- `price_per_gallon` (numeric, nullable).
+- `labor_rate_per_unit` (numeric, nullable).
+- `margin_percent` (numeric, default `0`).
+
+*Derived totals — never stored as columns*
+
+Subtotal, margin amount, and total are **computed deterministically** by `src/lib/pricing.ts` from surfaces + line items + pricing inputs. Re-stating the §6 AI principle: numeric fields the contract value depends on are computed, never generated. The bid record stores inputs; the totals are derived.
+
+*Child records*
+
+- `buildings[]` — `id`, `bid_id`, `label`, `count`, `sort_order`, timestamps. Each building represents a *type* of building on the property; `count` is how many of that type exist.
+- `surfaces[]` (per building) — `id`, `building_id`, `name`, `dimensions` (jsonb of `[length, height][]` tuples preserving Rob's compound-surface notation), `total_sqft` (computed once and cached), `sort_order`, `created_at`.
+- `line_items[]` — `id`, `bid_id`, `name`, `amount`, `sort_order`, `created_at`. Custom additions (metal primer, bleach wash, equipment rental).
+- `proposals[]` — `id`, `bid_id`, `snapshot` (jsonb of the frozen render data), `pdf_url`, `created_at`.
+
+*Aspirational child records — Milestone 1+*
+
+- `captures[]` — Milestone 1: photo / video / satellite / streetview artifacts feeding the takeoff agent.
+- `scope_items[]`, `scope_flags[]` — Milestone 2: structured traceable scope object + reconciliation-agent flags.
+- `spec_documents[]`, `customer_requests[]` — Milestone 2: spec PDF parsing + customer-request ingestion.
+
+*Workflow*
+
+- `status` (text enum, not null, default `draft`) — `draft | sent | won | lost`. Transitions: `draft → sent` on proposal generate; `sent → won` on share accept; `sent → lost` on share decline. Manual overrides allowed from the bid detail page.
+- `notes` (text, not null, default `''`) — freeform contractor notes.
+
+### 6.3 Project fields
+
+New entity introduced for the project layer. Created automatically when a `proposal_share` is accepted; see §5.5 for lifecycle. The project owns delivery metadata; everything contractual lives on the bid by reference.
+
+*Identity*
+
+- `id` (uuid, PK).
+- `bid_id` (uuid, not null, **unique**, FK → `bids.id` on delete cascade) — one project per bid; uniqueness is the database guarantee that supports `ON CONFLICT DO NOTHING` idempotency on accept.
+- `user_id` (uuid, not null) — denormalized from the bid for cheap ownership checks (mirrors how `bids.user_id` works).
+- `created_at`, `updated_at` (timestamptz, not null).
+
+*Inherited references — read-only from the project's perspective*
+
+Not stored as columns beyond `bid_id`. Reached via the existing join graph:
+
+- bid (and through it: property info, scope, price, satellite, line items, captures, spec documents, scope items, scope flags)
+- proposal snapshot (the frozen version the property manager accepted)
+- lead (if the bid was created from one)
+
+*Schedule*
+
+- `target_start_date` (date, nullable) — contractor-settable target.
+- `target_end_date` (date, nullable) — contractor-settable target.
+- `actual_start_date` (timestamptz, nullable) — auto-stamped when status enters `in_progress` (if not already set).
+- `actual_end_date` (timestamptz, nullable) — auto-stamped when status enters `complete` (if not already set).
+
+*Assignment*
+
+- `assigned_sub` (text, nullable) — freeform in Phase 1. Becomes a FK to a subs table in a later milestone when sub performance patterns (Milestone 5) ship.
+- `crew_lead_name` (text, nullable) — point-of-contact crew lead, freeform.
+
+*Workflow*
+
+- `status` (text enum, not null, default `not_started`) — `not_started | in_progress | punch_out | complete | on_hold`. State machine in §5.5.
+
+*Acceptance provenance*
+
+Copied from `proposal_share` at create-time so the project carries the signer even if the share row changes later.
+
+- `accepted_by_name` (text, nullable).
+- `accepted_by_title` (text, nullable).
+- `accepted_at` (timestamptz, nullable).
+
+*Notes*
+
+- `notes` (text, not null, default `''`) — contractor-only freeform. Not shown on the public status page.
+
+*Agent layer — aspirational, Milestone 5*
+
+- `expense_reconciliation_agent_run_id` (uuid, nullable, FK → `agent_run.id`) — last expense-recon pass for this project.
+- `last_status_summary_agent_run_id` (uuid, nullable, FK → `agent_run.id`) — most recent auto-generated status summary surfaced on the public status page.
+
+#### 6.3.1 project_update fields
+
+Child entity that drives both the public status page and the contractor-internal feed. Introduced in Slice 3 of the project layer (§5.5 public status-page pivot); not in the live schema yet.
+
+- `id` (uuid, PK).
+- `project_id` (uuid, not null, FK → `projects.id` on delete cascade).
+- `author_type` (text enum, not null) — `human | crew_auto | agent`.
+- `author_name` (text, nullable) — display name; null for `crew_auto` / `agent`.
+- `body` (text, not null).
+- `attachments_ref` (jsonb, nullable) — pointers to capture / photo storage refs.
+- `visible_on_public_url` (boolean, not null, default `true`) — when false, update is contractor-internal only and never appears on `/p/[slug]`.
+- `created_at` (timestamptz, not null).
 
 ### AI Architecture Principles
 
@@ -563,4 +799,4 @@ Phase 1 is a learning exercise, not a revenue exercise. The right metrics measur
 - **Mobile-first, on-site use.** Contractors use it in the parking lot.
 - **Close the loop.** From lead acquired to project complete, everything lives in one system with a traced record.
 - **Output that wins work.** Proposals should be easier to share, review, and sign than the status quo.
-- **Domain opinion is the product.** Configurability is deferred. Value comes from knowing what a building, surface, takeoff, scope item, and punch-out are — and from having AI systems that operate fluently on those primitives.
+- **Domain opinion is the product.** Configurability is deferred. Custom fields, custom statuses, and custom workflows are explicitly out of Phase 1. Opinions about what a lead, bid, and project are *is the product*; the field specs in §6.1-§6.3 are the contract. Value comes from knowing what a building, surface, takeoff, scope item, and punch-out are — and from having AI systems that operate fluently on those primitives.

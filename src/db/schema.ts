@@ -7,11 +7,15 @@ import {
   jsonb,
   numeric,
   doublePrecision,
+  date,
+  boolean,
 } from "drizzle-orm/pg-core";
 import {
   BID_STATUSES,
   LEAD_STATUSES,
   ENRICHMENT_STATUSES,
+  PROJECT_STATUSES,
+  PROJECT_UPDATE_AUTHOR_TYPES,
 } from "@/lib/status-meta";
 
 export const bids = pgTable("bids", {
@@ -139,6 +143,66 @@ export const leads = pgTable("leads", {
     .notNull()
     .defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Projects: created automatically when a proposal_share is accepted.
+ * One project per bid (UNIQUE bid_id supports ON CONFLICT DO NOTHING
+ * idempotency on accept). Owns post-acceptance delivery metadata; the bid
+ * stays the immutable contract artifact. See PRD §5.5 / §6.3.
+ */
+export const projects = pgTable("projects", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  bidId: uuid("bid_id")
+    .notNull()
+    .unique()
+    .references(() => bids.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull(),
+  status: text("status", { enum: PROJECT_STATUSES })
+    .notNull()
+    .default("not_started"),
+  targetStartDate: date("target_start_date"),
+  targetEndDate: date("target_end_date"),
+  actualStartDate: timestamp("actual_start_date", { withTimezone: true }),
+  actualEndDate: timestamp("actual_end_date", { withTimezone: true }),
+  assignedSub: text("assigned_sub"),
+  crewLeadName: text("crew_lead_name"),
+  acceptedByName: text("accepted_by_name"),
+  acceptedByTitle: text("accepted_by_title"),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Project updates: append-only feed of progress notes against a project.
+ * `visible_on_public_url` is the contractor's opt-in switch for whether
+ * an entry shows up on the post-acceptance status page at /p/[slug].
+ * Defaults to false so internal-by-default is the safe choice. See PRD
+ * §5.5 / §6.3.1.
+ */
+export const projectUpdates = pgTable("project_updates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  projectId: uuid("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  authorType: text("author_type", { enum: PROJECT_UPDATE_AUTHOR_TYPES })
+    .notNull()
+    .default("human"),
+  authorName: text("author_name").notNull().default(""),
+  body: text("body").notNull(),
+  attachmentsRef: jsonb("attachments_ref"),
+  visibleOnPublicUrl: boolean("visible_on_public_url")
+    .notNull()
+    .default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });

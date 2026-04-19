@@ -21,6 +21,23 @@ export const ENRICHMENT_STATUSES = [
 ] as const;
 export type EnrichmentStatus = (typeof ENRICHMENT_STATUSES)[number];
 
+export const PROJECT_STATUSES = [
+  "not_started",
+  "in_progress",
+  "punch_out",
+  "complete",
+  "on_hold",
+] as const;
+export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
+
+export const PROJECT_UPDATE_AUTHOR_TYPES = [
+  "human",
+  "crew_auto",
+  "agent",
+] as const;
+export type ProjectUpdateAuthorType =
+  (typeof PROJECT_UPDATE_AUTHOR_TYPES)[number];
+
 type BadgeVariant = "default" | "secondary" | "outline";
 
 export const BID_STATUS_LABELS: Record<BidStatus, string> = {
@@ -58,6 +75,22 @@ export const ENRICHMENT_LABELS: Record<EnrichmentStatus, string> = {
   skipped: "Skipped",
 };
 
+export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
+  not_started: "Not started",
+  in_progress: "In progress",
+  punch_out: "Punch out",
+  complete: "Complete",
+  on_hold: "On hold",
+};
+
+export const PROJECT_STATUS_VARIANTS: Record<ProjectStatus, BadgeVariant> = {
+  not_started: "secondary",
+  in_progress: "default",
+  punch_out: "outline",
+  complete: "default",
+  on_hold: "secondary",
+};
+
 export function bidStatusLabel(status: string): string {
   return BID_STATUS_LABELS[status as BidStatus] ?? status;
 }
@@ -76,4 +109,12 @@ export function leadStatusVariant(status: string): BadgeVariant {
 
 export function enrichmentLabel(status: string): string {
   return ENRICHMENT_LABELS[status as EnrichmentStatus] ?? status;
+}
+
+export function projectStatusLabel(status: string): string {
+  return PROJECT_STATUS_LABELS[status as ProjectStatus] ?? status;
+}
+
+export function projectStatusVariant(status: string): BadgeVariant {
+  return PROJECT_STATUS_VARIANTS[status as ProjectStatus] ?? "secondary";
 }

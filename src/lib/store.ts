@@ -8,6 +8,8 @@ import {
   proposals,
   proposalShares,
   leads,
+  projects,
+  projectUpdates,
 } from "@/db/schema";
 import { eq, desc, and, asc, sql } from "drizzle-orm";
 import { getSessionUser } from "@/lib/supabase/auth-cache";
@@ -22,6 +24,8 @@ export type UserDefault = typeof userDefaults.$inferSelect;
 export type Proposal = typeof proposals.$inferSelect;
 export type ProposalShare = typeof proposalShares.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
+export type Project = typeof projects.$inferSelect;
+export type ProjectUpdate = typeof projectUpdates.$inferSelect;
 export type BuildingWithSqft = Building & { totalSqft: number };
 
 async function requireUser() {
@@ -706,6 +710,7 @@ async function respondToProposalShare(
       .select({
         share: proposalShares,
         bidId: proposals.bidId,
+        bidUserId: bids.userId,
         leadId: bids.leadId,
       })
       .from(proposalShares)
@@ -738,10 +743,39 @@ async function respondToProposalShare(
         .where(eq(leads.id, existing.leadId));
     }
 
+    let projectId: string | null = null;
+    if (outcome === "won") {
+      // Atomic create-on-accept. UNIQUE bid_id + ON CONFLICT DO NOTHING
+      // makes this idempotent under any race (e.g. share toggled and
+      // re-accepted). See PRD §5.5.
+      const inserted = await tx
+        .insert(projects)
+        .values({
+          bidId: existing.bidId,
+          userId: existing.bidUserId,
+          acceptedByName: updatedShare.acceptedByName,
+          acceptedByTitle: updatedShare.acceptedByTitle,
+          acceptedAt: updatedShare.acceptedAt,
+        })
+        .onConflictDoNothing({ target: projects.bidId })
+        .returning({ id: projects.id });
+      if (inserted[0]) {
+        projectId = inserted[0].id;
+      } else {
+        const existingProject = await tx
+          .select({ id: projects.id })
+          .from(projects)
+          .where(eq(projects.bidId, existing.bidId))
+          .limit(1);
+        projectId = existingProject[0]?.id ?? null;
+      }
+    }
+
     return {
       share: updatedShare,
       bidId: existing.bidId,
       leadId: existing.leadId ?? null,
+      projectId,
     };
   });
 }
@@ -767,10 +801,316 @@ export async function declineProposalShare(
   });
 }
 
+export async function getProjectByBidId(
+  bidId: string
+): Promise<Project | null> {
+  const user = await requireUser();
+  const rows = await db
+    .select()
+    .from(projects)
+    .where(and(eq(projects.bidId, bidId), eq(projects.userId, user.id)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export type ProjectWithBid = {
+  project: Project;
+  bid: Pick<
+    Bid,
+    | "id"
+    | "propertyName"
+    | "address"
+    | "clientName"
+    | "leadId"
+    | "status"
+  >;
+};
+
+export async function getProjects(): Promise<ProjectWithBid[]> {
+  const user = await requireUser();
+  return db
+    .select({
+      project: projects,
+      bid: {
+        id: bids.id,
+        propertyName: bids.propertyName,
+        address: bids.address,
+        clientName: bids.clientName,
+        leadId: bids.leadId,
+        status: bids.status,
+      },
+    })
+    .from(projects)
+    .innerJoin(bids, eq(bids.id, projects.bidId))
+    .where(eq(projects.userId, user.id))
+    .orderBy(desc(projects.updatedAt));
+}
+
+export async function getProject(id: string): Promise<ProjectWithBid | null> {
+  const user = await requireUser();
+  const rows = await db
+    .select({
+      project: projects,
+      bid: {
+        id: bids.id,
+        propertyName: bids.propertyName,
+        address: bids.address,
+        clientName: bids.clientName,
+        leadId: bids.leadId,
+        status: bids.status,
+      },
+    })
+    .from(projects)
+    .innerJoin(bids, eq(bids.id, projects.bidId))
+    .where(and(eq(projects.id, id), eq(projects.userId, user.id)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/**
+ * Allowed transitions per PRD §5.5 state machine.
+ *
+ *     not_started → in_progress → punch_out → complete ──┐
+ *                       ↓             ↑                  │
+ *                    on_hold ─────────┘                  │
+ *                       ↑                                │
+ *                       └──────── reopen ────────────────┘
+ *
+ * `on_hold` is reachable from any non-terminal state and exits back to
+ * `in_progress`. `complete` can be reopened to `punch_out` (typical:
+ * walk-list items resurface) or back to `in_progress` (substantive
+ * rework). Reopening clears `actual_end_date` so the next `complete`
+ * re-stamps it; `actual_start_date` is preserved.
+ */
+const PROJECT_STATUS_TRANSITIONS: Record<ProjectStatus, ProjectStatus[]> = {
+  not_started: ["in_progress", "on_hold"],
+  in_progress: ["punch_out", "on_hold"],
+  punch_out: ["complete", "on_hold"],
+  on_hold: ["in_progress"],
+  complete: ["punch_out", "in_progress"],
+};
+
+export function allowedProjectStatusTransitions(
+  current: ProjectStatus
+): ProjectStatus[] {
+  return PROJECT_STATUS_TRANSITIONS[current] ?? [];
+}
+
+export async function updateProjectStatus(
+  id: string,
+  next: ProjectStatus
+): Promise<Project | null> {
+  const user = await requireUser();
+  const existing = await db
+    .select()
+    .from(projects)
+    .where(and(eq(projects.id, id), eq(projects.userId, user.id)))
+    .limit(1);
+  const current = existing[0];
+  if (!current) return null;
+
+  if (current.status === next) return current;
+  const allowed = allowedProjectStatusTransitions(current.status);
+  if (!allowed.includes(next)) {
+    throw new Error(
+      `Invalid status transition: ${current.status} → ${next}`
+    );
+  }
+
+  const now = new Date();
+  const patch: Partial<typeof projects.$inferInsert> = {
+    status: next,
+    updatedAt: now,
+  };
+  // Auto-stamp actual_start_date the first time we enter in_progress.
+  if (next === "in_progress" && !current.actualStartDate) {
+    patch.actualStartDate = now;
+  }
+  // Auto-stamp actual_end_date the first time we enter complete.
+  if (next === "complete" && !current.actualEndDate) {
+    patch.actualEndDate = now;
+  }
+  // Reopen from complete clears actual_end_date so the next complete
+  // re-stamps it; actual_start_date is preserved through the reopen.
+  if (current.status === "complete" && next !== "complete") {
+    patch.actualEndDate = null;
+  }
+
+  const rows = await db
+    .update(projects)
+    .set(patch)
+    .where(and(eq(projects.id, id), eq(projects.userId, user.id)))
+    .returning();
+  return rows[0] ?? null;
+}
+
+export async function updateProjectDetails(
+  id: string,
+  data: {
+    targetStartDate: string | null;
+    targetEndDate: string | null;
+    assignedSub: string | null;
+    crewLeadName: string | null;
+    notes: string;
+  }
+): Promise<Project | null> {
+  const user = await requireUser();
+  const rows = await db
+    .update(projects)
+    .set({
+      targetStartDate: data.targetStartDate,
+      targetEndDate: data.targetEndDate,
+      assignedSub: data.assignedSub,
+      crewLeadName: data.crewLeadName,
+      notes: data.notes,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(projects.id, id), eq(projects.userId, user.id)))
+    .returning();
+  return rows[0] ?? null;
+}
+
+/**
+ * All updates for a project, newest first. Caller is responsible for
+ * having already confirmed the project belongs to the requesting user
+ * (typically via getProject()).
+ */
+export async function getProjectUpdates(
+  projectId: string
+): Promise<ProjectUpdate[]> {
+  return db
+    .select()
+    .from(projectUpdates)
+    .where(eq(projectUpdates.projectId, projectId))
+    .orderBy(desc(projectUpdates.createdAt));
+}
+
+export async function createProjectUpdate(
+  projectId: string,
+  data: { body: string; visibleOnPublicUrl: boolean }
+): Promise<ProjectUpdate> {
+  const user = await requireUser();
+  // Ownership check: only the project owner can append updates.
+  const owned = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.userId, user.id)))
+    .limit(1);
+  if (!owned[0]) throw new Error("Project not found");
+
+  const authorName = user.email ?? "Unknown";
+  const rows = await db
+    .insert(projectUpdates)
+    .values({
+      projectId,
+      authorType: "human",
+      authorName,
+      body: data.body,
+      visibleOnPublicUrl: data.visibleOnPublicUrl,
+    })
+    .returning();
+  // Touch the parent project so list-view ordering reflects activity.
+  await db
+    .update(projects)
+    .set({ updatedAt: new Date() })
+    .where(eq(projects.id, projectId));
+  return rows[0]!;
+}
+
+/**
+ * Public-facing project view for /p/[slug] post-acceptance. No user
+ * scoping — accessed via the share slug — but only returns the slim
+ * fields a property manager should see, and only opted-in updates.
+ */
+export type PublicProjectView = {
+  status: ProjectStatus;
+  targetStartDate: string | null;
+  targetEndDate: string | null;
+  actualStartDate: Date | null;
+  actualEndDate: Date | null;
+  assignedSub: string | null;
+  crewLeadName: string | null;
+  acceptedByName: string | null;
+  acceptedByTitle: string | null;
+  acceptedAt: Date | null;
+  updates: Array<
+    Pick<ProjectUpdate, "id" | "body" | "authorName" | "createdAt">
+  >;
+};
+
+/**
+ * Slugs for every proposal share tied to a given bid. Used to fan out
+ * revalidatePath() calls when project state that the public page
+ * surfaces (status, public updates) changes.
+ */
+export async function getShareSlugsForBid(bidId: string): Promise<string[]> {
+  const rows = await db
+    .select({ id: proposalShares.id })
+    .from(proposalShares)
+    .innerJoin(proposals, eq(proposalShares.proposalId, proposals.id))
+    .where(eq(proposals.bidId, bidId));
+  return rows.map((r) => r.id);
+}
+
+export async function getPublicProjectByBidId(
+  bidId: string
+): Promise<PublicProjectView | null> {
+  const projectRows = await db
+    .select({
+      id: projects.id,
+      status: projects.status,
+      targetStartDate: projects.targetStartDate,
+      targetEndDate: projects.targetEndDate,
+      actualStartDate: projects.actualStartDate,
+      actualEndDate: projects.actualEndDate,
+      assignedSub: projects.assignedSub,
+      crewLeadName: projects.crewLeadName,
+      acceptedByName: projects.acceptedByName,
+      acceptedByTitle: projects.acceptedByTitle,
+      acceptedAt: projects.acceptedAt,
+    })
+    .from(projects)
+    .where(eq(projects.bidId, bidId))
+    .limit(1);
+  const project = projectRows[0];
+  if (!project) return null;
+
+  const updates = await db
+    .select({
+      id: projectUpdates.id,
+      body: projectUpdates.body,
+      authorName: projectUpdates.authorName,
+      createdAt: projectUpdates.createdAt,
+    })
+    .from(projectUpdates)
+    .where(
+      and(
+        eq(projectUpdates.projectId, project.id),
+        eq(projectUpdates.visibleOnPublicUrl, true)
+      )
+    )
+    .orderBy(desc(projectUpdates.createdAt));
+
+  return {
+    status: project.status,
+    targetStartDate: project.targetStartDate,
+    targetEndDate: project.targetEndDate,
+    actualStartDate: project.actualStartDate,
+    actualEndDate: project.actualEndDate,
+    assignedSub: project.assignedSub,
+    crewLeadName: project.crewLeadName,
+    acceptedByName: project.acceptedByName,
+    acceptedByTitle: project.acceptedByTitle,
+    acceptedAt: project.acceptedAt,
+    updates,
+  };
+}
+
 // ── Status count aggregates (cheap GROUP BY for dashboard) ──
 
 export type BidStatus = (typeof bids.$inferSelect)["status"];
 export type LeadStatus = (typeof leads.$inferSelect)["status"];
+export type ProjectStatus = (typeof projects.$inferSelect)["status"];
 
 export type BidStatusCounts = {
   total: number;
@@ -786,6 +1126,19 @@ export type LeadStatusCounts = {
   quoted: number;
   won: number;
   lost: number;
+};
+
+export type ProjectStatusCounts = {
+  total: number;
+  not_started: number;
+  in_progress: number;
+  punch_out: number;
+  complete: number;
+  on_hold: number;
+  /** Anything not in `complete` — the contractor's "still working it" set. */
+  active: number;
+  /** Active projects whose `target_end_date` is in the past. */
+  overdue: number;
 };
 
 export async function getBidStatusCounts(): Promise<BidStatusCounts> {
@@ -804,6 +1157,42 @@ export async function getBidStatusCounts(): Promise<BidStatusCounts> {
     const n = Number(row.count);
     if (row.status in counts) counts[row.status as BidStatus] = n;
     counts.total += n;
+  }
+  return counts;
+}
+
+export async function getProjectStatusCounts(): Promise<ProjectStatusCounts> {
+  const user = await requireUser();
+  // Single GROUP BY round trip — counts per status, plus a count of
+  // overdue rows in the same row (active + target_end_date < today).
+  const rows = await db
+    .select({
+      status: projects.status,
+      count: sql<number>`count(*)::int`,
+      overdue: sql<number>`count(*) filter (where ${projects.targetEndDate} is not null and ${projects.targetEndDate} < current_date and ${projects.status} <> 'complete')::int`,
+    })
+    .from(projects)
+    .where(eq(projects.userId, user.id))
+    .groupBy(projects.status);
+
+  const counts: ProjectStatusCounts = {
+    total: 0,
+    not_started: 0,
+    in_progress: 0,
+    punch_out: 0,
+    complete: 0,
+    on_hold: 0,
+    active: 0,
+    overdue: 0,
+  };
+  for (const row of rows) {
+    const n = Number(row.count);
+    if (row.status in counts) {
+      counts[row.status as ProjectStatus] = n;
+    }
+    counts.total += n;
+    if (row.status !== "complete") counts.active += n;
+    counts.overdue += Number(row.overdue);
   }
   return counts;
 }

@@ -26,6 +26,11 @@ import {
   getLead,
   acceptProposalShare,
   declineProposalShare,
+  getProject,
+  updateProjectStatus,
+  updateProjectDetails,
+  createProjectUpdate,
+  getShareSlugsForBid,
 } from "./store";
 import { parseCsv, autoMapColumns, mapRowsToLeads } from "./leads/csv";
 import {
@@ -57,6 +62,9 @@ import {
   importLeadsSchema,
   updateLeadStatusSchema,
   enrichLeadActionSchema,
+  updateProjectStatusSchema,
+  updateProjectDetailsSchema,
+  createProjectUpdateSchema,
 } from "./validations";
 import { calculateBidPricing } from "./pricing";
 import type { ProposalSnapshot } from "./pdf/types";
@@ -611,5 +619,69 @@ export async function enrichLeadAction(formData: FormData) {
   await runEnrichmentForLead(lead);
   revalidatePath(`/leads/${lead.id}`);
   revalidatePath("/leads");
+}
+
+// ── Projects ──
+
+async function revalidateProjectAndShares(
+  projectId: string,
+  bidId: string
+): Promise<void> {
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/projects");
+  revalidatePath(`/bids/${bidId}`);
+  const slugs = await getShareSlugsForBid(bidId);
+  for (const slug of slugs) {
+    revalidatePath(`/p/${slug}`);
+  }
+}
+
+export async function updateProjectStatusAction(formData: FormData) {
+  const result = updateProjectStatusSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    throw new Error(result.error.issues[0]?.message ?? "Invalid input");
+  }
+  const projectWithBid = await getProject(result.data.id);
+  if (!projectWithBid) throw new Error("Project not found");
+  await updateProjectStatus(result.data.id, result.data.status);
+  await revalidateProjectAndShares(result.data.id, projectWithBid.bid.id);
+}
+
+export async function updateProjectDetailsAction(formData: FormData) {
+  const result = updateProjectDetailsSchema.safeParse(
+    formDataToObject(formData)
+  );
+  if (!result.success) {
+    throw new Error(result.error.issues[0]?.message ?? "Invalid input");
+  }
+  const projectWithBid = await getProject(result.data.id);
+  if (!projectWithBid) throw new Error("Project not found");
+  await updateProjectDetails(result.data.id, {
+    targetStartDate: result.data.targetStartDate,
+    targetEndDate: result.data.targetEndDate,
+    assignedSub: result.data.assignedSub,
+    crewLeadName: result.data.crewLeadName,
+    notes: result.data.notes,
+  });
+  await revalidateProjectAndShares(result.data.id, projectWithBid.bid.id);
+}
+
+export async function createProjectUpdateAction(formData: FormData) {
+  const result = createProjectUpdateSchema.safeParse(
+    formDataToObject(formData)
+  );
+  if (!result.success) {
+    throw new Error(result.error.issues[0]?.message ?? "Invalid input");
+  }
+  const projectWithBid = await getProject(result.data.projectId);
+  if (!projectWithBid) throw new Error("Project not found");
+  await createProjectUpdate(result.data.projectId, {
+    body: result.data.body,
+    visibleOnPublicUrl: result.data.visibleOnPublicUrl,
+  });
+  await revalidateProjectAndShares(
+    result.data.projectId,
+    projectWithBid.bid.id
+  );
 }
 

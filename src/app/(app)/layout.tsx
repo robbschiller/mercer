@@ -21,7 +21,9 @@ export default async function AppLayout({
       <SidebarInset>
         <header className="flex h-14 items-center gap-2 border-b px-4 md:hidden">
           <SidebarTrigger />
-          <span className="font-semibold">Mercer</span>
+          <span className="font-display text-lg font-medium tracking-tight">
+            Mercer
+          </span>
         </header>
         {children}
       </SidebarInset>

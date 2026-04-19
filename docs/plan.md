@@ -24,7 +24,7 @@ These rows connect **near-term repo work** to **PRD sections**. “Next” is su
 | Capture & takeoff | 5.2 | Manual bid flow: buildings, surfaces, pricing, PDF proposal | PRD **Milestone 1**: mobile capture + vision-based takeoff agent with confidence-scored draft, form as edit surface, graceful fallback to manual. Not started. |
 | Scope reconciliation | 5.3 | — | PRD **Milestone 2**: structured scope object with `source_type`/`source_ref`, spec-PDF parsing, customer-request ingestion, `scope_flag` UI, reconciliation agent. Not started. |
 | Proposal as live surface | 5.4 | Public `/p/[slug]`, accept/decline, share link, status propagation | PRD **Milestone 4**: hover-to-source, structured comments, scope-change requests handled by a **negotiation agent**, property-manager-facing status page post-acceptance. Property Manager (PRD §3) is the load-bearing customer-of-the-customer. |
-| Project layer | 5.5 | — | Phase 1 narrow slice per PRD §5.5: auto-create project on accept, status / dates / sub / notes, proposal URL becomes project status page. Not started. Ops-layer agents (expense reconciliation, change orders, punch-lists, paint guides) are Milestone 5. |
+| Project layer | 5.5 / 6.3 | **Slice 1** — `projects` table, atomic create-on-accept transaction, "Project created" signal on bid detail. **Slice 2** — `/projects/[id]` detail page with status state machine UI (auto-stamps `actual_start_date` / `actual_end_date`, reopen from `complete` clears `actual_end_date`), target-date / assigned-sub / crew-lead / notes editing. **Slice 3** — `/projects` list view with status filters; `project_updates` table + feed UI on the project detail page; `/p/[slug]` pivots to a status-page render post-acceptance with `visible_on_public_url` filter for what the property manager sees. | Ops-layer agents (expense reconciliation, change orders, punch-lists, paint guides) remain Milestone 5. Future polish: project-level dashboard rollup (timeline / overdue), automatic update authoring from agents (`crew_auto`, `agent` author types reserved in schema). |
 | Pipeline & reporting | 5.6 | Dashboard funnel, drill-downs, proposal-based $ | NL query surface deferred. **Qualified** stage naming vs app’s lead statuses: reconcile when qualification agent ships. |
 
 ---
@@ -100,6 +100,9 @@ Tracked here so the plan is honest about what must resolve before the AI-native 
 - **Phase D** — `/p/[slug]`, proposal shares, accept/decline, bid/lead status propagation, share + copy link on bid detail.
 - **Phase E** — Pipeline on **`/dashboard`** (funnel, source filter, `/leads` drill-down with `?status=` / `?source=`), proposal-based open vs won dollars.
 - **Phase F** — (nothing checked yet — see Open now.)
+- **Project layer Slice 1** — `projects` table + `008_projects.sql` migration, `PROJECT_STATUSES` + helpers, atomic create-on-accept inside `respondToProposalShare` (`ON CONFLICT DO NOTHING` on `bid_id`), `getProjectByBidId`, "Project created" badge on the bid detail page.
+- **Project layer Slice 2** — `/projects/[id]` route, status state-machine UI with `actual_*` auto-stamping (and `complete → punch_out / in_progress` reopen that clears `actual_end_date`), target-date / assigned-sub / crew-lead / notes editing, "Open project" link from the bid detail page.
+- **Project layer Slice 3** — `/projects` list view with status filters + sidebar nav entry, `project_updates` table + `009_project_updates.sql` migration, append-only feed on the project detail page with per-entry `visible_on_public_url` opt-in, `/p/[slug]` pivots to a status-page render post-acceptance (status, schedule, on-site, public updates, original-proposal summary).
 - **Infra** — Next.js 16, `src/proxy.ts`, [`AGENTS.md`](../AGENTS.md).
 
 ---

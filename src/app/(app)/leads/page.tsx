@@ -69,13 +69,15 @@ export default async function LeadsPage({
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-4 gap-3">
-        <h1 className="text-2xl font-bold">Leads</h1>
+        <h1 className="font-display text-3xl font-medium tracking-tight">
+          Leads
+        </h1>
         <div className="flex items-center gap-2">
           <ViewModeToggle current={view} />
           <Button variant="outline" asChild>
             <Link href="/leads/import">Import CSV</Link>
           </Button>
-          <Button asChild>
+          <Button variant="amber" asChild>
             <Link href="/leads/new">New lead</Link>
           </Button>
         </div>

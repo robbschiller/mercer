@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, JetBrains_Mono } from "next/font/google";
+import { Fraunces, Geist, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AnalyticsLoader } from "@/components/analytics-loader";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -14,6 +14,13 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-jetbrains",
   display: "swap",
+});
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-fraunces",
+  display: "swap",
+  axes: ["SOFT", "WONK", "opsz"],
 });
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://mercer-bids.vercel.app";
@@ -60,7 +67,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geist.variable} ${jetbrainsMono.variable} font-sans antialiased`}
+        className={`${geist.variable} ${jetbrainsMono.variable} ${fraunces.variable} font-sans antialiased`}
       >
         <ThemeProvider
           attribute="class"
