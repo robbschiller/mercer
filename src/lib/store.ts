@@ -942,3 +942,62 @@ export async function getLeadSourceTags(): Promise<string[]> {
     .filter((t): t is string => !!t)
     .sort();
 }
+
+/** Dollar amounts from latest proposal snapshot per bid (`grandTotal`), optional lead source filter. */
+export type DashboardPipelineFinances = {
+  /** Open work: bids still in play (draft or sent). */
+  openPipelineUsd: number;
+  /** Closed-won bids (deal value from latest proposal). */
+  wonBookedUsd: number;
+};
+
+export async function getDashboardPipelineFinances(options?: {
+  sourceTag?: string | null;
+}): Promise<DashboardPipelineFinances> {
+  const user = await requireUser();
+  const tag = options?.sourceTag?.trim() || null;
+  const sourceFilter = tag ? sql`AND l.source_tag = ${tag}` : sql``;
+
+  const parseTotal = (rows: unknown): number => {
+    const list = rows as { total?: string }[];
+    const raw = list[0]?.total ?? "0";
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const [openRows, wonRows] = await Promise.all([
+    db.execute(sql`
+      WITH latest AS (
+        SELECT DISTINCT ON (p.bid_id)
+          (p.snapshot->>'grandTotal')::numeric AS gt
+        FROM proposals p
+        INNER JOIN bids b ON b.id = p.bid_id
+        LEFT JOIN leads l ON l.id = b.lead_id
+        WHERE b.user_id = ${user.id}
+          AND b.status IN ('draft', 'sent')
+          ${sourceFilter}
+        ORDER BY p.bid_id, p.created_at DESC
+      )
+      SELECT COALESCE(SUM(gt), 0)::text AS total FROM latest WHERE gt IS NOT NULL
+    `),
+    db.execute(sql`
+      WITH latest AS (
+        SELECT DISTINCT ON (p.bid_id)
+          (p.snapshot->>'grandTotal')::numeric AS gt
+        FROM proposals p
+        INNER JOIN bids b ON b.id = p.bid_id
+        LEFT JOIN leads l ON l.id = b.lead_id
+        WHERE b.user_id = ${user.id}
+          AND b.status = 'won'
+          ${sourceFilter}
+        ORDER BY p.bid_id, p.created_at DESC
+      )
+      SELECT COALESCE(SUM(gt), 0)::text AS total FROM latest WHERE gt IS NOT NULL
+    `),
+  ]);
+
+  return {
+    openPipelineUsd: parseTotal(openRows),
+    wonBookedUsd: parseTotal(wonRows),
+  };
+}

@@ -34,6 +34,16 @@ const enrichmentLabels: Record<string, string> = {
   skipped: "Skipped",
 };
 
+const LEAD_STATUSES = ["new", "quoted", "won", "lost"] as const;
+type LeadFilterStatus = (typeof LEAD_STATUSES)[number];
+
+function parseLeadStatus(value: string | undefined): LeadFilterStatus | null {
+  if (!value) return null;
+  return LEAD_STATUSES.includes(value as LeadFilterStatus)
+    ? (value as LeadFilterStatus)
+    : null;
+}
+
 function enrichmentClass(status: Lead["enrichmentStatus"]): string {
   switch (status) {
     case "success":
@@ -52,17 +62,24 @@ function enrichmentClass(status: Lead["enrichmentStatus"]): string {
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ source?: string; imported?: string; view?: string }>;
+  searchParams: Promise<{
+    source?: string;
+    imported?: string;
+    view?: string;
+    status?: string;
+  }>;
 }) {
-  const { source, imported, view: viewParam } = await searchParams;
+  const { source, imported, view: viewParam, status: statusParam } =
+    await searchParams;
   const view = parseViewMode(viewParam);
+  const statusFilter = parseLeadStatus(statusParam);
   const [leads, sourceTags] = await Promise.all([
     getLeads(),
     getLeadSourceTags(),
   ]);
-  const filtered = source
-    ? leads.filter((l) => l.sourceTag === source)
-    : leads;
+  const filtered = leads
+    .filter((l) => !source || l.sourceTag === source)
+    .filter((l) => !statusFilter || l.status === statusFilter);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -86,24 +103,50 @@ export default async function LeadsPage({
         </div>
       )}
 
-      {sourceTags.length > 0 && (
-        <div className="mb-4 flex items-center gap-2 flex-wrap text-sm">
-          <span className="text-muted-foreground">Source:</span>
+      <div className="mb-4 flex flex-col gap-3">
+        {sourceTags.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap text-sm">
+            <span className="text-muted-foreground">Source:</span>
+            <SourceChip
+              label="All"
+              active={!source}
+              href={buildLeadsHref({ source: null, view, status: statusFilter })}
+            />
+            {sourceTags.map((tag) => (
+              <SourceChip
+                key={tag}
+                label={tag}
+                active={source === tag}
+                href={buildLeadsHref({ source: tag, view, status: statusFilter })}
+              />
+            ))}
+          </div>
+        )}
+        <div className="flex items-center gap-2 flex-wrap text-sm">
+          <span className="text-muted-foreground">Status:</span>
           <SourceChip
             label="All"
-            active={!source}
-            href={buildLeadsHref({ source: null, view })}
+            active={!statusFilter}
+            href={buildLeadsHref({
+              source: source ?? null,
+              view,
+              status: null,
+            })}
           />
-          {sourceTags.map((tag) => (
+          {(LEAD_STATUSES as readonly LeadFilterStatus[]).map((st) => (
             <SourceChip
-              key={tag}
-              label={tag}
-              active={source === tag}
-              href={buildLeadsHref({ source: tag, view })}
+              key={st}
+              label={statusLabels[st]}
+              active={statusFilter === st}
+              href={buildLeadsHref({
+                source: source ?? null,
+                view,
+                status: st,
+              })}
             />
           ))}
         </div>
-      )}
+      </div>
 
       {filtered.length === 0 ? (
         <Card>
@@ -137,13 +180,16 @@ export default async function LeadsPage({
 function buildLeadsHref({
   source,
   view,
+  status,
 }: {
   source: string | null;
   view: "cards" | "table";
+  status: LeadFilterStatus | null;
 }): string {
   const params = new URLSearchParams();
   if (source) params.set("source", source);
   if (view === "table") params.set("view", view);
+  if (status) params.set("status", status);
   const qs = params.toString();
   return qs ? `/leads?${qs}` : "/leads";
 }

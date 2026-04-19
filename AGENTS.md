@@ -10,8 +10,9 @@ This file keeps human contributors and AI agents aligned on Mercer.
 
 ## Source Of Truth
 
-- **Strategy, roadmap, and live to-do list: `docs/plan.md` → "Active Work".** This is the single source of truth for what is shipped, what is open, what is paused, and what is blocked on decisions from the team. Do not duplicate status here.
-- Session-by-session log of how work got done: `docs/worklog.md`.
+- **Product requirements and vision: `docs/prd.md`.** Strategy, positioning, full scope, milestones, and AI principles.
+- **Execution tracker (shipped / open / paused / decisions): `docs/plan.md` → "Active work".** Single source of truth for current engineering status. Do not duplicate status across docs.
+- Session-by-session log: `docs/worklog.md`.
 - This operating guide: `AGENTS.md`.
 - Database schema: `src/db/schema.ts`. Manual migrations: `drizzle/manual/*.sql`.
 
@@ -19,13 +20,13 @@ If this file and another doc conflict, update the docs in the same PR and call i
 
 ## Team Workflow (Two Contributors)
 
-1. Keep one primary priority at a time. Pull it from `docs/plan.md` → "Active Work → Open now."
-2. Start each session by reading `AGENTS.md` then `docs/plan.md` → "Active Work."
+1. Keep one primary priority at a time. Pull it from `docs/plan.md` → "Active work → Open now."
+2. Start each session by reading `AGENTS.md`, then `docs/plan.md` → "Active work" (and skim `docs/prd.md` when the change touches product scope).
 3. Before coding, state:
    - what you are changing
    - why now
    - which roadmap checkbox it maps to (quote the line from `docs/plan.md`)
-4. When a checkbox flips, update `docs/plan.md` in the same PR. Move the item out of "Open now" into "Shipped" (or update its state in the phase section below).
+4. When a checkbox flips, update `docs/plan.md` in the same PR. Move the item out of "Open now" into "Shipped" (and adjust the PRD alignment table if the capability meaningfully changed).
 5. End each working block with a handoff note (template below).
 
 ## Handoff Template (Required)
@@ -78,5 +79,5 @@ A task is not done unless all applicable items pass:
 
 Use this at the top of a new AI session:
 
-"Read `AGENTS.md`, then `docs/plan.md` → 'Active Work' section. Summarize the live state (shipped, open, paused, decisions needed) in 6 bullets max, pick the highest-leverage item from 'Open now', and implement it with verification. Update the matching checkbox in `docs/plan.md` in the same PR."
+"Read `AGENTS.md`, then `docs/plan.md` → 'Active work'. Summarize the live state (shipped, open, paused, decisions needed) in 6 bullets max, pick the highest-leverage item from 'Open now', and implement it with verification. Update the matching checkbox in `docs/plan.md` in the same PR."
 
