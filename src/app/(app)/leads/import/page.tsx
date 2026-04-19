@@ -29,14 +29,42 @@ export default async function ImportLeadsPage({
           ← Leads
         </Link>
       </div>
+      <div className="mb-6 rounded-lg border bg-muted/30 p-4">
+        <p className="text-sm font-medium">First time here?</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Drop in a trade-show attendee list, tag the source, and you&apos;ll
+          land on the leads page with one row per contact. Nothing is sent to
+          anyone, you can always delete or re-import.
+        </p>
+        <ol className="mt-3 flex flex-col gap-1 text-xs text-muted-foreground">
+          <li>
+            <span className="font-medium text-foreground">1. Upload</span>
+            {" — "}pick a .csv saved from Excel, Google Sheets, or your
+            badge-scan export.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">2. Auto-map</span>
+            {" — "}we detect the usual columns, no manual mapping step.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">
+              3. Enrich where we can
+            </span>
+            {" — "}we look up the company&apos;s office address via Google
+            Places. Coverage is partial, don&apos;t expect every row to
+            resolve.
+          </li>
+        </ol>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle>Import leads from CSV</CardTitle>
           <CardDescription>
-            Upload a trade show attendee list. We&apos;ll auto-map the columns
-            (Name, Email, Phone, Company, Property) and look up each
-            company&apos;s office address via Google Places so you have context
-            before you reach out.
+            Only <code>name</code> is required. We&apos;ll look for{" "}
+            <code>email</code>, <code>phone</code>, <code>company</code>, and{" "}
+            <code>property</code> (or common variants) and keep anything else
+            in the row as raw data on the lead.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -83,12 +111,13 @@ export default async function ImportLeadsPage({
               <ul className="list-disc pl-4 space-y-0.5">
                 <li>Rows without a name are skipped</li>
                 <li>
-                  Each row&apos;s office address is resolved via Google Places
-                  using <code>company</code> (plus <code>property</code> if
-                  present)
+                  Office-address lookup runs inline via Google Places when a{" "}
+                  <code>company</code> is present. Many attendee lists
+                  won&apos;t resolve cleanly, that&apos;s expected.
                 </li>
                 <li>
-                  Enrichment runs inline — expect a brief wait on large imports
+                  You&apos;ll land on the leads page with a confirmation
+                  banner, enrichment status shows per row.
                 </li>
               </ul>
             </div>
