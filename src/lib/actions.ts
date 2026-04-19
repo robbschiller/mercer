@@ -602,9 +602,21 @@ export async function importLeadsAction(formData: FormData) {
 export async function updateLeadStatusAction(formData: FormData) {
   const result = updateLeadStatusSchema.safeParse(formDataToObject(formData));
   if (!result.success) {
-    throw new Error(result.error.issues[0]?.message ?? "Invalid input");
+    const id = (formData.get("id") as string) || "";
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(
+      id
+        ? `/leads/${id}?error=${encodeURIComponent(message)}`
+        : `/leads?error=${encodeURIComponent(message)}`
+    );
   }
-  await updateLeadStatus(result.data.id, result.data.status);
+  try {
+    await updateLeadStatus(result.data.id, result.data.status);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to update lead status";
+    redirect(`/leads/${result.data.id}?error=${encodeURIComponent(message)}`);
+  }
   revalidatePath("/leads");
   revalidatePath(`/leads/${result.data.id}`);
 }
@@ -612,11 +624,25 @@ export async function updateLeadStatusAction(formData: FormData) {
 export async function enrichLeadAction(formData: FormData) {
   const result = enrichLeadActionSchema.safeParse(formDataToObject(formData));
   if (!result.success) {
-    throw new Error(result.error.issues[0]?.message ?? "Invalid input");
+    const id = (formData.get("id") as string) || "";
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(
+      id
+        ? `/leads/${id}?error=${encodeURIComponent(message)}`
+        : `/leads?error=${encodeURIComponent(message)}`
+    );
   }
   const lead = await getLead(result.data.id);
-  if (!lead) throw new Error("Lead not found");
-  await runEnrichmentForLead(lead);
+  if (!lead) {
+    redirect(`/leads?error=${encodeURIComponent("Lead not found")}`);
+  }
+  try {
+    await runEnrichmentForLead(lead);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Enrichment failed";
+    redirect(`/leads/${lead.id}?error=${encodeURIComponent(message)}`);
+  }
   revalidatePath(`/leads/${lead.id}`);
   revalidatePath("/leads");
 }
@@ -636,14 +662,30 @@ async function revalidateProjectAndShares(
   }
 }
 
+function projectErrorRedirect(id: string | null, message: string): never {
+  const target = id
+    ? `/projects/${id}?error=${encodeURIComponent(message)}`
+    : `/projects?error=${encodeURIComponent(message)}`;
+  redirect(target);
+}
+
 export async function updateProjectStatusAction(formData: FormData) {
   const result = updateProjectStatusSchema.safeParse(formDataToObject(formData));
   if (!result.success) {
-    throw new Error(result.error.issues[0]?.message ?? "Invalid input");
+    projectErrorRedirect(
+      (formData.get("id") as string) || null,
+      result.error.issues[0]?.message ?? "Invalid input"
+    );
   }
   const projectWithBid = await getProject(result.data.id);
-  if (!projectWithBid) throw new Error("Project not found");
-  await updateProjectStatus(result.data.id, result.data.status);
+  if (!projectWithBid) projectErrorRedirect(null, "Project not found");
+  try {
+    await updateProjectStatus(result.data.id, result.data.status);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to update project status";
+    projectErrorRedirect(result.data.id, message);
+  }
   await revalidateProjectAndShares(result.data.id, projectWithBid.bid.id);
 }
 
@@ -652,17 +694,26 @@ export async function updateProjectDetailsAction(formData: FormData) {
     formDataToObject(formData)
   );
   if (!result.success) {
-    throw new Error(result.error.issues[0]?.message ?? "Invalid input");
+    projectErrorRedirect(
+      (formData.get("id") as string) || null,
+      result.error.issues[0]?.message ?? "Invalid input"
+    );
   }
   const projectWithBid = await getProject(result.data.id);
-  if (!projectWithBid) throw new Error("Project not found");
-  await updateProjectDetails(result.data.id, {
-    targetStartDate: result.data.targetStartDate,
-    targetEndDate: result.data.targetEndDate,
-    assignedSub: result.data.assignedSub,
-    crewLeadName: result.data.crewLeadName,
-    notes: result.data.notes,
-  });
+  if (!projectWithBid) projectErrorRedirect(null, "Project not found");
+  try {
+    await updateProjectDetails(result.data.id, {
+      targetStartDate: result.data.targetStartDate,
+      targetEndDate: result.data.targetEndDate,
+      assignedSub: result.data.assignedSub,
+      crewLeadName: result.data.crewLeadName,
+      notes: result.data.notes,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to save project details";
+    projectErrorRedirect(result.data.id, message);
+  }
   await revalidateProjectAndShares(result.data.id, projectWithBid.bid.id);
 }
 
@@ -671,14 +722,23 @@ export async function createProjectUpdateAction(formData: FormData) {
     formDataToObject(formData)
   );
   if (!result.success) {
-    throw new Error(result.error.issues[0]?.message ?? "Invalid input");
+    projectErrorRedirect(
+      (formData.get("projectId") as string) || null,
+      result.error.issues[0]?.message ?? "Invalid input"
+    );
   }
   const projectWithBid = await getProject(result.data.projectId);
-  if (!projectWithBid) throw new Error("Project not found");
-  await createProjectUpdate(result.data.projectId, {
-    body: result.data.body,
-    visibleOnPublicUrl: result.data.visibleOnPublicUrl,
-  });
+  if (!projectWithBid) projectErrorRedirect(null, "Project not found");
+  try {
+    await createProjectUpdate(result.data.projectId, {
+      body: result.data.body,
+      visibleOnPublicUrl: result.data.visibleOnPublicUrl,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to post update";
+    projectErrorRedirect(result.data.projectId, message);
+  }
   await revalidateProjectAndShares(
     result.data.projectId,
     projectWithBid.bid.id

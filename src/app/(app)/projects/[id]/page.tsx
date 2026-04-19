@@ -80,10 +80,12 @@ function formatDateTime(value: Date | string | null): string {
 
 export default async function ProjectPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
-  const { id } = await params;
+  const [{ id }, { error }] = await Promise.all([params, searchParams]);
   const data = await getProject(id);
   if (!data) notFound();
 
@@ -99,12 +101,18 @@ export default async function ProjectPage({
         </Button>
       </div>
 
+      {error && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
       <header className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-xs uppercase tracking-wide text-muted-foreground">
             Project
           </p>
-          <h1 className="font-display text-3xl font-medium tracking-tight">
+          <h1 className="text-3xl font-medium tracking-tight">
             {bid.propertyName}
           </h1>
           {bid.address && (

@@ -69,7 +69,7 @@ export default async function LeadsPage({
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-4 gap-3">
-        <h1 className="font-display text-3xl font-medium tracking-tight">
+        <h1 className="text-3xl font-medium tracking-tight">
           Leads
         </h1>
         <div className="flex items-center gap-2">
@@ -138,21 +138,36 @@ export default async function LeadsPage({
 
       {filtered.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center gap-4 py-12">
-            <p className="text-muted-foreground">
-              {source
-                ? `No leads with source "${source}".`
-                : "No leads yet."}
-            </p>
-            {!source && (
-              <div className="flex items-center gap-2">
-                <Button asChild>
-                  <Link href="/leads/import">Import a CSV</Link>
-                </Button>
+          <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
+            {source || statusFilter ? (
+              <>
+                <p className="text-muted-foreground">
+                  {emptyFilteredMessage({ source, statusFilter, totalLeads: leads.length })}
+                </p>
                 <Button variant="outline" asChild>
-                  <Link href="/leads/new">Add a single lead</Link>
+                  <Link
+                    href={buildLeadsHref({ source: null, view, status: null })}
+                  >
+                    Clear filters
+                  </Link>
                 </Button>
-              </div>
+              </>
+            ) : (
+              <>
+                <p className="text-muted-foreground">No leads yet.</p>
+                <p className="max-w-sm text-sm text-muted-foreground/80">
+                  Import a CSV from a trade-show list, or add a single lead to
+                  start your pipeline.
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button asChild>
+                    <Link href="/leads/import">Import a CSV</Link>
+                  </Button>
+                  <Button variant="outline" asChild>
+                    <Link href="/leads/new">Add a single lead</Link>
+                  </Button>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
@@ -163,6 +178,23 @@ export default async function LeadsPage({
       )}
     </div>
   );
+}
+
+function emptyFilteredMessage({
+  source,
+  statusFilter,
+  totalLeads,
+}: {
+  source: string | undefined;
+  statusFilter: LeadFilterStatus | null;
+  totalLeads: number;
+}): string {
+  if (totalLeads === 0) return "No leads yet.";
+  const parts: string[] = [];
+  if (statusFilter) parts.push(`status "${leadStatusLabel(statusFilter)}"`);
+  if (source) parts.push(`source "${source}"`);
+  if (parts.length === 0) return "No leads match the current filters.";
+  return `No leads match ${parts.join(" and ")}.`;
 }
 
 function buildLeadsHref({

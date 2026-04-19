@@ -49,7 +49,7 @@ export default async function BidsPage({
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6 gap-3">
-        <h1 className="font-display text-3xl font-medium tracking-tight">
+        <h1 className="text-3xl font-medium tracking-tight">
           Bids
         </h1>
         <div className="flex items-center gap-2">

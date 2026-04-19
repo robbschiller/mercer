@@ -20,10 +20,12 @@ import {
 
 export default async function LeadDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
-  const { id } = await params;
+  const [{ id }, { error }] = await Promise.all([params, searchParams]);
   const [lead, linkedBid] = await Promise.all([
     getLead(id),
     getLatestBidForLead(id),
@@ -46,9 +48,15 @@ export default async function LeadDetailPage({
         </Link>
       </div>
 
+      {error && (
+        <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/5 px-4 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
       <div className="flex items-start justify-between gap-4 mb-6">
         <div>
-          <h1 className="font-display text-3xl font-medium tracking-tight">
+          <h1 className="text-3xl font-medium tracking-tight">
             {lead.name}
           </h1>
           {(lead.company || lead.propertyName) && (

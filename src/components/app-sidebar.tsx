@@ -20,7 +20,7 @@ export function AppSidebar({ userEmail }: { userEmail: string }) {
         <div className="flex items-center gap-1 px-2 py-1.5 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center">
           <Link
             href="/dashboard"
-            className="flex flex-1 items-center gap-2 font-bold text-lg group-data-[collapsible=icon]:hidden"
+            className="flex flex-1 items-center gap-2 font-display font-bold text-lg group-data-[collapsible=icon]:hidden"
           >
             Mercer
           </Link>

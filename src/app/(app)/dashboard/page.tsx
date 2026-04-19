@@ -68,7 +68,7 @@ export default async function DashboardPage({
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6 flex items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-medium tracking-tight">
+          <h1 className="text-3xl font-medium tracking-tight">
             Dashboard
           </h1>
           <p className="text-sm text-muted-foreground">
