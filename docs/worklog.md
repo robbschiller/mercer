@@ -41,7 +41,7 @@ These are real wins but each needs its own focused PR:
 
 ### Next
 
-Highest leverage remaining items in *Open now* (per `docs/plan.md`): Phase F demo polish + Phase D2 `mailto:` shortcut. Perf/DX work above does not flip any plan checkboxes; the plan file already abstracts perf work behind the milestone roadmap.
+Highest leverage remaining item in *Open now* (per `docs/plan.md`) is Phase F demo polish. Perf/DX work above does not flip any plan checkboxes; the plan file already abstracts perf work behind the milestone roadmap.
 
 ---
 
@@ -76,7 +76,7 @@ AGENTS.md had its own "What Is Shipped" / "What Is Still Open" lists that duplic
 
 ### Next
 
-Next candidate in "Open now" is **Phase E — /pipeline funnel page**. Phase F demo polish and Phase D2 mailto: are smaller follow-ups.
+Next candidate in "Open now" is **Phase E — /pipeline funnel page**. Phase F demo polish is the smaller follow-up.
 
 ---
 

@@ -23,7 +23,7 @@ These rows connect **near-term repo work** to **PRD sections**. “Next” is su
 | Lead capture & qualification | 5.1 | CSV import, mapping, source tags, Places enrichment, lead list/detail, statuses, manual address override | PRD wants a **qualification agent**: portfolio resolution, public-data pull, paint-timing score, generated brief, confidence-scored ranking (`qualification_score`, `qualification_brief`, `agent_run_id`). Today’s enrichment is Places/satellite only. |
 | Capture & takeoff | 5.2 | Manual bid flow: buildings, surfaces, pricing, PDF proposal | PRD **Milestone 1**: mobile capture + vision-based takeoff agent with confidence-scored draft, form as edit surface, graceful fallback to manual. Not started. |
 | Scope reconciliation | 5.3 | — | PRD **Milestone 2**: structured scope object with `source_type`/`source_ref`, spec-PDF parsing, customer-request ingestion, `scope_flag` UI, reconciliation agent. Not started. |
-| Proposal as live surface | 5.4 | Public `/p/[slug]`, accept/decline, share link, status propagation | Near term: **`mailto:`** shortcut. PRD **Milestone 4**: hover-to-source, structured comments, scope-change requests handled by a **negotiation agent**, property-manager-facing status page post-acceptance. Property Manager (PRD §3) is the load-bearing customer-of-the-customer. |
+| Proposal as live surface | 5.4 | Public `/p/[slug]`, accept/decline, share link, status propagation | PRD **Milestone 4**: hover-to-source, structured comments, scope-change requests handled by a **negotiation agent**, property-manager-facing status page post-acceptance. Property Manager (PRD §3) is the load-bearing customer-of-the-customer. |
 | Project layer | 5.5 | — | Phase 1 narrow slice per PRD §5.5: auto-create project on accept, status / dates / sub / notes, proposal URL becomes project status page. Not started. Ops-layer agents (expense reconciliation, change orders, punch-lists, paint guides) are Milestone 5. |
 | Pipeline & reporting | 5.6 | Dashboard funnel, drill-downs, proposal-based $ | NL query surface deferred. **Qualified** stage naming vs app’s lead statuses: reconcile when qualification agent ships. |
 
@@ -58,8 +58,7 @@ Update this section in the same PR when status changes ([`AGENTS.md`](../AGENTS.
    - [ ] Seed a clean sample import for Jordan’s account
    - [ ] End-to-end test with a real attendee CSV
    - [ ] Record a backup 3-minute demo video
-2. [ ] **Phase D2 — `mailto:` Email Proposal shortcut** on bid detail (aligns with PRD §5.4).
-3. [ ] **Phase A2 — sort leads by estimated bid** — gated on footprint/estimate fields (Phase B1). While B1 is paused, optional: explicit **sort by created date** control if product wants sort without estimates.
+2. [ ] **Phase A2 — sort leads by estimated bid** — gated on footprint/estimate fields (Phase B1). While B1 is paused, optional: explicit **sort by created date** control if product wants sort without estimates.
 
 ### Paused / deferred by decision
 
@@ -113,10 +112,9 @@ Historical phases **A–F** below are folded into checkboxes here and in *Open n
 
 1. [ ] Jordan (or proxy) runs a **real** attendee CSV through import.
 2. [x] Lead → bid → proposal → share link → accept/decline updates bid + lead.
-3. [ ] **`mailto:`** sends proposal URL in one tap from bid detail.
-4. [x] Dashboard shows funnel / pipeline story (scoped version on `/dashboard`).
-5. [ ] Walkthrough **under five minutes** with polish items in Phase F done.
-6. Phase F artifacts: onboarding copy, empty states, seeded demo data, backup video.
+3. [x] Dashboard shows funnel / pipeline story (scoped version on `/dashboard`).
+4. [ ] Walkthrough **under five minutes** with polish items in Phase F done.
+5. Phase F artifacts: onboarding copy, empty states, seeded demo data, backup video.
 
 ---
 
@@ -142,7 +140,6 @@ The following tracked the original **lead-to-close POC** build. Items are **hist
 ### Phase D — Shareable proposal
 
 - [x] Public page, snapshot UI, accept/decline, propagation, share UI.
-- [ ] `mailto:` shortcut — Open now.
 
 ### Phase E — Pipeline
 
@@ -169,6 +166,5 @@ For longer narrative (personas incl. the Property Manager customer-of-the-custom
 
 1. [ ] Real CSV import demo path confident.
 2. [x] End-to-end proposal URL + accept path works.
-3. [ ] `mailto:` shortcut for sending URL.
-4. [x] Pipeline visible on dashboard.
-5. [ ] Five-minute narrated walkthrough + Phase F polish complete.
+3. [x] Pipeline visible on dashboard.
+4. [ ] Five-minute narrated walkthrough + Phase F polish complete.

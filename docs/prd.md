@@ -237,7 +237,6 @@ PDF export remains available for property managers who insist. It is not the pri
 - Accept/decline actions with capture of approver name and title
 - Scope-change request UI: property manager requests a change; negotiation agent drafts a revised bid; contractor reviews and sends
 - PDF export as fallback
-- `mailto:` send shortcut with pre-filled subject and URL
 - Proposal-response status propagation: on accept, bid → won, lead → won, project created (see §5.5)
 
 **Deferred**
