@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardList, LayoutDashboard, Settings, Users } from "lucide-react";
+import {
+  ClipboardList,
+  HardHat,
+  LayoutDashboard,
+  Settings,
+  Users,
+} from "lucide-react";
 import {
   SidebarMenu,
   SidebarMenuButton,
@@ -13,6 +19,7 @@ const items = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/bids", label: "Bids", icon: ClipboardList },
+  { href: "/projects", label: "Projects", icon: HardHat },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

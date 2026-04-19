@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { BID_STATUSES, LEAD_STATUSES } from "./status-meta";
+import {
+  BID_STATUSES,
+  LEAD_STATUSES,
+  PROJECT_STATUSES,
+} from "./status-meta";
 
 export const signInSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -220,4 +224,58 @@ export const updateLeadStatusSchema = z.object({
 
 export const enrichLeadActionSchema = z.object({
   id: z.string().uuid("Invalid lead ID"),
+});
+
+// ── Projects ──
+
+const optionalDate = z
+  .union([z.string(), z.null(), z.undefined()])
+  .transform((v) => {
+    if (v == null) return null;
+    const trimmed = v.trim();
+    return trimmed === "" ? null : trimmed;
+  })
+  .refine((v) => v === null || /^\d{4}-\d{2}-\d{2}$/.test(v), {
+    message: "Date must be YYYY-MM-DD",
+  });
+
+export const updateProjectStatusSchema = z.object({
+  id: z.string().uuid("Invalid project ID"),
+  status: z.enum(PROJECT_STATUSES),
+});
+
+export const updateProjectDetailsSchema = z.object({
+  id: z.string().uuid("Invalid project ID"),
+  targetStartDate: optionalDate,
+  targetEndDate: optionalDate,
+  assignedSub: optionalText,
+  crewLeadName: optionalText,
+  notes: z
+    .union([z.string(), z.undefined()])
+    .transform((v) => (v ?? "").trim()),
+});
+
+/**
+ * HTML checkboxes only appear in FormData when checked, so any defined
+ * value (typically the literal string "on") is true. This shape works
+ * for both server actions parsing FormData and JSON callers.
+ */
+const formCheckbox = z.preprocess((val: unknown) => {
+  if (val === undefined || val === null || val === "") return false;
+  if (typeof val === "boolean") return val;
+  if (typeof val === "string") {
+    const lowered = val.toLowerCase();
+    return lowered === "on" || lowered === "true" || lowered === "1";
+  }
+  return Boolean(val);
+}, z.boolean());
+
+export const createProjectUpdateSchema = z.object({
+  projectId: z.string().uuid("Invalid project ID"),
+  body: z
+    .string()
+    .trim()
+    .min(1, "Write something in the update")
+    .max(4000, "Update is too long"),
+  visibleOnPublicUrl: formCheckbox,
 });

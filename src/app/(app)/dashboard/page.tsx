@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   ArrowRight,
   ClipboardList,
+  HardHat,
   TrendingUp,
   Users,
 } from "lucide-react";
@@ -12,6 +13,7 @@ import {
   getDashboardPipelineFinances,
   getLeadSourceTags,
   getLeadStatusCounts,
+  getProjectStatusCounts,
 } from "@/lib/store";
 import { formatCurrency } from "@/lib/pricing";
 
@@ -31,14 +33,21 @@ export default async function DashboardPage({
   // Pipeline section is scoped to the active source filter; the per-tab Leads
   // card always shows totals across every source. When no source filter is
   // active the two are identical and we reuse the scoped result.
-  const [bidStats, leadStats, leadStatsAll, sourceTags, finances] =
-    await Promise.all([
-      getBidStatusCounts(),
-      getLeadStatusCounts({ sourceTag: source ?? null }),
-      source ? getLeadStatusCounts() : null,
-      getLeadSourceTags(),
-      getDashboardPipelineFinances({ sourceTag: source ?? null }),
-    ]);
+  const [
+    bidStats,
+    leadStats,
+    leadStatsAll,
+    sourceTags,
+    finances,
+    projectStats,
+  ] = await Promise.all([
+    getBidStatusCounts(),
+    getLeadStatusCounts({ sourceTag: source ?? null }),
+    source ? getLeadStatusCounts() : null,
+    getLeadSourceTags(),
+    getDashboardPipelineFinances({ sourceTag: source ?? null }),
+    getProjectStatusCounts(),
+  ]);
 
   const leadCardStats = leadStatsAll ?? leadStats;
 
@@ -56,10 +65,12 @@ export default async function DashboardPage({
   };
 
   return (
-    <div className="container mx-auto max-w-5xl px-4 py-8">
+    <div className="container mx-auto px-4 py-8">
       <div className="mb-6 flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Dashboard</h1>
+          <h1 className="font-display text-3xl font-medium tracking-tight">
+            Dashboard
+          </h1>
           <p className="text-sm text-muted-foreground">
             Snapshot of your lead pipeline and bids.
           </p>
@@ -180,7 +191,7 @@ export default async function DashboardPage({
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-base">Leads</CardTitle>
@@ -229,6 +240,75 @@ export default async function DashboardPage({
             <Button variant="outline" size="sm" asChild>
               <Link href="/bids">
                 View bids
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-base">Projects</CardTitle>
+            <HardHat className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-baseline gap-3">
+              <p className="text-3xl font-semibold tabular-nums">
+                {projectStats.active}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                active of {projectStats.total} total
+              </p>
+            </div>
+            {projectStats.overdue > 0 ? (
+              <Link
+                href="/projects"
+                className="block rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive hover:bg-destructive/10"
+              >
+                <span className="font-medium">
+                  {projectStats.overdue} overdue
+                </span>{" "}
+                — past target end date and not complete
+              </Link>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                No projects past their target end date.
+              </p>
+            )}
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <Stat
+                label="Not started"
+                value={projectStats.not_started}
+                href="/projects?status=not_started"
+              />
+              <Stat
+                label="In progress"
+                value={projectStats.in_progress}
+                href="/projects?status=in_progress"
+              />
+              <Stat
+                label="Punch out"
+                value={projectStats.punch_out}
+                href="/projects?status=punch_out"
+              />
+              <Stat
+                label="On hold"
+                value={projectStats.on_hold}
+                href="/projects?status=on_hold"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Complete:{" "}
+              <Link
+                href="/projects?status=complete"
+                className="font-medium text-foreground underline-offset-4 hover:underline"
+              >
+                {projectStats.complete}
+              </Link>
+            </p>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/projects">
+                View projects
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
@@ -285,11 +365,30 @@ function PipelineStage({
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-md border p-2">
+function Stat({
+  label,
+  value,
+  href,
+}: {
+  label: string;
+  value: number;
+  href?: string;
+}) {
+  const body = (
+    <>
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-lg font-medium">{value}</p>
-    </div>
+    </>
   );
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className="block rounded-md border p-2 transition-colors hover:bg-muted/50"
+      >
+        {body}
+      </Link>
+    );
+  }
+  return <div className="rounded-md border p-2">{body}</div>;
 }

@@ -80,6 +80,7 @@ export function ProposalList({
           onClick={handleGenerate}
           disabled={isPending || !pricingComplete}
           size="sm"
+          variant="amber"
         >
           {isPending ? (
             <Loader2 className="h-4 w-4 animate-spin" />

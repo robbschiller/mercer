@@ -1,15 +1,20 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { getBidPageData } from "@/lib/store";
+import { getBidPageData, getProjectByBidId } from "@/lib/store";
 import { calculateBidPricing } from "@/lib/pricing";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { BidSummary } from "@/components/bid-summary";
 import { BidDetailSections } from "@/components/bid-detail-sections";
 import { DeleteBidButton } from "@/components/delete-bid-button";
 import { OsmFootprintsSection } from "@/components/osm-footprints-section";
 import { OsmFootprintsSkeleton } from "@/components/page-loading";
+import {
+  projectStatusLabel,
+  projectStatusVariant,
+} from "@/lib/status-meta";
 
 export default async function BidPage({
   params,
@@ -17,7 +22,10 @@ export default async function BidPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const data = await getBidPageData(id);
+  const [data, project] = await Promise.all([
+    getBidPageData(id),
+    getProjectByBidId(id),
+  ]);
 
   if (!data) {
     notFound();
@@ -59,6 +67,42 @@ export default async function BidPage({
       </div>
 
       <BidSummary bid={bid} />
+
+      {project && (
+        <Card>
+          <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium">Project created</p>
+                <Badge variant={projectStatusVariant(project.status)}>
+                  {projectStatusLabel(project.status)}
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {project.acceptedByName ? (
+                  <>
+                    Accepted by{" "}
+                    <span className="text-foreground">
+                      {project.acceptedByName}
+                      {project.acceptedByTitle
+                        ? `, ${project.acceptedByTitle}`
+                        : ""}
+                    </span>
+                    {project.acceptedAt
+                      ? ` on ${new Date(project.acceptedAt).toLocaleDateString()}`
+                      : ""}
+                  </>
+                ) : (
+                  "Bid moved into delivery."
+                )}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/projects/${project.id}`}>Open project</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <Suspense fallback={<OsmFootprintsSkeleton />}>
         <OsmFootprintsSection

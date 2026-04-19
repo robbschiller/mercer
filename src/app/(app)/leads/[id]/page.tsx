@@ -48,7 +48,9 @@ export default async function LeadDetailPage({
 
       <div className="flex items-start justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold">{lead.name}</h1>
+          <h1 className="font-display text-3xl font-medium tracking-tight">
+            {lead.name}
+          </h1>
           {(lead.company || lead.propertyName) && (
             <p className="text-muted-foreground">
               {[lead.company, lead.propertyName].filter(Boolean).join(" · ")}
@@ -161,7 +163,7 @@ export default async function LeadDetailPage({
             <Link href={`/bids/${linkedBid.id}`}>View linked bid</Link>
           </Button>
         ) : null}
-        <Button asChild>
+        <Button variant="amber" asChild>
           <Link href={`/bids/new?leadId=${lead.id}`}>Create bid from lead</Link>
         </Button>
       </div>

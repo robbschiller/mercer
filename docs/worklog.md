@@ -4,6 +4,192 @@ Running log of in-flight work on the lead-to-close MVP (docs/plan.md). Chronolog
 
 ---
 
+## 2026-04-19 — Brand consistency pass: auth pages adopt the marketing surface, light brand accents in the app
+
+**Goal:** Make the product and the marketing site read as one continuous brand. Auth pages get the full marketing treatment (texture + Mercer wordmark linking home) so first impression stays unbroken from `/` → `/signup`. Inside the app, a light touch only — Fraunces editorial display on page titles and amber on the most-primary CTA per surface — so the operator UI doesn't get cosmetically loud at the expense of dense data legibility.
+
+### Shipped
+
+#### Font lifting (Fraunces global)
+
+- **Root layout** ([src/app/layout.tsx](../src/app/layout.tsx)) — moved the `Fraunces` font loader (with the same `axes: ["SOFT", "WONK", "opsz"]` variable axes used on the landing page) up from the marketing-only layout so `--font-fraunces` is now defined for every route. `display: "swap"` keeps it non-blocking, and Fraunces is only fetched when something actually opts into `font-display` / `.font-display-editorial`, so app routes that don't use it still won't pay for the file.
+- **Marketing layout** ([src/app/(marketing)/layout.tsx](<../src/app/(marketing)/layout.tsx>)) — dropped its local Fraunces import and the wrapping `${fraunces.variable}` div now that the variable is set at the root.
+
+#### `(auth)` route group + theme-aware shell
+
+- **Route group** — moved `src/app/login/` and `src/app/signup/` into `src/app/(auth)/login/` and `src/app/(auth)/signup/` (`loading.tsx` carried along with each). URLs are unchanged; `/login` and `/signup` still resolve.
+- **Layout** ([src/app/(auth)/layout.tsx](<../src/app/(auth)/layout.tsx>)) — three-layer textured shell that mirrors the landing-page hero: blueprint grid, soft amber/blueprint vignette, fractal-noise overlay. The whole surface is theme-aware off the existing `.dark` class — `bg-[var(--color-parchment)] dark:bg-[var(--color-ink)]` for the canvas and `bg-grid-parchment dark:bg-grid-ink` for the grid — so the palette follows the global theme toggle instead of being a fixed dark island. Header carries the Mercer wordmark in `font-display`, with `aria-label="Mercer, home"` and `href="/"` so the post-marketing flow can always retreat back to the public site.
+- **Auth pages restyled** ([src/app/(auth)/login/page.tsx](<../src/app/(auth)/login/page.tsx>), [src/app/(auth)/signup/page.tsx](<../src/app/(auth)/signup/page.tsx>)) — same cards, but reading on the textured background: `bg-[var(--color-parchment-soft)]/85` with backdrop blur in light mode, `bg-white/5` translucent panel in dark mode. Each card opens with a `kicker` label in amber (`§ sign in` / `§ create account`), a Fraunces title (`Welcome back` / `Start your account`), and the submit button uses the new `amber` button variant. Forms, error/message handling, and the login ⇄ signup cross-link are otherwise unchanged.
+- **Loading skeleton** ([src/components/page-loading.tsx](../src/components/page-loading.tsx)) — `AuthPageSkeleton` rewritten to render only a card-shaped skeleton (no outer `container`, no separate title placeholder) since the auth layout supplies all the page chrome now. Uses the same translucent / parchment-soft surface so the load state matches the loaded state.
+
+#### Amber primary-CTA variant
+
+- **Button variant** ([src/components/ui/button.tsx](../src/components/ui/button.tsx)) — added an `amber` variant: `bg-[var(--color-amber)]` with white text, the same amber glow shadow used on the marketing hero CTA, and a 1px lift on hover into `--color-amber-soft`. Opt-in only — `default` is unchanged so existing buttons stay neutral.
+- **Selective rollout** — applied to one button per primary surface so the accent reads as "this is the do-the-thing action," not as a paint job:
+  - `/leads` New lead ([src/app/(app)/leads/page.tsx](<../src/app/(app)/leads/page.tsx>))
+  - `/bids` New bid ([src/app/(app)/bids/page.tsx](<../src/app/(app)/bids/page.tsx>))
+  - `/leads/[id]` Create bid from lead ([src/app/(app)/leads/[id]/page.tsx](<../src/app/(app)/leads/[id]/page.tsx>))
+  - Bid detail Generate Proposal ([src/components/proposal-list.tsx](../src/components/proposal-list.tsx)) — the actual "produce the deliverable" action on the bid page.
+  - Auth submit buttons (above).
+- **Dashboard** has no single primary CTA on the page itself (the three "View leads / View bids / View projects" buttons are equivalent secondary navigation), so it gets no amber accent — leaving it neutral keeps the per-page rule honest.
+
+#### Fraunces page titles
+
+- Swapped `text-2xl font-bold` → `font-display text-3xl font-medium tracking-tight` on every app `<h1>`: dashboard, leads list, lead detail, bids list, projects list, project detail. Editorial display + slightly larger size + tighter tracking, no other layout change.
+- **Mobile sidebar header** ([src/app/(app)/layout.tsx](<../src/app/(app)/layout.tsx>)) — the small "Mercer" wordmark in the mobile-only top bar now also uses `font-display`, so it matches the marketing/auth wordmark across every surface a logged-in user can see.
+
+### Verification
+
+- `bun run lint` — 0 errors, 6 pre-existing warnings (unchanged).
+- `bun run build` — clean. `/login` and `/signup` resolve through the new `(auth)` route group; the route table shows them at the same URLs as before.
+- Manual smoke: auth pages render the grid + vignette + noise textures, parchment in light mode and ink in dark mode, with the Mercer wordmark linking back to `/`. App pages render unchanged except for the headline font and one amber CTA each.
+
+### Deliberately out of scope
+
+- No re-skin of the app shell (sidebar, cards, table chrome stay neutral). User picked "light accents" — anything heavier turns the operator UI into a marketing surface, which would hurt the dense-data flows.
+- No changes to the public `/p/[slug]` proposal/status page. It's a customer-facing surface with its own constraints (read by property managers who haven't met the brand) and warrants a separate decision.
+- `Button`'s `default` variant still resolves to `--color-primary`; the amber treatment is opt-in per CTA. Avoids a global recolor that would muddy the meaning of the accent.
+- `docs/plan.md` not updated — this isn't a tracked roadmap item; it's UX polish layered onto already-shipped surfaces.
+
+---
+
+## 2026-04-19 — Project layer Slice 3: project_updates feed + public status-page pivot, /projects list, complete reopen
+
+**Goal:** Close out the Phase 1 project layer. Slice 3 adds the append-only `project_updates` feed and the public status-page pivot at `/p/[slug]` post-acceptance, which is what closes the loop with the property manager (PRD §3 — they're the load-bearing customer-of-the-customer). Two scope adds on the same PR: a `/projects` list view (so the contractor has a global view of in-flight work without nav-spelunking through bid pages) and an explicit `complete → punch_out / in_progress` reopen path on the state machine (so wrapping a project isn't accidentally one-way).
+
+### Shipped
+
+#### Reopen from `complete` (PRD §5.5 update)
+
+- **State-machine table** ([src/lib/store.ts](../src/lib/store.ts)) — `PROJECT_STATUS_TRANSITIONS.complete` flips from `[]` to `["punch_out", "in_progress"]`. `updateProjectStatus` now clears `actual_end_date` whenever the source state is `complete` and the destination differs, so the next entry into `complete` re-stamps it. `actual_start_date` is preserved through the reopen — the project hasn't suddenly "un-started." The two new transitions render as **Reopen to punch out** / **Reopen to in progress** on the project detail page so the action is unambiguous.
+- **PRD updated** ([docs/prd.md](../docs/prd.md) §5.5) — state-machine diagram and `complete` bullet rewritten to describe the explicit reopen, the `actual_end_date` clear-on-reopen behavior, and the `actual_start_date` preservation. Removed the prior "terminal in Phase 1" framing — the reopen is small and natural enough that hiding it behind a Phase 2 milestone wasn't worth it.
+
+#### `/projects` list view
+
+- **`getProjects()`** ([src/lib/store.ts](../src/lib/store.ts)) — single user-scoped query joining `projects` + `bids`, ordered by `projects.updated_at DESC` (uses the `projects_user_id_updated_at_idx` composite index added in Slice 1).
+- **List page** ([src/app/(app)/projects/page.tsx](<../src/app/(app)/projects/page.tsx>)) — RSC. Status pill filters across the top (`?status=...`) with per-status counts, then a 2-up grid of project cards: property name + client, status badge, target start / target end / assigned sub / last-updated. Cards link to `/projects/[id]`. Empty state distinguishes "no projects exist yet" from "no projects in this filter."
+- **Sidebar nav** ([src/components/app-sidebar-nav.tsx](../src/components/app-sidebar-nav.tsx)) — added `Projects` entry with `HardHat` icon between `Bids` and `Settings`. Active-route highlighting works for both `/projects` and `/projects/[id]`.
+
+#### `project_updates` table + feed UI
+
+- **Schema** ([src/db/schema.ts](../src/db/schema.ts)) — `project_updates` table: `id`, `project_id` (FK with `ON DELETE CASCADE`), `author_type` enum (`human | crew_auto | agent`, default `human` — the latter two are reserved for future agent-authored updates), `author_name`, `body`, `attachments_ref` (jsonb, unused in Phase 1 but reserved per PRD §6.3.1), `visible_on_public_url` (bool, **default false**), `created_at`. The default-false visibility is deliberate: internal-by-default is the safer slip path for a contractor who forgets to think about the property manager on every entry. New `PROJECT_UPDATE_AUTHOR_TYPES` const in [src/lib/status-meta.ts](../src/lib/status-meta.ts) so DB / TS / future UI can't drift.
+- **Migration** ([drizzle/manual/009_project_updates.sql](../drizzle/manual/009_project_updates.sql)) — additive table create + two indexes: `(project_id, created_at DESC)` for the detail-page feed, plus a **partial index** on `(project_id, created_at DESC) WHERE visible_on_public_url = true` so the public status-page read stays narrow even as private updates pile up. Applied to dev Supabase; verified columns + both indexes.
+- **Store helpers** ([src/lib/store.ts](../src/lib/store.ts)) — `getProjectUpdates(projectId)` (caller is responsible for ownership; the project-detail page calls `getProject` first), `createProjectUpdate(projectId, { body, visibleOnPublicUrl })` (re-checks ownership inline, defaults `author_type = 'human'` and `author_name = user.email`, and bumps `projects.updated_at` so the list view's recency ordering reflects update activity).
+- **Validation** ([src/lib/validations.ts](../src/lib/validations.ts)) — `createProjectUpdateSchema` with a body length floor of 1 / cap of 4000, plus a small `formCheckbox` preprocessor (HTML checkboxes only show up in FormData when checked, so missing-or-empty → false; "on" / "true" / "1" / `true` → true).
+- **Action** ([src/lib/actions.ts](../src/lib/actions.ts)) — `createProjectUpdateAction(formData)`. Verifies the project belongs to the caller, then posts the update and revalidates `/projects/[id]`, `/projects`, the parent `/bids/[id]`, *and* every `/p/[slug]` for shares tied to that bid (via the new `getShareSlugsForBid()` helper). The same fan-out wraps `updateProjectStatusAction` and `updateProjectDetailsAction` now too — anything that changes data the public status page renders also kicks the public route.
+- **Detail-page UI** ([src/app/(app)/projects/[id]/page.tsx](<../src/app/(app)/projects/[id]/page.tsx>)) — new "Project updates" card below the details form. Compose form (textarea + "Visible to property manager" checkbox + submit) sits at the top; below it, an ordered list of existing updates with author, timestamp, and an outline `Visible publicly` badge vs muted `Internal` text so the contractor can tell at a glance which entries the property manager will see.
+
+#### `/p/[slug]` post-acceptance pivot
+
+- **Public view DTO** ([src/lib/store.ts](../src/lib/store.ts) `getPublicProjectByBidId`) — explicit slim shape (`PublicProjectView`) with only the fields safe to render publicly (status, target/actual dates, sub, crew lead, acceptance provenance, and the public updates). Fetched in two cheap queries — the project row by `bid_id`, then the public updates filtered by `visible_on_public_url = true` (uses the partial index).
+- **Pivot logic** ([src/app/p/[slug]/page.tsx](<../src/app/p/[slug]/page.tsx>)) — same route, two render branches. Pre-acceptance (no project exists, or share is unaccepted) renders the existing proposal-acceptance view unchanged. Post-acceptance (`share.acceptedAt` set *and* a project exists) renders the new `StatusPage` component. Falling back to the proposal view when no project exists keeps backward compatibility with any historical accepted shares from before Slice 1.
+- **Status page** (same file, `StatusPage` component) — header with status badge, then four cards: **Schedule** (target start / target end / actual start / actual end), **On site** (sub + crew lead, only rendered if either is present so we don't show empty state to the customer), **Updates** (just the `visible_on_public_url = true` rows, newest first, with timestamp + author), and a final **Original proposal** card (client, bid status, accepted-by line, contract value). The contract value is read straight from the frozen `ProposalSnapshot.grandTotal` — no recomputation, per PRD §6 ("contract-value numerics are never generated").
+
+### Out of scope (deliberate)
+
+- **No edit / delete on project updates.** Append-only by design — the feed is part of the property-manager-facing audit trail. Typo? Post a corrective update.
+- **No agent-authored updates yet.** `author_type` enum has `crew_auto` and `agent` reserved for the eventual ops-layer agents (M5: expense reconciliation, status-page narrative generation, change-order ingest), but Phase 1 only writes `human`.
+- **No attachments / photos.** `attachments_ref` (jsonb) is in the schema so we don't migrate it back in later, but no UI for it. Photos in proposals / updates is its own multi-day chunk (deferred per `docs/plan.md`).
+- **No structured comments / scope-change requests on the public status page.** Those belong to PRD §5.4 / Milestone 4 (negotiation agent), and they belong on the proposal view, not the post-acceptance status view.
+- **No project-level dashboard rollup** (overdue projects, schedule view, sub utilization). The `/projects` list with status filters is enough for the current portfolio size; revisit when there are 20+ active.
+
+### Verification
+
+- Migration applied to dev Supabase; verified `project_updates` table + the two indexes (regular + partial).
+- `bunx tsc --noEmit` — clean.
+- `bun run lint` — back to the 6 known pre-existing warnings (no new ones).
+- `bun run build` — green; route table now includes `/projects` and `/projects/[id]`.
+- Manual smoke is up to you — accept a fresh share to land on a project, post a couple of updates with the visibility checkbox toggled both ways, then load `/p/[slug]` from an incognito window and confirm only the opted-in updates appear and the schedule reflects the dates / state-machine you set. Then drive the project to `complete` and back via Reopen and verify `actual_start_date` survives while `actual_end_date` clears and re-stamps.
+
+### Next
+
+Phase 1 project layer is closed out. Next priorities, per `docs/plan.md`: **Phase F demo polish** (onboarding blurb on `/leads/import`, empty states, seeded demo data, backup video). After Phase F, the next *feature* increments belong to PRD Milestone 1 (capture-first bidding) — gated on the vision-model + evals decisions in §10.
+
+---
+
+## 2026-04-19 — Project layer Slice 2: project detail page + state machine UI
+
+**Goal:** Make the `projects` row from Slice 1 something a contractor can actually drive. The accepted-bid → delivery handoff now has a place to live: target dates, assigned sub, crew lead, notes, and a status state machine with `actual_*` timestamps that the system stamps automatically (per PRD §5.5).
+
+### Shipped
+
+- **State machine in the store** ([src/lib/store.ts](../src/lib/store.ts)) — `PROJECT_STATUS_TRANSITIONS` table encodes the PRD §5.5 graph (`not_started → in_progress → punch_out → complete`, with `on_hold` reachable from any non-terminal state and exiting back to `in_progress`; `complete` is terminal in Phase 1). `allowedProjectStatusTransitions(current)` exported so the UI never has to recompute the rules. `updateProjectStatus(id, next)` validates the transition, throws on illegal moves, auto-stamps `actual_start_date` the first time we enter `in_progress`, auto-stamps `actual_end_date` the first time we enter `complete`, and never re-stamps a non-null timestamp (so re-entering `in_progress` after `on_hold` doesn't reset the start date).
+- **Detail editor in the store** ([src/lib/store.ts](../src/lib/store.ts)) — `updateProjectDetails(id, { targetStartDate, targetEndDate, assignedSub, crewLeadName, notes })`, user-scoped, single SQL update. `getProject(id)` returns `{ project, bid }` where `bid` is the small slice the page needs (id, propertyName, address, clientName, leadId, status), via inner join — saves a round trip on the page.
+- **Validation** ([src/lib/validations.ts](../src/lib/validations.ts)) — `updateProjectStatusSchema` (id + `PROJECT_STATUSES` enum), `updateProjectDetailsSchema` with an `optionalDate` preprocessor that empty-strings → null and rejects anything that isn't `YYYY-MM-DD` (matches the `<input type="date">` payload).
+- **Server actions** ([src/lib/actions.ts](../src/lib/actions.ts)) — `updateProjectStatusAction` and `updateProjectDetailsAction`. Both look up the project first to recover `bid.id` for revalidation, then call the store helper. Each revalidates `/projects/[id]` and `/bids/[bid.id]` so the bid detail "Project created" card and the project page both refresh.
+- **`/projects/[id]` route** ([src/app/(app)/projects/[id]/page.tsx](<../src/app/(app)/projects/[id]/page.tsx>)) — RSC. Header with property name, project status badge, accepted-by line. Bid-context card with client + bid status + "Open bid" link. Status card that renders one button per allowed transition (driven by `allowedProjectStatusTransitions`) plus a per-state description, with an explicit terminal-state message when no transitions remain. A single "Project details" form covers target start / target end (date inputs), read-only display of `actual_start_date` / `actual_end_date`, assigned sub, crew lead, and notes — one Save button, one server action.
+- **Bid detail link** ([src/app/(app)/bids/[id]/page.tsx](<../src/app/(app)/bids/[id]/page.tsx>)) — the existing "Project created" card from Slice 1 now has an "Open project" button that links to `/projects/[id]`.
+
+### Out of scope for Slice 2 (deliberate)
+
+- No `/projects` list view. The path in for now is bid detail → "Open project". A list view shows up when there are enough projects to navigate.
+- No `project_updates` feed and no public status-page pivot at `/p/[slug]` — that is Slice 3 in full.
+- No edit history / audit trail on status transitions beyond the `actual_*` stamps already in the schema.
+- No date-range validation (`target_end_date >= target_start_date`). The form trusts the contractor; can revisit if it bites.
+- No reopen flow out of `complete` (PRD calls it terminal in Phase 1; revisit if real workflows need it).
+
+### Verification
+
+- Linter clean on the touched files.
+- `bunx tsc --noEmit` — clean.
+- `bun run lint` — only the 6 known pre-existing warnings.
+- `bun run build` — green; route table now includes `/projects/[id]`.
+- Manual smoke is up to you — accept a fresh proposal share to land on a project, then walk it through `not_started → in_progress` (verify `actual_start_date` stamps), `in_progress → on_hold → in_progress` (verify start date is preserved), `→ punch_out → complete` (verify `actual_end_date` stamps and the action buttons disappear).
+
+### Next
+
+Slice 3: `project_updates` table + UI, public status-page pivot at `/p/[slug]` post-acceptance, `visible_on_public_url` flag for what the property manager actually sees.
+
+---
+
+## 2026-04-19 — PRD expansion: project layer + per-entity field specs; bid-to-project Slice 1
+
+**Goal:** Lock the project-layer behavior in the PRD before writing the project UI, then ship a tight first slice of the bid-to-project handoff so the data model is real and the create-on-accept transaction is wired through. Custom fields explicitly stay out (the §2 / §12 no-configurability stance is preserved and reinforced).
+
+### PRD shipped ([docs/prd.md](../docs/prd.md))
+
+- **§5.5 Project Layer** — full rewrite. Subsections: Lifecycle and trigger (auto on acceptance, atomic with bid → won, idempotent via `ON CONFLICT DO NOTHING`); State machine (`not_started → in_progress → punch_out → complete`, plus `on_hold` side state, with `actual_*` auto-stamping); Inherited (immutable bid + proposal snapshot + lead + captures) vs. Owned (schedule, assignment, status, notes, `project_update` feed); Public status-page pivot at `/p/[slug]` post-acceptance (Slice 3); Scope changes after acceptance explicitly out of Phase 1 (change-order workflow is Milestone 5); Deferred list re-anchored to Milestone 5.
+- **§6.1 Lead fields** — definitive spec grounded in the live `leads` table. Frames `resolved_address` / lat / lng / `google_place_id` as the *company office* address (not property-to-bid). `satellite_image_url` documented as historical-only, not written for new leads. Qualification fields (`qualification_score`, `qualification_brief`, `agent_run_id`) flagged as Milestone 3 aspirational.
+- **§6.2 Bid fields** — definitive spec grounded in the live `bids` / `buildings` / `surfaces` / `line_items` tables. Property fields explicitly distinct from the lead's office address. Derived totals called out as non-stored — computed by [src/lib/pricing.ts](../src/lib/pricing.ts) — re-stating the §6 AI principle that contract-value numerics are never generated. Aspirational child records (`captures`, `scope_items`, `scope_flags`, `spec_documents`, `customer_requests`) flagged with milestones.
+- **§6.3 Project fields + §6.3.1 project_update fields** — full spec for the new entity, including `accepted_by_*` provenance, `on_hold` state, and the `visible_on_public_url` flag on updates.
+- **§6 table** — `project` and `project_update` rows rewritten to match §6.3 / §6.3.1, with `bid_id (unique)`, the full status enum, and pointers back to the detail subsections.
+- **§2 non-goal "Configurability as a core product value"** and **§12 build principle "Domain opinion is the product"** — each lightly reinforced with one clause that points at §6.1-§6.3 as the definitive opinionated field spec, so future readers see the field lists and the no-configurability stance as one coherent argument.
+
+### Tracker updated ([docs/plan.md](../docs/plan.md))
+
+- PRD-alignment §5.5 row updated to reference §5.5 / §6.3 and to call out the named slices: Slice 1 (this PR), Slice 2 (project detail page + state machine UI), Slice 3 (`project_updates` + public status-page pivot).
+- New top entry under *Active work → Open now*: **Project layer — Slice 1: bid-to-project handoff**, with the same checklist as below. Slice 2 and Slice 3 added as follow-ups so the thread stays visible.
+
+### Slice 1 code shipped
+
+- **`projects` table** ([src/db/schema.ts](../src/db/schema.ts)) — `bid_id UNIQUE NOT NULL` (cascade on bid delete), `user_id` denormalized, status enum from `PROJECT_STATUSES`, schedule columns, assignment, acceptance provenance, notes, timestamps. Migration: [drizzle/manual/008_projects.sql](../drizzle/manual/008_projects.sql), additive, applied to dev DB; `projects_user_id_updated_at_idx` composite index added for the eventual project-list query.
+- **`PROJECT_STATUSES` + helpers** ([src/lib/status-meta.ts](../src/lib/status-meta.ts)) — `not_started | in_progress | punch_out | complete | on_hold`, plus `PROJECT_STATUS_LABELS`, `PROJECT_STATUS_VARIANTS`, `projectStatusLabel`, `projectStatusVariant` mirroring the bid/lead patterns. Schema enum sourced from this single const so the DB / TS / UI layers can't drift.
+- **Atomic create-on-accept** ([src/lib/store.ts](../src/lib/store.ts) `respondToProposalShare`) — when `outcome === "won"`, the same `db.transaction` that flips the bid to `won` and the lead to `won` also inserts a `projects` row with `bidId`, `userId` (from the existing share / bid join), and the freshly-stamped `accepted_by_*` / `acceptedAt` from `proposal_shares`. `ON CONFLICT DO NOTHING` on `bid_id` keeps the create idempotent under any race; the function falls back to a select to recover the existing project's id if the insert was a no-op. The function's return shape now includes `projectId` for downstream revalidation.
+- **`getProjectByBidId(bidId)`** ([src/lib/store.ts](../src/lib/store.ts)) — user-scoped getter for the bid detail page.
+- **"Project created" signal** ([src/app/(app)/bids/[id]/page.tsx](<../src/app/(app)/bids/[id]/page.tsx>)) — fetches the project in parallel with `getBidPageData`; when present, renders a small read-only Card between the BidSummary and the OSM section showing the status badge, signer name + title, and accepted-on date. Deliberately read-only: no state-machine controls, no edit form, no new route.
+
+### Out of scope for Slice 1 (deliberate)
+
+- No `/projects/[id]` route. (Slice 2.)
+- No status state-machine UI (no buttons to advance `not_started → in_progress` etc.). (Slice 2.)
+- No `project_updates` table or feed. (Slice 3.)
+- No public proposal URL pivot to a status page. (Slice 3.)
+- No project-list view or dashboard rollup of projects.
+- No back-fill SQL for historical accepted shares — the migration is forward-only, and any already-accepted dev shares stay project-less. To smoke-test, accept a fresh share or manually toggle `proposal_shares.accepted_at = NULL` and re-accept.
+
+### Verification
+
+- Migration applied to dev Supabase; verified columns + `projects_bid_id_key` unique constraint + `projects_user_id_updated_at_idx`.
+- `bunx tsc --noEmit` — clean.
+- `bun run lint` — only the 6 known pre-existing warnings.
+- `bun run build` — green; route table unchanged.
+
+### Next
+
+Slice 2 of the project layer: `/projects/[id]` route, status state machine UI with `actual_*` auto-stamping, target-date / assigned-sub / notes editing. After that, Slice 3 (`project_updates` + public status-page pivot at `/p/[slug]`).
+
+---
+
 ## 2026-04-19 — Strip satellite from leads + tighten the basic flow
 
 **Goal:** Re-scope the lead surface so "lead address" is conceptually the company's office, not the property to paint. Satellite imagery and property-address capture belong to the bid stage; the lead layer should be rock-solid in its most basic form (contact info, office address from Places, status, fast path to "Create bid from lead").
