@@ -67,34 +67,58 @@ export async function getBids() {
 export async function getBidsWithSummary() {
   const user = await requireUser();
 
-  const bidId = sql.raw('"bids"."id"');
+  // Aggregates pre-computed once per bid via grouped subqueries (instead of
+  // three correlated subqueries per bid row). Each subquery is scoped to the
+  // current user via INNER JOIN on bids so multi-tenant scans stay bounded
+  // and the planner can use bids(user_id, ...) + the FK indexes added in
+  // 007_perf_indexes.sql.
+  const buildingAgg = db
+    .select({
+      bidId: buildings.bidId,
+      buildingCount: sql<number>`count(distinct ${buildings.id})::int`.as(
+        "building_count"
+      ),
+      totalSqft: sql<string>`coalesce(sum(${surfaces.totalSqft}::numeric * ${buildings.count}), 0)`.as(
+        "total_sqft"
+      ),
+    })
+    .from(buildings)
+    .innerJoin(bids, eq(buildings.bidId, bids.id))
+    .leftJoin(surfaces, eq(surfaces.buildingId, buildings.id))
+    .where(eq(bids.userId, user.id))
+    .groupBy(buildings.bidId)
+    .as("building_agg");
+
+  const proposalAgg = db
+    .select({
+      bidId: proposals.bidId,
+      lastProposalAt: sql<string>`max(${proposals.createdAt})::text`.as(
+        "last_proposal_at"
+      ),
+    })
+    .from(proposals)
+    .innerJoin(bids, eq(proposals.bidId, bids.id))
+    .where(eq(bids.userId, user.id))
+    .groupBy(proposals.bidId)
+    .as("proposal_agg");
 
   const rows = await db
     .select({
       bid: bids,
-      buildingCount: sql<number>`coalesce((
-        select count(*) from buildings where buildings.bid_id = ${bidId}
-      ), 0)`,
-      totalSqft: sql<number>`coalesce((
-        select sum(s.total_sqft::numeric * b.count)
-        from surfaces s
-        join buildings b on b.id = s.building_id
-        where b.bid_id = ${bidId}
-      ), 0)`,
-      lastProposalAt: sql<string | null>`(
-        select max(p.created_at)::text
-        from proposals p
-        where p.bid_id = ${bidId}
-      )`,
+      buildingCount: buildingAgg.buildingCount,
+      totalSqft: buildingAgg.totalSqft,
+      lastProposalAt: proposalAgg.lastProposalAt,
     })
     .from(bids)
+    .leftJoin(buildingAgg, eq(buildingAgg.bidId, bids.id))
+    .leftJoin(proposalAgg, eq(proposalAgg.bidId, bids.id))
     .where(eq(bids.userId, user.id))
     .orderBy(desc(bids.updatedAt));
 
   return rows.map((r) => ({
     ...r.bid,
-    buildingCount: Number(r.buildingCount),
-    totalSqft: Number(r.totalSqft),
+    buildingCount: Number(r.buildingCount ?? 0),
+    totalSqft: Number(r.totalSqft ?? 0),
     lastProposalAt: r.lastProposalAt ? new Date(r.lastProposalAt) : null,
   }));
 }
@@ -633,18 +657,19 @@ export async function createProposal(
 export async function createProposalShare(proposalId: string) {
   const user = await requireUser();
   const proposalRows = await db
-    .select({ id: proposals.id })
+    .select({ id: proposals.id, bidId: proposals.bidId })
     .from(proposals)
     .innerJoin(bids, eq(proposals.bidId, bids.id))
     .where(and(eq(proposals.id, proposalId), eq(bids.userId, user.id)))
     .limit(1);
-  if (!proposalRows[0]) throw new Error("Proposal not found");
+  const proposalRow = proposalRows[0];
+  if (!proposalRow) throw new Error("Proposal not found");
 
   const rows = await db
     .insert(proposalShares)
     .values({ proposalId })
     .returning();
-  return rows[0];
+  return { ...rows[0], bidId: proposalRow.bidId };
 }
 
 export async function getProposalShareBySlug(slug: string) {
@@ -714,7 +739,11 @@ export async function acceptProposalShare(
       .where(eq(leads.id, bidRow.leadId));
   }
 
-  return updatedShare;
+  return {
+    share: updatedShare,
+    bidId: existing.proposal.bidId,
+    leadId: bidRow?.leadId ?? null,
+  };
 }
 
 export async function declineProposalShare(
@@ -759,7 +788,79 @@ export async function declineProposalShare(
       .where(eq(leads.id, bidRow.leadId));
   }
 
-  return updatedShare;
+  return {
+    share: updatedShare,
+    bidId: existing.proposal.bidId,
+    leadId: bidRow?.leadId ?? null,
+  };
+}
+
+// ── Status count aggregates (cheap GROUP BY for dashboard) ──
+
+export type BidStatus = (typeof bids.$inferSelect)["status"];
+export type LeadStatus = (typeof leads.$inferSelect)["status"];
+
+export type BidStatusCounts = {
+  total: number;
+  draft: number;
+  sent: number;
+  won: number;
+  lost: number;
+};
+
+export type LeadStatusCounts = {
+  total: number;
+  new: number;
+  quoted: number;
+  won: number;
+  lost: number;
+};
+
+export async function getBidStatusCounts(): Promise<BidStatusCounts> {
+  const user = await requireUser();
+  const rows = await db
+    .select({
+      status: bids.status,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(bids)
+    .where(eq(bids.userId, user.id))
+    .groupBy(bids.status);
+
+  const counts: BidStatusCounts = { total: 0, draft: 0, sent: 0, won: 0, lost: 0 };
+  for (const row of rows) {
+    const n = Number(row.count);
+    if (row.status in counts) counts[row.status as BidStatus] = n;
+    counts.total += n;
+  }
+  return counts;
+}
+
+export async function getLeadStatusCounts(options?: {
+  sourceTag?: string | null;
+}): Promise<LeadStatusCounts> {
+  const user = await requireUser();
+  const tag = options?.sourceTag?.trim() || null;
+  const rows = await db
+    .select({
+      status: leads.status,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(leads)
+    .where(
+      tag
+        ? and(eq(leads.userId, user.id), eq(leads.sourceTag, tag))
+        : eq(leads.userId, user.id)
+    )
+    .groupBy(leads.status);
+
+  const counts: LeadStatusCounts = { total: 0, new: 0, quoted: 0, won: 0, lost: 0 };
+  for (const row of rows) {
+    const n = Number(row.count);
+    if (row.status in counts) counts[row.status as LeadStatus] = n;
+    counts.total += n;
+  }
+  return counts;
 }
 
 // ── Leads ──

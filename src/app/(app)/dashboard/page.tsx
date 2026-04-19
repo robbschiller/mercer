@@ -8,22 +8,16 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  getBidsWithSummary,
+  getBidStatusCounts,
   getDashboardPipelineFinances,
   getLeadSourceTags,
-  getLeads,
-  type Lead,
+  getLeadStatusCounts,
 } from "@/lib/store";
 import { formatCurrency } from "@/lib/pricing";
 
 function pct(part: number, total: number) {
   if (total === 0) return "0%";
   return `${Math.round((part / total) * 100)}%`;
-}
-
-function filterLeadsBySource(leads: Lead[], source: string | undefined) {
-  if (!source) return leads;
-  return leads.filter((l) => l.sourceTag === source);
 }
 
 export default async function DashboardPage({
@@ -34,30 +28,19 @@ export default async function DashboardPage({
   const { source: sourceParam } = await searchParams;
   const source = sourceParam?.trim() || undefined;
 
-  const [bids, leads, sourceTags, finances] = await Promise.all([
-    getBidsWithSummary(),
-    getLeads(),
-    getLeadSourceTags(),
-    getDashboardPipelineFinances({ sourceTag: source ?? null }),
-  ]);
+  // Pipeline section is scoped to the active source filter; the per-tab Leads
+  // card always shows totals across every source. When no source filter is
+  // active the two are identical and we reuse the scoped result.
+  const [bidStats, leadStats, leadStatsAll, sourceTags, finances] =
+    await Promise.all([
+      getBidStatusCounts(),
+      getLeadStatusCounts({ sourceTag: source ?? null }),
+      source ? getLeadStatusCounts() : null,
+      getLeadSourceTags(),
+      getDashboardPipelineFinances({ sourceTag: source ?? null }),
+    ]);
 
-  const scopedLeads = filterLeadsBySource(leads, source);
-
-  const bidStats = {
-    total: bids.length,
-    draft: bids.filter((b) => b.status === "draft").length,
-    sent: bids.filter((b) => b.status === "sent").length,
-    won: bids.filter((b) => b.status === "won").length,
-    lost: bids.filter((b) => b.status === "lost").length,
-  };
-
-  const leadStats = {
-    total: scopedLeads.length,
-    new: scopedLeads.filter((l) => l.status === "new").length,
-    quoted: scopedLeads.filter((l) => l.status === "quoted").length,
-    won: scopedLeads.filter((l) => l.status === "won").length,
-    lost: scopedLeads.filter((l) => l.status === "lost").length,
-  };
+  const leadCardStats = leadStatsAll ?? leadStats;
 
   const dashboardHref = (tag: string | null) => {
     if (!tag) return "/dashboard";
@@ -204,25 +187,19 @@ export default async function DashboardPage({
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-3xl font-semibold">{leads.length}</p>
+            <p className="text-3xl font-semibold">{leadCardStats.total}</p>
             <p className="text-xs text-muted-foreground">
               Totals across all sources. Use Pipeline above to scope by source
               tag.
             </p>
             <div className="grid grid-cols-2 gap-2 text-sm">
-              <Stat label="New" value={leads.filter((l) => l.status === "new").length} />
-              <Stat
-                label="Quoted"
-                value={leads.filter((l) => l.status === "quoted").length}
-              />
-              <Stat label="Won" value={leads.filter((l) => l.status === "won").length} />
-              <Stat
-                label="Lost"
-                value={leads.filter((l) => l.status === "lost").length}
-              />
+              <Stat label="New" value={leadCardStats.new} />
+              <Stat label="Quoted" value={leadCardStats.quoted} />
+              <Stat label="Won" value={leadCardStats.won} />
+              <Stat label="Lost" value={leadCardStats.lost} />
             </div>
             <p className="text-xs text-muted-foreground">
-              Win rate: {pct(leads.filter((l) => l.status === "won").length, leads.length)}
+              Win rate: {pct(leadCardStats.won, leadCardStats.total)}
             </p>
             <Button variant="outline" size="sm" asChild>
               <Link href="/leads">

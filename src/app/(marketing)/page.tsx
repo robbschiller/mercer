@@ -995,7 +995,7 @@ function FooterCol({
       <h4 className="kicker text-white/45">{title}</h4>
       <ul className="mt-5 flex flex-col gap-2 text-sm">
         {items.map(([label, href]) => (
-          <li key={label}>
+          <li key={`${label}-${href}`}>
             <Link
               href={href}
               className="text-white/70 transition-colors hover:text-white"
