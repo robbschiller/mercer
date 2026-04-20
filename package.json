@@ -9,7 +9,8 @@
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "db:push": "drizzle-kit push",
     "db:apply-manual": "bun run scripts/apply-manual-migrations.ts",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "seed:jordan": "bun run scripts/seed-jordan-leads.ts"
   },
   "dependencies": {
     "@googlemaps/js-api-loader": "^2.0.2",

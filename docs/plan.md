@@ -55,9 +55,9 @@ Update this section in the same PR when status changes ([`AGENTS.md`](../AGENTS.
 1. [ ] **Phase F — demo polish**
    - [x] Onboarding blurb on `/leads/import`
    - [x] Empty states and error messages on key views
-   - [ ] Seed a clean sample import for Jordan’s account
+   - [x] Seed a clean sample import for Jordan’s account — curated 32-row BAAA subset at [`scripts/fixtures/jordan-demo.csv`](../scripts/fixtures/jordan-demo.csv) + `bun run seed:jordan --user-id=<uuid>` script at [`scripts/seed-jordan-leads.ts`](../scripts/seed-jordan-leads.ts). Covers 6 management companies with varied offices, cities, and roles so office grouping + role ranking + portfolio count all demo well.
    - [x] End-to-end test with a real attendee CSV (2026-BAAA list in [`docs/2026-BAAA-Trade-Show-Attendee-List.csv`](2026-BAAA-Trade-Show-Attendee-List.csv), imported cleanly)
-   - [ ] Record a backup 3-minute demo video
+   - [ ] Record a backup 3-minute demo video *(human task — the script is ready for a live walkthrough)*
 2. [ ] **Phase A2 — sort leads by estimated bid** — gated on footprint/estimate fields (Phase B1). While B1 is paused, optional: explicit **sort by created date** control if product wants sort without estimates.
 
 ### Enrichment rethink (open)
@@ -70,7 +70,7 @@ Directions to evaluate (not yet committed, PRD §10 Q6 related):
 
 - **[shipped]** Roll leads together by management office on `/leads` (filter + group view) so Jordan works one office at a time instead of 1,224 individual rows. Group key is `Management Company + City`, pulled from `lead.rawRow.City` (no schema change).
 - **[shipped]** Role-weighted contact ranking inside each office group (Owner / Regional > Community Manager > Maintenance Supervisor > Assistant / Leasing Manager > Corporate > Leasing / Maintenance Tech > support roles), reading `Role with Company` out of `rawRow`. Top row in each group is tagged "Top contact" when role rank ≤ 3.
-- Portfolio count per `Management Company` (how many properties / how many offices in this CSV), surfaced on the lead detail and on the group header.
+- **[shipped]** Portfolio count per `Management Company` (distinct offices + distinct properties + total attendees across the user's imports), surfaced on the office-grouping header on `/leads` and on the lead detail header. Implemented purely in [`src/lib/leads/office.ts`](../src/lib/leads/office.ts) — no schema change. Only renders when a company has >1 office or >1 property so single-office cases stay quiet.
 - Separate "property capture" flow that happens *after* a lead is qualified: Jordan picks a specific community managed by this office, then capture + takeoff runs against the actual multifamily address (PRD M1 / M2 territory).
 - Generate a per-office qualification brief (PRD M3), keyed on `management company + office city + contact roles + portfolio size`, not on Places.
 
@@ -115,7 +115,7 @@ Tracked here so the plan is honest about what must resolve before the AI-native 
 - **Phase C** — `bids.lead_id`, lead → bid pre-fill, lead **quoted** on proposal generate, **won/lost** from public share response.
 - **Phase D** — `/p/[slug]`, proposal shares, accept/decline, bid/lead status propagation, share + copy link on bid detail.
 - **Phase E** — Pipeline on **`/dashboard`** (funnel, source filter, `/leads` drill-down with `?status=` / `?source=`), proposal-based open vs won dollars.
-- **Phase F** — (nothing checked yet — see Open now.)
+- **Phase F** — seeded sample import (`scripts/fixtures/jordan-demo.csv` + `bun run seed:jordan`), onboarding blurb, empty states, real-CSV end-to-end test. Backup demo video remaining (human task).
 - **Project layer Slice 1** — `projects` table + `008_projects.sql` migration, `PROJECT_STATUSES` + helpers, atomic create-on-accept inside `respondToProposalShare` (`ON CONFLICT DO NOTHING` on `bid_id`), `getProjectByBidId`, "Project created" badge on the bid detail page.
 - **Project layer Slice 2** — `/projects/[id]` route, status state-machine UI with `actual_*` auto-stamping (and `complete → punch_out / in_progress` reopen that clears `actual_end_date`), target-date / assigned-sub / crew-lead / notes editing, "Open project" link from the bid detail page.
 - **Project layer Slice 3** — `/projects` list view with status filters + sidebar nav entry, `project_updates` table + `009_project_updates.sql` migration, append-only feed on the project detail page with per-entry `visible_on_public_url` opt-in, `/p/[slug]` pivots to a status-page render post-acceptance (status, schedule, on-site, public updates, original-proposal summary).

@@ -19,6 +19,16 @@ import {
   leadStatusLabel,
   leadStatusVariant,
 } from "@/lib/status-meta";
+import {
+  leadCity,
+  leadRole,
+  rolePriority,
+  officeKeyFor,
+  officeLabel,
+  computeCompanyPortfolios,
+  portfolioFor,
+  type CompanyPortfolio,
+} from "@/lib/leads/office";
 
 type LeadFilterStatus = LeadStatus;
 
@@ -29,106 +39,19 @@ function parseLeadStatus(value: string | undefined): LeadFilterStatus | null {
     : null;
 }
 
-/**
- * Derive the management-office identity from a lead. Attendees who share
- * a Management Company AND city are treated as one office. City is pulled
- * from the raw CSV row because we never promoted it to a typed column.
- * Falls back to company-only (city = "") or company = "" when missing.
- */
-const CITY_KEYS = ["city", "City", "CITY"];
-function leadCity(lead: Lead): string {
-  const raw = lead.rawRow;
-  if (!raw) return "";
-  for (const k of CITY_KEYS) {
-    const v = raw[k];
-    if (typeof v === "string" && v.trim()) return v.trim();
-  }
-  for (const [k, v] of Object.entries(raw)) {
-    if (/city/i.test(k) && typeof v === "string" && v.trim()) return v.trim();
-  }
-  return "";
-}
-
-/**
- * Paint-decision authority ranking for attendee roles. Lower number = more
- * likely to own the exterior-paint decision for a multifamily community.
- * Rough hierarchy: owners / regional leadership > site manager + maintenance
- * supervisor > assistant / leasing manager > corporate generalists > leasing
- * agents + technicians > support roles. The full BAAA 2026 list has 22 role
- * values; anything unrecognized falls through to the lowest tier so it still
- * surfaces but never bubbles above a decision-maker.
- */
-const ROLE_PRIORITY: Array<{ match: RegExp; rank: number }> = [
-  { match: /\bowner\b/i, rank: 1 },
-  { match: /\bregional maintenance\b/i, rank: 2 },
-  { match: /\bregional\b/i, rank: 2 },
-  { match: /\bcommunity manager\b/i, rank: 3 },
-  { match: /\bmaintenance supervisor\b/i, rank: 4 },
-  { match: /\bassistant (community )?manager\b/i, rank: 5 },
-  { match: /\bleasing manager\b/i, rank: 5 },
-  { match: /\btraining director\b/i, rank: 6 },
-  { match: /\bcorporate\b/i, rank: 6 },
-  { match: /\bleasing\b/i, rank: 7 },
-  { match: /\bmaintenance (technician|tech)\b/i, rank: 7 },
-  { match: /\b(marketing|accounting)\b/i, rank: 8 },
-  { match: /\b(groundskeeper|porter|housekeep(er|ing))\b/i, rank: 9 },
-];
-
-const ROLE_KEYS = [
-  "Role with Company",
-  "role with company",
-  "Role",
-  "role",
-  "Title",
-  "title",
-];
-
-function leadRole(lead: Lead): string {
-  const raw = lead.rawRow;
-  if (!raw) return "";
-  for (const k of ROLE_KEYS) {
-    const v = raw[k];
-    if (typeof v === "string" && v.trim()) return v.trim();
-  }
-  for (const [k, v] of Object.entries(raw)) {
-    if (/\brole\b|\btitle\b/i.test(k) && typeof v === "string" && v.trim()) {
-      return v.trim();
-    }
-  }
-  return "";
-}
-
-function rolePriority(role: string): number {
-  if (!role) return 99;
-  for (const entry of ROLE_PRIORITY) {
-    if (entry.match.test(role)) return entry.rank;
-  }
-  return 10;
-}
-
-function officeKeyFor(lead: Lead): string {
-  const company = (lead.company ?? "").trim();
-  const city = leadCity(lead);
-  if (!company && !city) return "";
-  return `${company}~${city}`;
-}
-
-function officeLabel(company: string, city: string): string {
-  if (company && city) return `${company}, ${city}`;
-  if (company) return company;
-  if (city) return city;
-  return "Ungrouped";
-}
-
 type OfficeGroup = {
   key: string;
   company: string;
   city: string;
   label: string;
   leads: Lead[];
+  portfolio: CompanyPortfolio | null;
 };
 
-function groupLeadsByOffice(leads: Lead[]): OfficeGroup[] {
+function groupLeadsByOffice(
+  leads: Lead[],
+  portfolios: Map<string, CompanyPortfolio>
+): OfficeGroup[] {
   const map = new Map<string, OfficeGroup>();
   for (const lead of leads) {
     const key = officeKeyFor(lead);
@@ -144,6 +67,7 @@ function groupLeadsByOffice(leads: Lead[]): OfficeGroup[] {
         city,
         label: officeLabel(company, city),
         leads: [lead],
+        portfolio: portfolioFor(portfolios, company),
       });
     }
   }
@@ -211,6 +135,11 @@ export default async function LeadsPage({
     getLeads(),
     getLeadSourceTags(),
   ]);
+  // Portfolio stats are computed over *all* leads (pre-filter) so a group
+  // header's "4 offices" signal stays stable as the user filters by status
+  // or source — a management company doesn't shrink just because Jordan is
+  // looking at only "new" leads.
+  const portfolios = computeCompanyPortfolios(leads);
   const filtered = leads
     .filter((l) => !source || l.sourceTag === source)
     .filter((l) => !statusFilter || l.status === statusFilter)
@@ -395,7 +324,7 @@ export default async function LeadsPage({
         </Card>
       ) : grouped ? (
         <LeadsByOffice
-          groups={groupLeadsByOffice(filtered)}
+          groups={groupLeadsByOffice(filtered, portfolios)}
           buildOfficeHref={(key) =>
             buildLeadsHref({
               source: source ?? null,
@@ -520,18 +449,29 @@ function LeadsByOffice({
         <Card key={group.key || "ungrouped"}>
           <CardHeader className="pb-3">
             <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Building2 className="h-4 w-4 text-muted-foreground" />
                 <CardTitle className="text-base">{group.label}</CardTitle>
                 <span className="text-xs text-muted-foreground">
                   {group.leads.length} attendee
                   {group.leads.length === 1 ? "" : "s"}
                 </span>
+                {group.portfolio &&
+                  (group.portfolio.offices > 1 ||
+                    group.portfolio.properties > 1) && (
+                    <span className="text-xs text-muted-foreground">
+                      · {group.portfolio.offices} office
+                      {group.portfolio.offices === 1 ? "" : "s"} ·{" "}
+                      {group.portfolio.properties} propert
+                      {group.portfolio.properties === 1 ? "y" : "ies"} in{" "}
+                      {group.portfolio.company}
+                    </span>
+                  )}
               </div>
               {group.key && (
                 <Link
                   href={buildOfficeHref(group.key)}
-                  className="text-xs text-muted-foreground hover:text-foreground"
+                  className="text-xs text-muted-foreground hover:text-foreground shrink-0"
                 >
                   View only this office →
                 </Link>
