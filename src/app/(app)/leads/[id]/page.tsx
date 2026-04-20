@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getLead, getLatestBidForLead } from "@/lib/store";
+import {
+  getLead,
+  getLatestBidForLead,
+  getLeadsByCompany,
+} from "@/lib/store";
 import { enrichLeadAction, updateLeadStatusAction } from "@/lib/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +21,8 @@ import {
   leadStatusLabel,
   leadStatusVariant,
 } from "@/lib/status-meta";
+import { computeCompanyPortfolios, portfolioFor } from "@/lib/leads/office";
+import { Building2 } from "lucide-react";
 
 export default async function LeadDetailPage({
   params,
@@ -31,6 +37,13 @@ export default async function LeadDetailPage({
     getLatestBidForLead(id),
   ]);
   if (!lead) notFound();
+
+  const companyLeads = lead.company
+    ? await getLeadsByCompany(lead.company)
+    : [];
+  const portfolio = lead.company
+    ? portfolioFor(computeCompanyPortfolios(companyLeads), lead.company)
+    : null;
 
   const showRerun =
     !lead.enrichmentStatus ||
@@ -64,6 +77,20 @@ export default async function LeadDetailPage({
               {[lead.company, lead.propertyName].filter(Boolean).join(" · ")}
             </p>
           )}
+          {portfolio &&
+            (portfolio.offices > 1 ||
+              portfolio.properties > 1 ||
+              portfolio.leads > 1) && (
+              <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Building2 className="h-3.5 w-3.5" />
+                {portfolio.company}: {portfolio.offices} office
+                {portfolio.offices === 1 ? "" : "s"} ·{" "}
+                {portfolio.properties} propert
+                {portfolio.properties === 1 ? "y" : "ies"} ·{" "}
+                {portfolio.leads} attendee
+                {portfolio.leads === 1 ? "" : "s"} in your imports
+              </p>
+            )}
         </div>
         <div className="flex flex-col items-end gap-2">
           <Badge variant={leadStatusVariant(lead.status)}>

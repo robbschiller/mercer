@@ -1276,6 +1276,27 @@ export async function getLead(id: string) {
   return rows[0] ?? null;
 }
 
+/**
+ * All leads for the current user whose trimmed, case-insensitive company
+ * matches `company`. Used by the lead-detail portfolio card to roll up how
+ * many offices / properties / attendees the user has for this management
+ * company across all their imports.
+ */
+export async function getLeadsByCompany(company: string): Promise<Lead[]> {
+  const user = await requireUser();
+  const trimmed = company.trim();
+  if (!trimmed) return [];
+  return db
+    .select()
+    .from(leads)
+    .where(
+      and(
+        eq(leads.userId, user.id),
+        sql`lower(trim(${leads.company})) = lower(${trimmed})`
+      )
+    );
+}
+
 export async function getLatestBidForLead(leadId: string) {
   const user = await requireUser();
   const rows = await db
