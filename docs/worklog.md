@@ -4,6 +4,46 @@ Running log of in-flight work on the lead-to-close MVP (docs/plan.md). Chronolog
 
 ---
 
+## 2026-04-20 — Phase F seed script + portfolio count per management company
+
+**Goal:** Knock out two items off `docs/plan.md` → *Open now*: the last non-human Phase F polish item (a clean sample import Jordan's demo account can start from) and the first uncommitted direction in the *Enrichment rethink* backlog (surface a per-management-company portfolio signal on top of the already-shipped office grouping). Both sit on the existing schema — no migration needed.
+
+### Shipped
+
+#### Seed sample import (Phase F)
+
+- **Curated fixture** ([scripts/fixtures/jordan-demo.csv](../scripts/fixtures/jordan-demo.csv)) — 32-row BAAA 2026 subset. Column shape mirrors the live BAAA CSV exactly (`First Name,Last Name,Property/Company,Role with Company,Email,Address,Address #2,City,State,Zip,Management Company`) so it flows through the existing [src/lib/leads/csv.ts](../src/lib/leads/csv.ts) auto-mapper the same way the full list does. Hand-picked to demo well: 6 management companies (Greystar, Highmark Residential, Asset Living, The Bainbridge Companies, RangeWater Real Estate, ZRS Management), varied office cities per company (Greystar alone spans Clearwater / Tampa / Pinellas Park / Winter Park / Sarasota), and role diversity (Community Manager, Regional Manager, Maintenance Supervisor, Assistant Manager, Leasing Manager, Maintenance Technician) so office grouping, role-weighted ranking, and the new portfolio-count line all render with non-trivial values.
+- **Seed script** ([scripts/seed-jordan-leads.ts](../scripts/seed-jordan-leads.ts)) — `bun run seed:jordan --user-id=<uuid> [--csv=<path>] [--source=<tag>]`. Imports the CSV directly through Drizzle against `DATABASE_URL`, bypassing the app's `requireUser` session layer. Reuses `parseCsv` + `autoMapColumns` + `mapRowsToLeads` from the production import path so the seed is guaranteed to produce the same `rawRow` shape the UI reads later. Idempotent via source-tag check: re-running with the same `--source` is a no-op (prints a notice, exits 0). Enrichment is **deliberately not run** from the seed — keeps the script independent of Google Places / API-key / referrer restrictions, and Jordan (or a manual run) can trigger per-lead enrichment through the UI after logging in.
+- **package.json** — added `"seed:jordan": "bun run scripts/seed-jordan-leads.ts"` alongside the existing `db:*` scripts.
+- **Out of scope / deliberate:** no seeded bids, proposals, or projects. The demo flow from lead → bid → proposal → accept is fast enough to run live during the walkthrough, and pre-seeding it would lock in a specific storyline. The seed gets Jordan to "here are 32 enriched-ready attendees across 6 management companies"; the live demo handles everything downstream.
+
+#### Portfolio count per management company
+
+- **Shared helpers module** ([src/lib/leads/office.ts](../src/lib/leads/office.ts)) — extracted `leadCity`, `leadRole`, `rolePriority`, `officeKeyFor`, `officeLabel` out of the leads list page (they were inline). Same behavior; the leads list page now imports them instead of defining them locally. The extraction lets the lead detail page reuse exactly the same `leadCity` semantics the list uses for grouping, so the portfolio count is consistent between the two surfaces.
+- **`computeCompanyPortfolios(leads) → Map<company, {offices, properties, leads}>`** (same module) — rolls a lead set up by lowercased company name, counting distinct cities (offices), distinct property names, and total attendees. Display casing is recovered from the first lead seen so "Greystar" doesn't turn into "greystar" in the UI. A `portfolioFor(map, company)` helper handles the null/whitespace edge cases so callers don't have to.
+- **Group header signal** ([src/app/(app)/leads/page.tsx](<../src/app/(app)/leads/page.tsx>)) — the office group cards in the grouped view now render, next to the attendee count, a line like "· 5 offices · 7 properties in Greystar". Only appears when the company has >1 office or >1 property, so single-office cases stay quiet. **Portfolio stats are computed over the full pre-filter `leads` array** — the signal intentionally stays stable as Jordan filters by status or source (a management company doesn't shrink just because he's looking at only "new" leads).
+- **Lead detail header** ([src/app/(app)/leads/[id]/page.tsx](<../src/app/(app)/leads/[id]/page.tsx>)) — added a small Building2-iconed line below the company/property subtitle: "Greystar: 5 offices · 7 properties · 10 attendees in your imports". Uses a new store helper `getLeadsByCompany(company)` ([src/lib/store.ts](../src/lib/store.ts)) — user-scoped SQL `lower(trim(company)) = lower($1)` match — so the detail page only pulls the company's leads, not the full table. Same visibility gate as the header (no render if the company only has a single office/property/attendee).
+
+### Verification
+
+- `bun install` ran to refresh deps (new worktree); `bunx tsc --noEmit` — clean.
+- `bun run build` — green; route table unchanged. All existing routes (`/leads`, `/leads/[id]`, `/p/[slug]`, etc.) render.
+- Lint on touched files only (`bunx eslint src/lib/leads/office.ts src/app/\(app\)/leads/page.tsx src/app/\(app\)/leads/\[id\]/page.tsx src/lib/store.ts scripts/seed-jordan-leads.ts`) — no output (clean). The repo-wide `bun run lint` picks up `.claude/worktrees/` with its own `node_modules`, which is unrelated noise and was there before this PR.
+- Did not run the seed against a live DB in this session — the script guards on valid UUID and on DATABASE_URL presence, and the insert path shares code with the production importer, so a dry-run would only prove Drizzle is wired up.
+
+### Deliberately out of scope
+
+- **Demo video.** Still open on the plan — human task. Script and seeded data are ready for a live walkthrough.
+- **Seeded bids / proposals / projects.** See above — pre-baking the downstream flow locks in a storyline we'd rather demo live.
+- **Per-office qualification brief** (PRD §10 Q6 / Milestone 3). Still on the *Enrichment rethink* backlog, gated on the vision-model + evals decisions.
+- **Multi-tenant portfolio rollup across all users** (e.g. "Greystar is the most-attended management company across the Mercer install base"). Doesn't belong to any current milestone.
+
+### Next
+
+Backup demo video is the last Phase F checkbox (human). After that, the next open direction in *Enrichment rethink* is the per-office qualification brief — but that's real Milestone 3 territory (qualification agent), so it should wait on the §10 decisions. For now the Phase 1 stack plus the portfolio signal is a complete enough demo surface.
+
+---
+
 ## 2026-04-19 — Brand consistency pass: auth pages adopt the marketing surface, light brand accents in the app
 
 **Goal:** Make the product and the marketing site read as one continuous brand. Auth pages get the full marketing treatment (texture + Mercer wordmark linking home) so first impression stays unbroken from `/` → `/signup`. Inside the app, a light touch only — Fraunces editorial display on page titles and amber on the most-primary CTA per surface — so the operator UI doesn't get cosmetically loud at the expense of dense data legibility.
