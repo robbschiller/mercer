@@ -11,7 +11,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Building2, List, MapPin } from "lucide-react";
 import { ViewModeToggle } from "@/components/view-mode-toggle";
+import {
+  PropertyFilterSelect,
+  type PropertyFilterOption,
+} from "@/components/property-filter-select";
 import { parseViewMode } from "@/lib/view-mode";
+import { leadFullName } from "@/lib/leads/name";
 import {
   LEAD_STATUSES,
   type LeadStatus,
@@ -21,6 +26,7 @@ import {
 } from "@/lib/status-meta";
 
 type LeadFilterStatus = LeadStatus;
+type GroupMode = "property" | "management" | null;
 
 function parseLeadStatus(value: string | undefined): LeadFilterStatus | null {
   if (!value) return null;
@@ -29,34 +35,14 @@ function parseLeadStatus(value: string | undefined): LeadFilterStatus | null {
     : null;
 }
 
-/**
- * Derive the management-office identity from a lead. Attendees who share
- * a Management Company AND city are treated as one office. City is pulled
- * from the raw CSV row because we never promoted it to a typed column.
- * Falls back to company-only (city = "") or company = "" when missing.
- */
-const CITY_KEYS = ["city", "City", "CITY"];
-function leadCity(lead: Lead): string {
-  const raw = lead.rawRow;
-  if (!raw) return "";
-  for (const k of CITY_KEYS) {
-    const v = raw[k];
-    if (typeof v === "string" && v.trim()) return v.trim();
-  }
-  for (const [k, v] of Object.entries(raw)) {
-    if (/city/i.test(k) && typeof v === "string" && v.trim()) return v.trim();
-  }
-  return "";
+function parseGroupMode(value: string | undefined): GroupMode {
+  if (value === "property" || value === "management") return value;
+  return null;
 }
 
 /**
  * Paint-decision authority ranking for attendee roles. Lower number = more
  * likely to own the exterior-paint decision for a multifamily community.
- * Rough hierarchy: owners / regional leadership > site manager + maintenance
- * supervisor > assistant / leasing manager > corporate generalists > leasing
- * agents + technicians > support roles. The full BAAA 2026 list has 22 role
- * values; anything unrecognized falls through to the lowest tier so it still
- * surfaces but never bubbles above a decision-maker.
  */
 const ROLE_PRIORITY: Array<{ match: RegExp; rank: number }> = [
   { match: /\bowner\b/i, rank: 1 },
@@ -106,43 +92,68 @@ function rolePriority(role: string): number {
   return 10;
 }
 
-function officeKeyFor(lead: Lead): string {
-  const company = (lead.company ?? "").trim();
-  const city = leadCity(lead);
-  if (!company && !city) return "";
-  return `${company}~${city}`;
+/**
+ * Property identity = the multifamily community this attendee manages. We key
+ * on the enriched resolvedAddress when available (Google Places normalizes
+ * spelling) and fall back to propertyName. Leads with neither land in a
+ * shared "Ungrouped" bucket.
+ */
+function propertyKeyFor(lead: Lead): string {
+  const addr = (lead.resolvedAddress ?? "").trim();
+  if (addr) return `addr:${addr.toLowerCase()}`;
+  const name = (lead.propertyName ?? "").trim();
+  if (name) return `name:${name.toLowerCase()}`;
+  return "";
 }
 
-function officeLabel(company: string, city: string): string {
-  if (company && city) return `${company}, ${city}`;
-  if (company) return company;
-  if (city) return city;
+function propertyDisplayName(lead: Lead): string {
+  const name = (lead.propertyName ?? "").trim();
+  if (name) return name;
+  const addr = (lead.resolvedAddress ?? "").trim();
+  if (addr) return addr.split(",")[0] ?? addr;
   return "Ungrouped";
 }
 
-type OfficeGroup = {
+/**
+ * Management identity = the property-management company. Keyed on lowercase
+ * company string. Corporate-only contacts (no property) still roll up here.
+ */
+function managementKeyFor(lead: Lead): string {
+  const company = (lead.company ?? "").trim();
+  return company ? `co:${company.toLowerCase()}` : "";
+}
+
+function managementDisplayName(lead: Lead): string {
+  return (lead.company ?? "").trim() || "Unassigned";
+}
+
+type PropertyGroup = {
   key: string;
+  name: string;
+  address: string;
   company: string;
-  city: string;
-  label: string;
   leads: Lead[];
 };
 
-function groupLeadsByOffice(leads: Lead[]): OfficeGroup[] {
-  const map = new Map<string, OfficeGroup>();
+function groupLeadsByProperty(leads: Lead[]): PropertyGroup[] {
+  const map = new Map<string, PropertyGroup>();
   for (const lead of leads) {
-    const key = officeKeyFor(lead);
-    const company = (lead.company ?? "").trim();
-    const city = leadCity(lead);
+    const key = propertyKeyFor(lead);
     const existing = map.get(key);
     if (existing) {
       existing.leads.push(lead);
+      if (!existing.company && lead.company) {
+        existing.company = lead.company.trim();
+      }
+      if (!existing.address && lead.resolvedAddress) {
+        existing.address = lead.resolvedAddress.trim();
+      }
     } else {
       map.set(key, {
         key,
-        company,
-        city,
-        label: officeLabel(company, city),
+        name: propertyDisplayName(lead),
+        address: (lead.resolvedAddress ?? "").trim(),
+        company: (lead.company ?? "").trim(),
         leads: [lead],
       });
     }
@@ -152,15 +163,59 @@ function groupLeadsByOffice(leads: Lead[]): OfficeGroup[] {
       const pa = rolePriority(leadRole(a));
       const pb = rolePriority(leadRole(b));
       if (pa !== pb) return pa - pb;
-      return a.name.localeCompare(b.name);
+      return leadFullName(a).localeCompare(leadFullName(b));
     });
   }
   return Array.from(map.values()).sort((a, b) => {
-    // Biggest offices first; ungrouped (empty key) sinks to the bottom.
     if (!a.key) return 1;
     if (!b.key) return -1;
     if (b.leads.length !== a.leads.length) return b.leads.length - a.leads.length;
-    return a.label.localeCompare(b.label);
+    return a.name.localeCompare(b.name);
+  });
+}
+
+type ManagementGroup = {
+  key: string;
+  name: string;
+  propertyCount: number;
+  leads: Lead[];
+};
+
+function groupLeadsByManagement(leads: Lead[]): ManagementGroup[] {
+  const map = new Map<string, { key: string; name: string; leads: Lead[] }>();
+  for (const lead of leads) {
+    const key = managementKeyFor(lead);
+    const existing = map.get(key);
+    if (existing) {
+      existing.leads.push(lead);
+    } else {
+      map.set(key, {
+        key,
+        name: managementDisplayName(lead),
+        leads: [lead],
+      });
+    }
+  }
+  const out: ManagementGroup[] = [];
+  for (const group of map.values()) {
+    group.leads.sort((a, b) => {
+      const pa = rolePriority(leadRole(a));
+      const pb = rolePriority(leadRole(b));
+      if (pa !== pb) return pa - pb;
+      return leadFullName(a).localeCompare(leadFullName(b));
+    });
+    const properties = new Set<string>();
+    for (const lead of group.leads) {
+      const pk = propertyKeyFor(lead);
+      if (pk) properties.add(pk);
+    }
+    out.push({ ...group, propertyCount: properties.size });
+  }
+  return out.sort((a, b) => {
+    if (!a.key) return 1;
+    if (!b.key) return -1;
+    if (b.leads.length !== a.leads.length) return b.leads.length - a.leads.length;
+    return a.name.localeCompare(b.name);
   });
 }
 
@@ -188,7 +243,8 @@ export default async function LeadsPage({
     view?: string;
     status?: string;
     group?: string;
-    office?: string;
+    property?: string;
+    management?: string;
   }>;
 }) {
   const {
@@ -197,15 +253,25 @@ export default async function LeadsPage({
     view: viewParam,
     status: statusParam,
     group: groupParam,
-    office: officeParam,
+    property: propertyParam,
+    management: managementParam,
   } = await searchParams;
   const view = parseViewMode(viewParam);
   const statusFilter = parseLeadStatus(statusParam);
-  const officeFilter = officeParam?.trim() || null;
-  // Grouped rendering ignores the card/table toggle on purpose: grouped
-  // sections are their own layout. The filter-to-one-office state falls
-  // back to flat rendering so the user can switch between cards/table.
-  const grouped = groupParam === "office" && !officeFilter;
+  const propertyFilter = propertyParam?.trim() || null;
+  const managementFilter = managementParam?.trim() || null;
+  const groupMode = parseGroupMode(groupParam);
+
+  // Render mode: a property filter always forces flat (it's one property
+  // already). A management filter combined with group=management collapses
+  // to flat (the single group would be redundant). Otherwise honor groupMode.
+  const renderMode: "flat" | "byProperty" | "byManagement" = propertyFilter
+    ? "flat"
+    : groupMode === "management" && !managementFilter
+    ? "byManagement"
+    : groupMode === "property"
+    ? "byProperty"
+    : "flat";
 
   const [leads, sourceTags] = await Promise.all([
     getLeads(),
@@ -214,13 +280,61 @@ export default async function LeadsPage({
   const filtered = leads
     .filter((l) => !source || l.sourceTag === source)
     .filter((l) => !statusFilter || l.status === statusFilter)
-    .filter((l) => !officeFilter || officeKeyFor(l) === officeFilter);
+    .filter((l) => !propertyFilter || propertyKeyFor(l) === propertyFilter)
+    .filter((l) => !managementFilter || managementKeyFor(l) === managementFilter);
 
-  const activeOfficeLabel = (() => {
-    if (!officeFilter) return null;
-    const sample = filtered[0] ?? leads.find((l) => officeKeyFor(l) === officeFilter);
-    if (!sample) return officeFilter;
-    return officeLabel((sample.company ?? "").trim(), leadCity(sample));
+  const propertyOptions: PropertyFilterOption[] = buildPropertyOptions(
+    leads
+  ).map((o) => ({
+    ...o,
+    href: buildLeadsHref({
+      source: source ?? null,
+      view,
+      status: statusFilter,
+      group: null,
+      property: o.key,
+      management: managementFilter,
+    }),
+  }));
+  const clearPropertyHref = buildLeadsHref({
+    source: source ?? null,
+    view,
+    status: statusFilter,
+    group: groupMode,
+    property: null,
+    management: managementFilter,
+  });
+  const activePropertyLabel = (() => {
+    if (!propertyFilter) return null;
+    const option = propertyOptions.find((o) => o.key === propertyFilter);
+    return option?.label ?? propertyFilter;
+  })();
+
+  const managementOptions: PropertyFilterOption[] = buildManagementOptions(
+    leads
+  ).map((o) => ({
+    ...o,
+    href: buildLeadsHref({
+      source: source ?? null,
+      view,
+      status: statusFilter,
+      group: groupMode === "management" ? null : groupMode,
+      property: propertyFilter,
+      management: o.key,
+    }),
+  }));
+  const clearManagementHref = buildLeadsHref({
+    source: source ?? null,
+    view,
+    status: statusFilter,
+    group: groupMode,
+    property: propertyFilter,
+    management: null,
+  });
+  const activeManagementLabel = (() => {
+    if (!managementFilter) return null;
+    const option = managementOptions.find((o) => o.key === managementFilter);
+    return option?.label ?? managementFilter;
   })();
 
   return (
@@ -231,20 +345,30 @@ export default async function LeadsPage({
         </h1>
         <div className="flex items-center gap-2">
           <GroupToggle
-            grouped={grouped}
-            hrefOn={buildLeadsHref({
-              source: source ?? null,
-              view,
-              status: statusFilter,
-              group: "office",
-              office: null,
-            })}
-            hrefOff={buildLeadsHref({
+            mode={groupMode}
+            hrefFlat={buildLeadsHref({
               source: source ?? null,
               view,
               status: statusFilter,
               group: null,
-              office: officeFilter,
+              property: propertyFilter,
+              management: managementFilter,
+            })}
+            hrefProperty={buildLeadsHref({
+              source: source ?? null,
+              view,
+              status: statusFilter,
+              group: "property",
+              property: null,
+              management: managementFilter,
+            })}
+            hrefManagement={buildLeadsHref({
+              source: source ?? null,
+              view,
+              status: statusFilter,
+              group: "management",
+              property: propertyFilter,
+              management: null,
             })}
           />
           <ViewModeToggle current={view} />
@@ -259,8 +383,9 @@ export default async function LeadsPage({
 
       {imported && (
         <div className="mb-4 rounded-md border border-emerald-600/30 bg-emerald-600/5 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-400">
-          Imported {imported} lead{imported === "1" ? "" : "s"}. Use “Group by
-          office” to roll attendees up by management company and city.
+          Imported {imported} lead{imported === "1" ? "" : "s"}. Group by
+          property to roll attendees up by community, or by management to see
+          the full company roster.
         </div>
       )}
 
@@ -275,8 +400,9 @@ export default async function LeadsPage({
                 source: null,
                 view,
                 status: statusFilter,
-                group: grouped ? "office" : null,
-                office: officeFilter,
+                group: groupMode,
+                property: propertyFilter,
+                management: managementFilter,
               })}
             />
             {sourceTags.map((tag) => (
@@ -288,8 +414,9 @@ export default async function LeadsPage({
                   source: tag,
                   view,
                   status: statusFilter,
-                  group: grouped ? "office" : null,
-                  office: officeFilter,
+                  group: groupMode,
+                  property: propertyFilter,
+                  management: managementFilter,
                 })}
               />
             ))}
@@ -304,8 +431,9 @@ export default async function LeadsPage({
               source: source ?? null,
               view,
               status: null,
-              group: grouped ? "office" : null,
-              office: officeFilter,
+              group: groupMode,
+              property: propertyFilter,
+              management: managementFilter,
             })}
           />
           {LEAD_STATUSES.map((st) => (
@@ -317,46 +445,50 @@ export default async function LeadsPage({
                 source: source ?? null,
                 view,
                 status: st,
-                group: grouped ? "office" : null,
-                office: officeFilter,
+                group: groupMode,
+                property: propertyFilter,
+                management: managementFilter,
               })}
             />
           ))}
         </div>
-        {officeFilter && (
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Office:</span>
-            <span className="inline-flex items-center gap-2 rounded-full border border-foreground bg-foreground px-3 py-1 text-xs text-background">
-              <Building2 className="h-3 w-3" />
-              {activeOfficeLabel}
-              <Link
-                href={buildLeadsHref({
-                  source: source ?? null,
-                  view,
-                  status: statusFilter,
-                  group: null,
-                  office: null,
-                })}
-                aria-label="Clear office filter"
-                className="ml-1 rounded-full px-1 leading-none hover:bg-background/20"
-              >
-                ×
-              </Link>
-            </span>
-          </div>
-        )}
+        <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+          {managementOptions.length > 0 && (
+            <PropertyFilterSelect
+              options={managementOptions}
+              activeKey={managementFilter}
+              clearHref={clearManagementHref}
+              activeLabel={activeManagementLabel}
+              entityLabel="Management"
+              allLabel="All management companies"
+              variant="management"
+            />
+          )}
+          {propertyOptions.length > 0 && (
+            <PropertyFilterSelect
+              options={propertyOptions}
+              activeKey={propertyFilter}
+              clearHref={clearPropertyHref}
+              activeLabel={activePropertyLabel}
+              entityLabel="Property"
+              allLabel="All properties"
+              variant="property"
+            />
+          )}
+        </div>
       </div>
 
       {filtered.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-            {source || statusFilter || officeFilter ? (
+            {source || statusFilter || propertyFilter || managementFilter ? (
               <>
                 <p className="text-muted-foreground">
                   {emptyFilteredMessage({
                     source,
                     statusFilter,
-                    officeLabel: activeOfficeLabel,
+                    propertyLabel: activePropertyLabel,
+                    managementLabel: activeManagementLabel,
                     totalLeads: leads.length,
                   })}
                 </p>
@@ -366,8 +498,9 @@ export default async function LeadsPage({
                       source: null,
                       view,
                       status: null,
-                      group: grouped ? "office" : null,
-                      office: null,
+                      group: groupMode,
+                      property: null,
+                      management: null,
                     })}
                   >
                     Clear filters
@@ -393,16 +526,31 @@ export default async function LeadsPage({
             )}
           </CardContent>
         </Card>
-      ) : grouped ? (
-        <LeadsByOffice
-          groups={groupLeadsByOffice(filtered)}
-          buildOfficeHref={(key) =>
+      ) : renderMode === "byProperty" ? (
+        <LeadsByProperty
+          groups={groupLeadsByProperty(filtered)}
+          buildPropertyHref={(key) =>
             buildLeadsHref({
               source: source ?? null,
               view,
               status: statusFilter,
               group: null,
-              office: key,
+              property: key,
+              management: managementFilter,
+            })
+          }
+        />
+      ) : renderMode === "byManagement" ? (
+        <LeadsByManagement
+          groups={groupLeadsByManagement(filtered)}
+          buildManagementHref={(key) =>
+            buildLeadsHref({
+              source: source ?? null,
+              view,
+              status: statusFilter,
+              group: null,
+              property: propertyFilter,
+              management: key,
             })
           }
         />
@@ -415,20 +563,59 @@ export default async function LeadsPage({
   );
 }
 
+type PropertyOptionBase = { key: string; label: string; count: number };
+
+function buildPropertyOptions(leads: Lead[]): PropertyOptionBase[] {
+  const map = new Map<string, PropertyOptionBase>();
+  for (const lead of leads) {
+    const key = propertyKeyFor(lead);
+    if (!key) continue;
+    const existing = map.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      map.set(key, { key, label: propertyDisplayName(lead), count: 1 });
+    }
+  }
+  return Array.from(map.values()).sort((a, b) =>
+    a.label.localeCompare(b.label)
+  );
+}
+
+function buildManagementOptions(leads: Lead[]): PropertyOptionBase[] {
+  const map = new Map<string, PropertyOptionBase>();
+  for (const lead of leads) {
+    const key = managementKeyFor(lead);
+    if (!key) continue;
+    const existing = map.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      map.set(key, { key, label: managementDisplayName(lead), count: 1 });
+    }
+  }
+  return Array.from(map.values()).sort((a, b) =>
+    a.label.localeCompare(b.label)
+  );
+}
+
 function emptyFilteredMessage({
   source,
   statusFilter,
-  officeLabel,
+  propertyLabel,
+  managementLabel,
   totalLeads,
 }: {
   source: string | undefined;
   statusFilter: LeadFilterStatus | null;
-  officeLabel: string | null;
+  propertyLabel: string | null;
+  managementLabel: string | null;
   totalLeads: number;
 }): string {
   if (totalLeads === 0) return "No leads yet.";
   const parts: string[] = [];
-  if (officeLabel) parts.push(`office "${officeLabel}"`);
+  if (managementLabel) parts.push(`management "${managementLabel}"`);
+  if (propertyLabel) parts.push(`property "${propertyLabel}"`);
   if (statusFilter) parts.push(`status "${leadStatusLabel(statusFilter)}"`);
   if (source) parts.push(`source "${source}"`);
   if (parts.length === 0) return "No leads match the current filters.";
@@ -440,33 +627,44 @@ function buildLeadsHref({
   view,
   status,
   group,
-  office,
+  property,
+  management,
 }: {
   source: string | null;
   view: "cards" | "table";
   status: LeadFilterStatus | null;
-  group: "office" | null;
-  office: string | null;
+  group: GroupMode;
+  property: string | null;
+  management: string | null;
 }): string {
   const params = new URLSearchParams();
   if (source) params.set("source", source);
   if (view === "table") params.set("view", view);
   if (status) params.set("status", status);
   if (group) params.set("group", group);
-  if (office) params.set("office", office);
+  if (property) params.set("property", property);
+  if (management) params.set("management", management);
   const qs = params.toString();
   return qs ? `/leads?${qs}` : "/leads";
 }
 
 function GroupToggle({
-  grouped,
-  hrefOff,
-  hrefOn,
+  mode,
+  hrefFlat,
+  hrefProperty,
+  hrefManagement,
 }: {
-  grouped: boolean;
-  hrefOff: string;
-  hrefOn: string;
+  mode: GroupMode;
+  hrefFlat: string;
+  hrefProperty: string;
+  hrefManagement: string;
 }) {
+  const btn = (active: boolean) =>
+    `inline-flex h-7 w-8 items-center justify-center rounded-sm transition-colors ${
+      active
+        ? "bg-foreground text-background"
+        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+    }`;
   return (
     <div
       role="group"
@@ -474,32 +672,35 @@ function GroupToggle({
       className="inline-flex h-9 items-center gap-0.5 rounded-md border bg-background p-0.5"
     >
       <Link
-        href={hrefOff}
+        href={hrefFlat}
         aria-label="Flat list"
-        aria-pressed={!grouped}
+        aria-pressed={mode === null}
         title="Flat list"
         prefetch={false}
         scroll={false}
-        className={`inline-flex h-7 w-8 items-center justify-center rounded-sm transition-colors ${
-          !grouped
-            ? "bg-foreground text-background"
-            : "text-muted-foreground hover:bg-muted hover:text-foreground"
-        }`}
+        className={btn(mode === null)}
       >
         <List className="h-3.5 w-3.5" />
       </Link>
       <Link
-        href={hrefOn}
-        aria-label="Group by office"
-        aria-pressed={grouped}
-        title="Group by office"
+        href={hrefProperty}
+        aria-label="Group by property"
+        aria-pressed={mode === "property"}
+        title="Group by property"
         prefetch={false}
         scroll={false}
-        className={`inline-flex h-7 w-8 items-center justify-center rounded-sm transition-colors ${
-          grouped
-            ? "bg-foreground text-background"
-            : "text-muted-foreground hover:bg-muted hover:text-foreground"
-        }`}
+        className={btn(mode === "property")}
+      >
+        <MapPin className="h-3.5 w-3.5" />
+      </Link>
+      <Link
+        href={hrefManagement}
+        aria-label="Group by management"
+        aria-pressed={mode === "management"}
+        title="Group by management"
+        prefetch={false}
+        scroll={false}
+        className={btn(mode === "management")}
       >
         <Building2 className="h-3.5 w-3.5" />
       </Link>
@@ -507,12 +708,12 @@ function GroupToggle({
   );
 }
 
-function LeadsByOffice({
+function LeadsByProperty({
   groups,
-  buildOfficeHref,
+  buildPropertyHref,
 }: {
-  groups: OfficeGroup[];
-  buildOfficeHref: (key: string) => string;
+  groups: PropertyGroup[];
+  buildPropertyHref: (key: string) => string;
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -520,20 +721,33 @@ function LeadsByOffice({
         <Card key={group.key || "ungrouped"}>
           <CardHeader className="pb-3">
             <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-muted-foreground" />
-                <CardTitle className="text-base">{group.label}</CardTitle>
-                <span className="text-xs text-muted-foreground">
-                  {group.leads.length} attendee
-                  {group.leads.length === 1 ? "" : "s"}
-                </span>
+              <div className="flex min-w-0 flex-col gap-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <CardTitle className="text-base">{group.name}</CardTitle>
+                  <span className="text-xs text-muted-foreground">
+                    {group.leads.length} contact
+                    {group.leads.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+                {(group.address || group.company) && (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground pl-6">
+                    {group.address && <span>{group.address}</span>}
+                    {group.company && (
+                      <span className="inline-flex items-center gap-1">
+                        <Building2 className="h-3 w-3" />
+                        {group.company}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
               {group.key && (
                 <Link
-                  href={buildOfficeHref(group.key)}
-                  className="text-xs text-muted-foreground hover:text-foreground"
+                  href={buildPropertyHref(group.key)}
+                  className="text-xs text-muted-foreground hover:text-foreground shrink-0"
                 >
-                  View only this office →
+                  View only this property →
                 </Link>
               )}
             </div>
@@ -543,9 +757,6 @@ function LeadsByOffice({
               {group.leads.map((lead, idx) => {
                 const role = leadRole(lead);
                 const rank = rolePriority(role);
-                // First row and a rank of 3 or better (owner / regional /
-                // community manager) gets the paint-decision star so Jordan
-                // can see at a glance who to call first in this office.
                 const topContact = idx === 0 && rank <= 3;
                 return (
                   <li key={lead.id} className="relative py-2.5">
@@ -556,7 +767,7 @@ function LeadsByOffice({
                             href={`/leads/${lead.id}`}
                             className="font-medium text-foreground before:absolute before:inset-0 before:content-['']"
                           >
-                            {lead.name}
+                            {leadFullName(lead)}
                           </Link>
                           {role && (
                             <span
@@ -577,11 +788,113 @@ function LeadsByOffice({
                             </span>
                           )}
                         </div>
-                        {lead.propertyName && (
-                          <span className="text-xs text-muted-foreground">
-                            {lead.propertyName}
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        {lead.email && (
+                          <span className="hidden sm:inline text-muted-foreground truncate max-w-[24ch]">
+                            {lead.email}
                           </span>
                         )}
+                        <Badge variant={leadStatusVariant(lead.status)}>
+                          {leadStatusLabel(lead.status)}
+                        </Badge>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function LeadsByManagement({
+  groups,
+  buildManagementHref,
+}: {
+  groups: ManagementGroup[];
+  buildManagementHref: (key: string) => string;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      {groups.map((group) => (
+        <Card key={group.key || "unassigned"}>
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 flex-col gap-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <CardTitle className="text-base">{group.name}</CardTitle>
+                  <span className="text-xs text-muted-foreground">
+                    {group.leads.length} contact
+                    {group.leads.length === 1 ? "" : "s"}
+                    {group.propertyCount > 0 && (
+                      <>
+                        {" · "}
+                        {group.propertyCount}{" "}
+                        {group.propertyCount === 1 ? "property" : "properties"}
+                      </>
+                    )}
+                  </span>
+                </div>
+              </div>
+              {group.key && (
+                <Link
+                  href={buildManagementHref(group.key)}
+                  className="text-xs text-muted-foreground hover:text-foreground shrink-0"
+                >
+                  View only this company →
+                </Link>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <ul className="divide-y border-t">
+              {group.leads.map((lead, idx) => {
+                const role = leadRole(lead);
+                const rank = rolePriority(role);
+                const topContact = idx === 0 && rank <= 3;
+                const property = propertyDisplayName(lead);
+                const hasProperty = property !== "Ungrouped";
+                return (
+                  <li key={lead.id} className="relative py-2.5">
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Link
+                            href={`/leads/${lead.id}`}
+                            className="font-medium text-foreground before:absolute before:inset-0 before:content-['']"
+                          >
+                            {leadFullName(lead)}
+                          </Link>
+                          {role && (
+                            <span
+                              className={
+                                rank <= 3
+                                  ? "text-xs text-amber-700 dark:text-amber-400"
+                                  : rank <= 5
+                                  ? "text-xs text-muted-foreground"
+                                  : "text-xs text-muted-foreground/60"
+                              }
+                            >
+                              {role}
+                            </span>
+                          )}
+                          {topContact && (
+                            <span className="text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                              Top contact
+                            </span>
+                          )}
+                          {hasProperty && (
+                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                              <MapPin className="h-3 w-3" />
+                              {property}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
                         {lead.email && (
@@ -636,7 +949,9 @@ function LeadsCards({ leads }: { leads: Lead[] }) {
           <Card className="h-full transition-colors group-hover:border-foreground/30">
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between gap-2">
-                <CardTitle className="text-base">{lead.name}</CardTitle>
+                <CardTitle className="text-base">
+                  {leadFullName(lead)}
+                </CardTitle>
                 <Badge variant={leadStatusVariant(lead.status)}>
                   {leadStatusLabel(lead.status)}
                 </Badge>
@@ -716,7 +1031,7 @@ function LeadsTable({ leads }: { leads: Lead[] }) {
                     href={`/leads/${lead.id}`}
                     className="font-medium text-foreground before:absolute before:inset-0 before:content-['']"
                   >
-                    {lead.name}
+                    {leadFullName(lead)}
                   </Link>
                 </Td>
                 <Td muted>{lead.company || "—"}</Td>

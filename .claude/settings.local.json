@@ -24,7 +24,9 @@
       "Bash(awk -F, 'NR>1 && $NF~/[Gg]reystar/ {print $\\(NF-3\\)}' docs/2026-BAAA-Trade-Show-Attendee-List.csv)",
       "Bash(./node_modules/.bin/next lint *)",
       "Bash(./node_modules/.bin/eslint src/app/\\\\\\(app\\\\\\)/leads/page.tsx)",
-      "Bash(awk -F',' 'NR>1 {print $4}' /Users/robb/Developer/mercer/docs/2026-BAAA-Trade-Show-Attendee-List.csv)"
+      "Bash(awk -F',' 'NR>1 {print $4}' /Users/robb/Developer/mercer/docs/2026-BAAA-Trade-Show-Attendee-List.csv)",
+      "Bash(git checkout *)",
+      "Bash(bunx tsc *)"
     ]
   }
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getLead, getLatestBidForLead } from "@/lib/store";
 import { enrichLeadAction, updateLeadStatusAction } from "@/lib/actions";
+import { leadFullName } from "@/lib/leads/name";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -57,7 +58,7 @@ export default async function LeadDetailPage({
       <div className="flex items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-medium tracking-tight">
-            {lead.name}
+            {leadFullName(lead)}
           </h1>
           {(lead.company || lead.propertyName) && (
             <p className="text-muted-foreground">
@@ -113,10 +114,10 @@ export default async function LeadDetailPage({
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Office address</CardTitle>
+            <CardTitle className="text-base">Property address</CardTitle>
             <CardDescription className="text-xs">
-              Resolved from the company name via Google Places. The property to
-              bid on is captured when you create a bid.
+              Resolved via Google Places from the property and management
+              company. This is the property this contact manages.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-2 text-sm">
