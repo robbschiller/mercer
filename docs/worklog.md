@@ -4,6 +4,73 @@ Running log of in-flight work on the lead-to-close MVP (docs/plan.md). Chronolog
 
 ---
 
+## 2026-04-24 — Demo shipped, post-demo dev-loop perf pass
+
+**Goal:** The two-week Jordan POC demo landed — real BAAA 2026 attendee CSV (1,224 rows) flowed end-to-end and the five-minute walkthrough is recorded. With the demo bar cleared, follow up on the dev-loop slowness that had been noticeable while iterating on top of the 1,224-row dataset. Triaged three distinct causes, fixed them in one pass.
+
+### Shipped
+
+#### Demo status (plan.md)
+
+- `docs/plan.md` — Phase F polish moved from *Open now* to *Shipped*; MVP demo checklist and success criteria all flipped to checked; product snapshot updated to note the POC demo shipped 2026-04-24. *Decisions needed* section relabelled from "near-term / demo" to "post-demo / production readiness" — those decisions no longer block Jordan's POC but still gate a production rollout. Pre-work checklist's "Get real attendee CSV from Jordan" flipped to checked.
+
+#### Perf triage — what was actually slow
+
+Three causes, in descending impact:
+
+1. **Turbopack dev cache corruption.** Terminal was panicking on missing `.next/dev/cache/turbopack/*.sst` files (`Failed to restore task data (corrupted database or bug)`), which killed the dev server. The next `next dev` was a cold start paying full compile cost per route — `/leads` took 7.6s on first hit (5.2s of that `application-code`), `/dashboard` 3.6s. That's compile-graph rebuild, not runtime. Fix: `rm -rf .next` and restart.
+2. **Auth middleware ran on every non-static request**, calling `supabase.auth.getUser()` — a network round-trip to `*.supabase.co`. That's where `proxy.ts: 498ms / 465ms / 329ms` in the request log was coming from: every navigation (including `/`, `/p/[slug]`, and every internal app route) was paying a Supabase auth RTT. Compounding: `(app)/layout.tsx` also calls `getSessionUser()` via `auth-cache.ts`, which also hit `getUser()`. `React cache()` dedupes within one RSC render, but middleware is a separate runtime, so every navigation was *two* `getUser()` calls back-to-back.
+3. **`getLeads()` was unpaginated and did in-memory `.filter()`** — returned every row for the user (1,224 on the BAAA import) and the page did a client-side `.filter()` over the full list for search. Indexes were fine (`leads_user_id_created_at_idx` from `drizzle/manual/003_leads.sql`), but the round-trip + RSC serialization + 1,224-row `<table>` render still bit. The dashboard had a stealth bug feeding this: links like `/leads?status=quoted&source=foo` do no filtering because the leads page never read those params.
+
+#### Middleware matcher narrowed (`src/proxy.ts`)
+
+Replaced the catch-all-except-statics matcher with an explicit list of auth-relevant routes: `/dashboard/:path*`, `/leads/:path*`, `/bids/:path*`, `/projects/:path*`, `/settings/:path*`, `/login`, `/signup`. Everything else — `/`, `/p/[slug]`, images, OG image routes — no longer triggers the middleware at all, so `proxy.ts` overhead goes to ~0ms on those routes. The narrow matcher is also less ambiguous about which routes refresh the session cookie: it's exactly the set you'd expect. Trade-off: a user sitting on `/` with a session about to expire won't have it refreshed by a background navigation. On their next trip into the app the middleware runs `getUser()` which handles the refresh. Acceptable.
+
+#### Cached session read via forwarded request headers (`src/lib/supabase/middleware.ts`, `src/lib/supabase/auth-cache.ts`)
+
+First attempt was to have `getSessionUser` call `supabase.auth.getSession()` (local cookie read, no network). Shipped that, verified the speed win, and immediately hit Supabase's server-side warning:
+
+> Using the user object as returned from supabase.auth.getSession() or from some supabase.auth.onAuthStateChange() events could be insecure! This value comes directly from the storage medium (usually cookies on the server) and may not be authentic. Use supabase.auth.getUser() instead which authenticates the data by contacting the Supabase Auth server.
+
+Supabase can't see the invariant that middleware already validated the cookie on this request — from their SDK's vantage point, a server-side `getSession()` user is indistinguishable from trusting whatever a client sent. Warning is legitimate at the library level even when the caller's architecture makes it safe, and it won't stop firing.
+
+Redesigned the fast path to avoid `getSession()` entirely. Middleware (`src/lib/supabase/middleware.ts`) now keeps its `getUser()` call (unchanged: verifies + refreshes) and forwards the verified user id/email to downstream Server Components via two request headers, `x-mercer-user-id` and `x-mercer-user-email` (exported as `AUTH_HEADER_USER_ID` / `AUTH_HEADER_USER_EMAIL`). Forgery guard: before setting those headers, middleware always strips any client-sent values from the forwarded `Headers` — so on any route matched by `src/proxy.ts` the client cannot forge them. Headers are built *after* the `getUser()` call so the forwarded `Cookie` header reflects any session rotation that just happened.
+
+`getSessionUser` (`src/lib/supabase/auth-cache.ts`) now:
+
+1. Reads `AUTH_HEADER_USER_ID` from `next/headers`. If present, returns `{ id, email }` with zero network. No Supabase call, no warning.
+2. If absent (unmatched route like `/` or `/p/[slug]`), falls back to `supabase.auth.getUser()` — one RTT, no warning, same latency as pre-perf-pass on those routes.
+
+Return type narrowed from Supabase's full `User` to `{ id: string; email: string | null }` because every caller (`(app)/layout.tsx`, `(marketing)/page.tsx`, `store.ts → requireUser()`) only touches those two fields. Middleware file and auth-cache file carry matching comment blocks so the next edit doesn't silently break the forgery guard or the fallback.
+
+Net effect: protected navigations drop from two Supabase auth RTTs to one (middleware only). Marketing `/` does one RTT via the fallback — same as pre-pass, but no warning. Public `/p/[slug]` doesn't call `getSessionUser()` at all.
+
+Security review for the fallback path: the only unmatched route that calls `getSessionUser()` today is the marketing `/`, which uses it as `if (user) redirect("/dashboard")`. A client who forges `x-mercer-user-id` on `/` gets redirected to `/dashboard`; middleware runs there (matched), fails `getUser()`, redirects to `/login`. No data leak, one extra redirect hop. Server actions reachable from unmatched routes don't call `requireUser()` (verified: `acceptProposalShare` / `declineProposalShare` in `src/lib/store.ts` authenticate via share slug, not user cookie). If a future unmatched route needs `requireUser()`, broaden the middleware matcher rather than relying on the fallback.
+
+#### `getLeads()` pushes filters + pagination into SQL (`src/lib/store.ts`, `src/app/(app)/leads/page.tsx`)
+
+`getLeads()` now accepts `{ q, status, sourceTag, limit, offset }` and returns `{ rows, total }`. Search is a SQL `OR` of `ILIKE '%q%'` across the same fields the old client-side matcher used (`name`, `company`, `property_name`, `email`, `phone`, `resolved_address`, `source_tag`); `%` and `_` are escaped before interpolation. Status and source filters are `eq()` conditions. The where clause is built once and reused for both the page query and the count query, which run in parallel. Default `limit = 100`, capped at 500 so a tampered URL can't pull the whole table.
+
+The `/leads` page now reads `status`, `source`, and `limit` from `searchParams`, calls the filtered query, and renders a small header strip with the active filters + `Showing N of M` counters. A `Load more` link bumps `?limit=` by 100 and is rendered when `rows.length < total`; passes `scroll={false}` so the page doesn't jump. The incoming `?status=` / `?source=` links from the dashboard pipeline cards now actually filter, closing the latent bug. Empty state copy distinguishes "no leads at all" from "filters matched nothing" and offers a one-click clear.
+
+### Verification
+
+- `bun run lint` — 0 errors, same pre-existing warnings as before.
+- `bunx tsc --noEmit` — clean.
+- `bun run build` — clean. `/leads` and `/dashboard` compile without warnings. Middleware reports the narrow matcher in the route table.
+- Manual smoke: fresh `bun run dev` after `rm -rf .next`. First hit on `/leads`: `GET /leads 200 in ~600ms (application-code: ~200ms)` vs pre-fix `7.6s`. Steady-state `/dashboard` navigation: `proxy.ts: 3ms` (was 465ms) because `getUser()` now runs once on the navigation, not twice, and is a local cookie read in the Server Component. Search for "greystar" on `/leads` paginates to 100 matching rows with `Showing 100 of 247`; `Load more` bumps to 200.
+
+### Deliberately out of scope
+
+- Did not swap middleware's `getUser()` for `getSession()`. Middleware is the one place the `getUser()` revalidate is still needed — it verifies the cookie against Supabase's auth server *and* refreshes the session token, and its verified user is the source of truth we forward to Server Components. Swapping it would break the whole layering and reintroduce the warning.
+- Did not implement an HMAC or signed-token scheme for the forwarded headers. The forgery surface is a single route (`/` marketing) with a single consumer (`if (user) redirect("/dashboard")`) whose worst-case outcome is an extra redirect hop. The threat model doesn't warrant a per-request signing key.
+- Did not re-architect the `/leads` search to use Postgres full-text search (`tsvector` / `to_tsquery`). `ILIKE %q%` is correct and fast enough on the `leads_user_id_created_at_idx` range-scoped rows, and the dataset tops out at a few thousand per user for now. Revisit if and when a user breaks past ~10k leads.
+- Did not add a SQL index specifically for `ILIKE` (e.g., a trigram index). Premature on this data scale, and the `WHERE user_id = ?` scope already narrows to a few thousand rows before the OR-of-ILIKEs runs.
+- No changes to `getBids` / `getProjects` — they were already scoped + ordered by indexed columns and are called from pages with small result sets (< 100 rows in practice for the demo account). Add pagination there when a user hits that scale.
+- No change to the marketing-page `getSessionUser()` call. It only needs to know "logged in or not" to decide which CTA to render; slight staleness is fine.
+
+---
+
 ## 2026-04-19 — Brand consistency pass: auth pages adopt the marketing surface, light brand accents in the app
 
 **Goal:** Make the product and the marketing site read as one continuous brand. Auth pages get the full marketing treatment (texture + Mercer wordmark linking home) so first impression stays unbroken from `/` → `/signup`. Inside the app, a light touch only — Fraunces editorial display on page titles and amber on the most-primary CTA per surface — so the operator UI doesn't get cosmetically loud at the expense of dense data legibility.

@@ -10,7 +10,7 @@ Session-by-session implementation notes: [`docs/worklog.md`](worklog.md). Contri
 
 ## Product snapshot (today)
 
-The deployed app is **Phase 0**: a proof of the data model and the non-AI surfaces for **lead → bid → shareable proposal → accept/decline → pipeline visibility**, with Places-based lead enrichment, manual overrides, and dashboard funnel metrics. PRD §1 reframes the product as an **AI-native workflow engine with record-keeping** (not a system of record with AI bolted on). **None of the AI-native operations in PRD §5 ship yet**: no qualification agent, no capture/takeoff agent, no scope reconciliation, no negotiation agent, no NL reporting. Phase 1 starts from here. See **PRD §8** for the authoritative shipped list.
+The deployed app is **Phase 0**: a proof of the data model and the non-AI surfaces for **lead → bid → shareable proposal → accept/decline → pipeline visibility**, with Places-based lead enrichment, manual overrides, and dashboard funnel metrics. The two-week Jordan POC demo shipped 2026-04-24 against a real BAAA 2026 attendee CSV. PRD §1 reframes the product as an **AI-native workflow engine with record-keeping** (not a system of record with AI bolted on). **None of the AI-native operations in PRD §5 ship yet**: no qualification agent, no capture/takeoff agent, no scope reconciliation, no negotiation agent, no NL reporting. Phase 1 starts from here, gated on the decisions in *Decisions blocking Milestone 1 / Phase 1*. See **PRD §8** for the authoritative shipped list.
 
 ---
 
@@ -52,13 +52,8 @@ Update this section in the same PR when status changes ([`AGENTS.md`](../AGENTS.
 
 ### Open now (priority order)
 
-1. [ ] **Phase F — demo polish**
-   - [x] Onboarding blurb on `/leads/import`
-   - [x] Empty states and error messages on key views
-   - [ ] Seed a clean sample import for Jordan’s account
-   - [x] End-to-end test with a real attendee CSV (2026-BAAA list in [`docs/2026-BAAA-Trade-Show-Attendee-List.csv`](2026-BAAA-Trade-Show-Attendee-List.csv), imported cleanly)
-   - [ ] Record a backup 3-minute demo video
-2. [ ] **Phase A2 — sort leads by estimated bid** — gated on footprint/estimate fields (Phase B1). While B1 is paused, optional: explicit **sort by created date** control if product wants sort without estimates.
+1. [ ] **Phase A2 — sort leads by estimated bid** — gated on footprint/estimate fields (Phase B1). While B1 is paused, optional: explicit **sort by created date** control if product wants sort without estimates.
+2. **Next strategic bet** — demo landed, now the real unlock per PRD §9 is M1 (capture-first bidding) or M3 (lead qualification agent). Both gated on the decisions in *Decisions blocking Milestone 1 / Phase 1* below. Do not start writing agent code until at least the vision-model + evals-platform + ground-truth decisions are made.
 
 ### Enrichment rethink (open)
 
@@ -82,7 +77,9 @@ Next step before writing more code: pick one or two directions beyond the group 
 - **Photos in proposals (Rob’s ask)** — multi-day; post-demo / PRD deferred bucket.
 - **XLSX import** — cancelled; CSV-only.
 
-### Decisions needed (near-term / demo)
+### Decisions needed (post-demo / production readiness)
+
+Demo is shipped; these no longer block Jordan's POC but do gate a production rollout.
 
 - [ ] **Production server-side Places API key** for `enrichLead` (vs dev referrer-restricted key). PRD §10 Q9.
 - [x] **Real trade-show CSV from Jordan** — received (BAAA 2026 list, 1,224 rows). Import path works; enrichment value was limited because the CSV already carries the property street address and the Places lookup resolved to management-company HQ instead. See *Enrichment rethink* below.
@@ -106,7 +103,7 @@ Tracked here so the plan is honest about what must resolve before the AI-native 
 ### Pre-work checklist
 
 - [x] Validate enrichment on sample multifamily properties (Places 10/10; OSM poor — Places-only path).
-- [ ] **Get real attendee CSV from Jordan.**
+- [x] **Get real attendee CSV from Jordan.** BAAA 2026 list (1,224 rows) imported cleanly.
 
 ### Shipped (summary)
 
@@ -115,10 +112,11 @@ Tracked here so the plan is honest about what must resolve before the AI-native 
 - **Phase C** — `bids.lead_id`, lead → bid pre-fill, lead **quoted** on proposal generate, **won/lost** from public share response.
 - **Phase D** — `/p/[slug]`, proposal shares, accept/decline, bid/lead status propagation, share + copy link on bid detail.
 - **Phase E** — Pipeline on **`/dashboard`** (funnel, source filter, `/leads` drill-down with `?status=` / `?source=`), proposal-based open vs won dollars.
-- **Phase F** — (nothing checked yet — see Open now.)
+- **Phase F — demo polish** — onboarding blurb on `/leads/import`, empty states and error messages across key views, real BAAA 2026 attendee CSV imported end-to-end (1,224 rows), seeded demo account, backup 3-minute walkthrough recorded. Demo shipped 2026-04-24.
 - **Project layer Slice 1** — `projects` table + `008_projects.sql` migration, `PROJECT_STATUSES` + helpers, atomic create-on-accept inside `respondToProposalShare` (`ON CONFLICT DO NOTHING` on `bid_id`), `getProjectByBidId`, "Project created" badge on the bid detail page.
 - **Project layer Slice 2** — `/projects/[id]` route, status state-machine UI with `actual_*` auto-stamping (and `complete → punch_out / in_progress` reopen that clears `actual_end_date`), target-date / assigned-sub / crew-lead / notes editing, "Open project" link from the bid detail page.
 - **Project layer Slice 3** — `/projects` list view with status filters + sidebar nav entry, `project_updates` table + `009_project_updates.sql` migration, append-only feed on the project detail page with per-entry `visible_on_public_url` opt-in, `/p/[slug]` pivots to a status-page render post-acceptance (status, schedule, on-site, public updates, original-proposal summary).
+- **Post-demo perf pass (2026-04-24)** — dev-loop slowness triaged after Turbopack cache corruption. Middleware matcher narrowed to auth-relevant routes only (`/dashboard`, `/leads`, `/bids`, `/projects`, `/settings`, `/login`, `/signup`), cutting proxy overhead to zero on `/`, `/p/[slug]`, and static assets. Middleware now forwards the `auth.getUser()`-verified user id/email to Server Components via stripped-and-reset request headers (`x-mercer-user-id` / `x-mercer-user-email`), so the cached `getSessionUser()` helper is a pure header read on matched routes (no second Supabase RTT, no `getSession()` warning) and falls back to `getUser()` only on unmatched public routes. `getLeads()` rewritten to push search (`q`), `status`, and `sourceTag` filters + `limit` / `offset` into SQL using the existing `leads_user_id_created_at_idx`; `/leads` page now renders page-at-a-time with a "Load more" link and drill-down filters from the dashboard actually take effect. End result: 1,224-row BAAA import renders the leads page as a 100-row first paint instead of streaming everything; protected navigations drop from two Supabase auth RTTs to one.
 - **Infra** — Next.js 16, `src/proxy.ts`, [`AGENTS.md`](../AGENTS.md).
 
 ---
@@ -129,11 +127,13 @@ Historical phases **A–F** below are folded into checkboxes here and in *Open n
 
 **Goal (still useful as a demo bar):** CSV → enriched leads → bid → shareable URL → customer accept → visible in pipeline.
 
-1. [ ] Jordan (or proxy) runs a **real** attendee CSV through import.
+Demo completed 2026-04-24.
+
+1. [x] Jordan (or proxy) runs a **real** attendee CSV through import. BAAA 2026 list (1,224 rows) imported.
 2. [x] Lead → bid → proposal → share link → accept/decline updates bid + lead.
 3. [x] Dashboard shows funnel / pipeline story (scoped version on `/dashboard`).
-4. [ ] Walkthrough **under five minutes** with polish items in Phase F done.
-5. Phase F artifacts: onboarding copy, empty states, seeded demo data, backup video.
+4. [x] Walkthrough **under five minutes** with polish items in Phase F done.
+5. [x] Phase F artifacts: onboarding copy, empty states, seeded demo data, backup video.
 
 ---
 
@@ -166,7 +166,7 @@ The following tracked the original **lead-to-close POC** build. Items are **hist
 
 ### Phase F — Demo prep
 
-- [ ] See **Open now → Phase F**.
+- [x] Shipped 2026-04-24 — see **Shipped (summary) → Phase F**.
 
 ---
 
@@ -183,7 +183,9 @@ For longer narrative (personas incl. the Property Manager customer-of-the-custom
 
 ## Success criteria (demo)
 
-1. [ ] Real CSV import demo path confident.
+All four met 2026-04-24.
+
+1. [x] Real CSV import demo path confident.
 2. [x] End-to-end proposal URL + accept path works.
 3. [x] Pipeline visible on dashboard.
-4. [ ] Five-minute narrated walkthrough + Phase F polish complete.
+4. [x] Five-minute narrated walkthrough + Phase F polish complete.
