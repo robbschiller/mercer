@@ -11,7 +11,7 @@ import {
   projects,
   projectUpdates,
 } from "@/db/schema";
-import { eq, desc, and, asc, sql } from "drizzle-orm";
+import { eq, desc, and, asc, sql, ilike, or, type SQL } from "drizzle-orm";
 import { getSessionUser } from "@/lib/supabase/auth-cache";
 import { computeTotalSqft } from "@/lib/dimensions";
 import { buildSatelliteProxyPath } from "@/lib/maps/satellite-path";
@@ -1226,13 +1226,101 @@ export async function getLeadStatusCounts(options?: {
 
 // ── Leads ──
 
-export async function getLeads() {
+/** Hard ceiling on `limit` — a tampered URL can't pull the whole table. */
+export const LEADS_PAGE_MAX_LIMIT = 500;
+/** Default page size when the caller doesn't specify one. */
+export const LEADS_PAGE_DEFAULT_LIMIT = 100;
+
+export type GetLeadsOptions = {
+  /** Free-text search across name/company/property/email/phone/address/tag. */
+  q?: string | null;
+  status?: LeadStatus | null;
+  sourceTag?: string | null;
+  /** Number of rows to return (clamped to `[1, LEADS_PAGE_MAX_LIMIT]`). */
+  limit?: number;
+  /** Rows to skip (clamped to `>= 0`). */
+  offset?: number;
+};
+
+export type GetLeadsResult = {
+  rows: Lead[];
+  /** Total rows matching the current filter set (before limit/offset). */
+  total: number;
+  /** Effective pagination the query actually used, after clamping. */
+  limit: number;
+  offset: number;
+};
+
+/** Escape Postgres `ILIKE` metacharacters before wrapping in `%…%`. */
+function escapeIlike(needle: string): string {
+  return needle.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/**
+ * Lead list query with SQL-level filtering + pagination.
+ *
+ * The where clause is built once and reused for both the page query and the
+ * count query, which run in parallel. Uses the `leads_user_id_created_at_idx`
+ * composite index from `drizzle/manual/003_leads.sql` for the primary ordering
+ * + user scope; the `ILIKE` OR-group runs against the already-narrowed row
+ * set so a trigram index is not yet warranted at this data scale (per-user
+ * lead counts in the low thousands).
+ */
+export async function getLeads(
+  options: GetLeadsOptions = {},
+): Promise<GetLeadsResult> {
   const user = await requireUser();
-  return db
-    .select()
-    .from(leads)
-    .where(eq(leads.userId, user.id))
-    .orderBy(desc(leads.createdAt));
+  const limit = Math.max(
+    1,
+    Math.min(options.limit ?? LEADS_PAGE_DEFAULT_LIMIT, LEADS_PAGE_MAX_LIMIT),
+  );
+  const offset = Math.max(0, options.offset ?? 0);
+
+  const conditions: SQL[] = [eq(leads.userId, user.id)];
+
+  const status = options.status?.trim() || null;
+  if (status) conditions.push(eq(leads.status, status as LeadStatus));
+
+  const sourceTag = options.sourceTag?.trim() || null;
+  if (sourceTag) conditions.push(eq(leads.sourceTag, sourceTag));
+
+  const q = options.q?.trim() || null;
+  if (q) {
+    const needle = `%${escapeIlike(q)}%`;
+    const searchable = or(
+      ilike(leads.name, needle),
+      ilike(leads.company, needle),
+      ilike(leads.propertyName, needle),
+      ilike(leads.email, needle),
+      ilike(leads.phone, needle),
+      ilike(leads.resolvedAddress, needle),
+      ilike(leads.sourceTag, needle),
+    );
+    if (searchable) conditions.push(searchable);
+  }
+
+  const where = and(...conditions)!;
+
+  const [rows, totalRows] = await Promise.all([
+    db
+      .select()
+      .from(leads)
+      .where(where)
+      .orderBy(desc(leads.createdAt))
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(leads)
+      .where(where),
+  ]);
+
+  return {
+    rows,
+    total: Number(totalRows[0]?.count ?? 0),
+    limit,
+    offset,
+  };
 }
 
 export async function createLead(
