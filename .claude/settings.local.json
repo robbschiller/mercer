@@ -26,7 +26,15 @@
       "Bash(./node_modules/.bin/eslint src/app/\\\\\\(app\\\\\\)/leads/page.tsx)",
       "Bash(awk -F',' 'NR>1 {print $4}' /Users/robb/Developer/mercer/docs/2026-BAAA-Trade-Show-Attendee-List.csv)",
       "Bash(git checkout *)",
-      "Bash(bunx tsc *)"
+      "Bash(bunx tsc *)",
+      "Bash(npx tsc *)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(node_modules/.bin/eslint src/app/\\\\\\(app\\\\\\)/leads/page.tsx src/components/leads-toolbar.tsx)",
+      "Bash(node_modules/.bin/eslint src/app/\\\\\\(app\\\\\\)/leads/page.tsx)",
+      "Bash(node_modules/.bin/eslint src/app/\\\\\\(app\\\\\\)/leads src/components/lead-detail-sheet.tsx src/components/lead-detail-body.tsx)",
+      "Bash(node_modules/.bin/eslint src/app/\\\\\\(app\\\\\\)/leads/page.tsx src/components/leads-row.tsx)",
+      "Bash(node_modules/.bin/next lint *)",
+      "Bash(node_modules/.bin/eslint src/app/\\\\\\(app\\\\\\)/leads/page.tsx src/components/leads-row.tsx src/components/lead-detail-body.tsx)"
     ]
   }
 }

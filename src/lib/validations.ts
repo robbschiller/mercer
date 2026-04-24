@@ -222,6 +222,18 @@ export const updateLeadStatusSchema = z.object({
   status: z.enum(LEAD_STATUSES),
 });
 
+export const updateLeadSchema = z.object({
+  id: z.string().uuid("Invalid lead ID"),
+  name: z.string().trim().min(1, "Name is required"),
+  email: optionalEmail,
+  phone: optionalText,
+  company: optionalText,
+  propertyName: optionalText,
+  notes: z
+    .union([z.string(), z.undefined()])
+    .transform((v) => (v ?? "").trim()),
+});
+
 export const enrichLeadActionSchema = z.object({
   id: z.string().uuid("Invalid lead ID"),
 });

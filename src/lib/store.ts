@@ -1356,6 +1356,21 @@ export async function updateLeadEnrichment(
   return rows[0] ?? null;
 }
 
+export async function updateLead(
+  id: string,
+  patch: Partial<
+    Pick<Lead, "name" | "email" | "phone" | "company" | "propertyName" | "notes">
+  >,
+) {
+  const user = await requireUser();
+  const rows = await db
+    .update(leads)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(and(eq(leads.id, id), eq(leads.userId, user.id)))
+    .returning();
+  return rows[0] ?? null;
+}
+
 export async function updateLeadStatus(id: string, status: Lead["status"]) {
   const user = await requireUser();
   const rows = await db

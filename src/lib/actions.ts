@@ -22,6 +22,7 @@ import {
   createProposalShare,
   createLead,
   createLeadsBatch,
+  updateLead,
   updateLeadStatus,
   getLead,
   acceptProposalShare,
@@ -62,6 +63,7 @@ import {
   createLeadSchema,
   importLeadsSchema,
   updateLeadStatusSchema,
+  updateLeadSchema,
   enrichLeadActionSchema,
   updateProjectStatusSchema,
   updateProjectDetailsSchema,
@@ -620,6 +622,29 @@ export async function updateLeadStatusAction(formData: FormData) {
   }
   revalidatePath("/leads");
   revalidatePath(`/leads/${result.data.id}`);
+}
+
+export async function updateLeadAction(formData: FormData) {
+  const result = updateLeadSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    const id = (formData.get("id") as string) || "";
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(
+      id
+        ? `/leads?lead=${id}&error=${encodeURIComponent(message)}`
+        : `/leads?error=${encodeURIComponent(message)}`,
+    );
+  }
+  const { id, ...patch } = result.data;
+  try {
+    await updateLead(id, patch);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to update lead";
+    redirect(`/leads?lead=${id}&error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath("/leads");
+  revalidatePath(`/leads/${id}`);
 }
 
 export async function enrichLeadAction(formData: FormData) {
