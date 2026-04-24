@@ -16,11 +16,16 @@ import { updateLeadEnrichment, type Lead } from "@/lib/store";
 export async function runEnrichmentForLead(lead: Lead): Promise<void> {
   const company = lead.company ?? "";
   const propertyName = lead.propertyName ?? undefined;
+  // Prefer the CSV-derived address (seeded into resolvedAddress at import)
+  // as the Places query — it's the authoritative physical location for
+  // this contact. Fall back to property+company string matching only when
+  // the CSV didn't provide an address.
+  const csvAddress = lead.resolvedAddress?.trim() || null;
 
-  if (!company && !propertyName) {
+  if (!csvAddress && !company && !propertyName) {
     await updateLeadEnrichment(lead.id, {
       enrichmentStatus: "skipped",
-      enrichmentError: "No company or property name to resolve",
+      enrichmentError: "No address, company, or property name to resolve",
     });
     return;
   }
@@ -35,15 +40,21 @@ export async function runEnrichmentForLead(lead: Lead): Promise<void> {
   }
 
   try {
-    const place = await resolveLeadViaPlaces(
-      { company, propertyName },
-      apiKey,
-      // Dev key is restricted to HTTP referrers. Prod should use a separate
-      // IP-restricted key and drop this Referer.
-      { referer: "http://localhost:3000/" }
-    );
+    const place = csvAddress
+      ? await resolveLeadViaPlaces(
+          { company: csvAddress, propertyName: null },
+          apiKey,
+          { referer: "http://localhost:3000/" }
+        )
+      : await resolveLeadViaPlaces(
+          { company, propertyName },
+          apiKey,
+          { referer: "http://localhost:3000/" }
+        );
 
     if (!place) {
+      // Don't wipe the CSV-derived resolvedAddress just because Places
+      // couldn't geocode it — keep the text, mark enrichment failed.
       await updateLeadEnrichment(lead.id, {
         enrichmentStatus: "failed",
         enrichmentError: "No Places result for query",
@@ -53,7 +64,8 @@ export async function runEnrichmentForLead(lead: Lead): Promise<void> {
 
     await updateLeadEnrichment(lead.id, {
       enrichmentStatus: "success",
-      resolvedAddress: place.formattedAddress,
+      // CSV address wins as the stored string; Places gives us lat/lng/id.
+      resolvedAddress: csvAddress ?? place.formattedAddress,
       latitude: place.latitude,
       longitude: place.longitude,
       googlePlaceId: place.placeId,

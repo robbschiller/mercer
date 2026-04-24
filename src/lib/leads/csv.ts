@@ -96,8 +96,11 @@ function splitCells(line: string): string[] {
 
 /* ── Column detection ─────────────────────────────────────────────────── */
 
-const COLUMN_ALIASES: Record<keyof Omit<LeadImportRow, "rawRow">, string[]> = {
-  name: ["name", "full name", "contact", "contact name", "first name"],
+const COLUMN_ALIASES: Record<
+  keyof Omit<LeadImportRow, "rawRow" | "csvAddress">,
+  string[]
+> = {
+  name: ["name", "full name", "contact", "contact name"],
   email: ["email", "e-mail", "email address"],
   phone: ["phone", "mobile", "cell", "tel", "telephone", "phone number"],
   company: [
@@ -115,11 +118,32 @@ const COLUMN_ALIASES: Record<keyof Omit<LeadImportRow, "rawRow">, string[]> = {
     "community",
     "community name",
     "building",
+    "property/company",
   ],
 };
 
+const FIRST_NAME_ALIASES = ["first name", "firstname", "first"];
+const LAST_NAME_ALIASES = ["last name", "lastname", "last", "surname"];
+
+// CSV address pieces. The row-level physical address is authoritative for
+// where this contact sits (per 2026-04-22 correction), so we assemble it
+// explicitly rather than letting Places guess from property+company strings.
+const ADDRESS_ALIASES = ["address", "street address", "street"];
+const ADDRESS_2_ALIASES = ["address #2", "address 2", "address line 2", "suite", "unit"];
+const CITY_ALIASES = ["city", "town"];
+const STATE_ALIASES = ["state", "province", "region"];
+const ZIP_ALIASES = ["zip", "zip code", "postal code", "postcode"];
+
 export type ColumnMapping = {
-  [K in keyof Omit<LeadImportRow, "rawRow">]: string | null;
+  [K in keyof Omit<LeadImportRow, "rawRow" | "csvAddress">]: string | null;
+} & {
+  firstName: string | null;
+  lastName: string | null;
+  address: string | null;
+  address2: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
 };
 
 /** Best-effort auto-map from CSV headers → lead fields. */
@@ -144,7 +168,30 @@ export function autoMapColumns(headers: string[]): ColumnMapping {
     phone: pick(COLUMN_ALIASES.phone),
     company: pick(COLUMN_ALIASES.company),
     propertyName: pick(COLUMN_ALIASES.propertyName),
+    firstName: pick(FIRST_NAME_ALIASES),
+    lastName: pick(LAST_NAME_ALIASES),
+    address: pick(ADDRESS_ALIASES),
+    address2: pick(ADDRESS_2_ALIASES),
+    city: pick(CITY_ALIASES),
+    state: pick(STATE_ALIASES),
+    zip: pick(ZIP_ALIASES),
   };
+}
+
+function buildCsvAddress(
+  row: Record<string, string>,
+  mapping: ColumnMapping
+): string | null {
+  const street = mapping.address ? (row[mapping.address] ?? "").trim() : "";
+  const street2 = mapping.address2 ? (row[mapping.address2] ?? "").trim() : "";
+  const city = mapping.city ? (row[mapping.city] ?? "").trim() : "";
+  const state = mapping.state ? (row[mapping.state] ?? "").trim() : "";
+  const zip = mapping.zip ? (row[mapping.zip] ?? "").trim() : "";
+  if (!street && !city && !state && !zip) return null;
+  const line1 = [street, street2].filter(Boolean).join(" ");
+  const cityState = [city, state].filter(Boolean).join(", ");
+  const tail = [cityState, zip].filter(Boolean).join(" ");
+  return [line1, tail].filter(Boolean).join(", ").trim() || null;
 }
 
 /** Apply a column mapping to raw CSV rows → LeadImportRows. Drops nameless rows. */
@@ -154,8 +201,12 @@ export function mapRowsToLeads(
 ): LeadImportRow[] {
   const out: LeadImportRow[] = [];
   for (const row of rows) {
-    const nameCol = mapping.name;
-    const name = nameCol ? (row[nameCol] ?? "").trim() : "";
+    const full = mapping.name ? (row[mapping.name] ?? "").trim() : "";
+    const first = mapping.firstName
+      ? (row[mapping.firstName] ?? "").trim()
+      : "";
+    const last = mapping.lastName ? (row[mapping.lastName] ?? "").trim() : "";
+    const name = full || [first, last].filter(Boolean).join(" ").trim();
     if (!name) continue;
     const emailRaw = mapping.email ? row[mapping.email]?.trim() : "";
     const phoneRaw = mapping.phone ? row[mapping.phone]?.trim() : "";
@@ -163,12 +214,24 @@ export function mapRowsToLeads(
     const propRaw = mapping.propertyName
       ? row[mapping.propertyName]?.trim()
       : "";
+    // If the CSV puts the same value in both Property and Management Company
+    // (e.g. Property/Company="Highmark Residential", Management Company=
+    // "Highmark Residential"), the row is a corporate-level contact with no
+    // specific property. Null out propertyName so it doesn't grouph as a
+    // fake property.
+    const normalizedProperty =
+      propRaw &&
+      companyRaw &&
+      propRaw.toLowerCase() === companyRaw.toLowerCase()
+        ? null
+        : propRaw || null;
     out.push({
       name,
       email: emailRaw || null,
       phone: phoneRaw || null,
       company: companyRaw || null,
-      propertyName: propRaw || null,
+      propertyName: normalizedProperty,
+      csvAddress: buildCsvAddress(row, mapping),
       rawRow: row,
     });
   }

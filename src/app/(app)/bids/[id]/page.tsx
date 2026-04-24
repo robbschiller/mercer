@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { getBidPageData, getProjectByBidId } from "@/lib/store";
+import { getAppOrigin } from "@/lib/env";
 import { calculateBidPricing } from "@/lib/pricing";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -42,7 +43,7 @@ export default async function BidPage({
     proposals,
     proposalShares,
   } = data;
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const siteUrl = getAppOrigin();
 
   const pricing = calculateBidPricing({
     totalSqft,

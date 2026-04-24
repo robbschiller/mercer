@@ -1293,6 +1293,12 @@ export type LeadImportRow = {
   phone: string | null;
   company: string | null;
   propertyName: string | null;
+  /**
+   * Physical address assembled from the CSV's Address/City/State/Zip
+   * columns. Authoritative per 2026-04-22 — Places lookup is a fallback
+   * only when the CSV doesn't carry an address.
+   */
+  csvAddress: string | null;
   rawRow: Record<string, string>;
 };
 
@@ -1318,6 +1324,7 @@ export async function createLeadsBatch(
         phone: r.phone,
         company: r.company,
         propertyName: r.propertyName,
+        resolvedAddress: r.csvAddress,
         rawRow: r.rawRow,
         enrichmentStatus: "pending" as const,
       }))

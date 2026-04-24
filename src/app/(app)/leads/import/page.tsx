@@ -50,9 +50,9 @@ export default async function ImportLeadsPage({
             <span className="font-medium text-foreground">
               3. Enrich where we can
             </span>
-            {" — "}we look up the company&apos;s office address via Google
-            Places. Coverage is partial, don&apos;t expect every row to
-            resolve.
+            {" — "}we look up the property&apos;s address via Google Places
+            from the property name and management company. Coverage is partial,
+            don&apos;t expect every row to resolve.
           </li>
         </ol>
       </div>
@@ -111,9 +111,10 @@ export default async function ImportLeadsPage({
               <ul className="list-disc pl-4 space-y-0.5">
                 <li>Rows without a name are skipped</li>
                 <li>
-                  Office-address lookup runs inline via Google Places when a{" "}
-                  <code>company</code> is present. Many attendee lists
-                  won&apos;t resolve cleanly, that&apos;s expected.
+                  Property-address lookup runs inline via Google Places when
+                  a <code>property</code> or <code>company</code> is present.
+                  Many attendee lists won&apos;t resolve cleanly, that&apos;s
+                  expected.
                 </li>
                 <li>
                   You&apos;ll land on the leads page with a confirmation

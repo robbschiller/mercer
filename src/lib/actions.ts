@@ -32,6 +32,7 @@ import {
   createProjectUpdate,
   getShareSlugsForBid,
 } from "./store";
+import { getAppOrigin } from "./env";
 import { parseCsv, autoMapColumns, mapRowsToLeads } from "./leads/csv";
 import {
   runEnrichmentForBatch,
@@ -457,7 +458,7 @@ export async function createProposalShareAction(data: { proposalId: string }) {
 
   try {
     const share = await createProposalShare(result.data.proposalId);
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+    const siteUrl = getAppOrigin();
     revalidatePath(`/bids/${share.bidId}`);
     revalidatePath("/bids");
     return { error: null, shareUrl: `${siteUrl}/p/${share.id}` };
@@ -569,7 +570,7 @@ export async function importLeadsAction(formData: FormData) {
   }
 
   const mapping = autoMapColumns(headers);
-  if (!mapping.name) {
+  if (!mapping.name && !mapping.firstName && !mapping.lastName) {
     redirect(
       `/leads/import?error=${encodeURIComponent(
         `Could not find a name column. Headers seen: ${headers.join(", ")}`
