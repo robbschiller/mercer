@@ -238,6 +238,24 @@ export const enrichLeadActionSchema = z.object({
   id: z.string().uuid("Invalid lead ID"),
 });
 
+export const logLeadContactSchema = z.object({
+  id: z.string().uuid("Invalid lead ID"),
+});
+
+export const setLeadFollowUpSchema = z.object({
+  id: z.string().uuid("Invalid lead ID"),
+  followUpAt: z
+    .union([z.string(), z.null(), z.undefined()])
+    .transform((v) => {
+      if (v == null) return null;
+      const trimmed = v.trim();
+      return trimmed === "" ? null : trimmed;
+    })
+    .refine((v) => v === null || /^\d{4}-\d{2}-\d{2}$/.test(v), {
+      message: "Date must be YYYY-MM-DD",
+    }),
+});
+
 // ── Projects ──
 
 const optionalDate = z

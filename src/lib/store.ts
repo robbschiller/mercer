@@ -1459,6 +1459,30 @@ export async function updateLead(
   return rows[0] ?? null;
 }
 
+export async function logLeadContact(id: string) {
+  const user = await requireUser();
+  const rows = await db
+    .update(leads)
+    .set({
+      lastContactedAt: new Date(),
+      contactAttempts: sql`${leads.contactAttempts} + 1`,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(leads.id, id), eq(leads.userId, user.id)))
+    .returning();
+  return rows[0] ?? null;
+}
+
+export async function setLeadFollowUp(id: string, followUpAt: string | null) {
+  const user = await requireUser();
+  const rows = await db
+    .update(leads)
+    .set({ followUpAt, updatedAt: new Date() })
+    .where(and(eq(leads.id, id), eq(leads.userId, user.id)))
+    .returning();
+  return rows[0] ?? null;
+}
+
 export async function updateLeadStatus(id: string, status: Lead["status"]) {
   const user = await requireUser();
   const rows = await db

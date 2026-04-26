@@ -139,6 +139,10 @@ export const leads = pgTable("leads", {
   enrichmentError: text("enrichment_error"),
   /** Untransformed CSV row — keeps columns we didn't map for later use. */
   rawRow: jsonb("raw_row").$type<Record<string, string>>(),
+  /* ── Outreach state ─────────────────────────────────────────────────── */
+  lastContactedAt: timestamp("last_contacted_at", { withTimezone: true }),
+  followUpAt: date("follow_up_at"),
+  contactAttempts: integer("contact_attempts").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

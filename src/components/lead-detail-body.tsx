@@ -6,6 +6,8 @@ import { Pencil, X } from "lucide-react";
 import type { Lead } from "@/lib/store";
 import {
   enrichLeadAction,
+  logLeadContactAction,
+  setLeadFollowUpAction,
   updateLeadAction,
   updateLeadStatusAction,
 } from "@/lib/actions";
@@ -162,6 +164,8 @@ export function LeadDetailBody({
             </CardContent>
           </Card>
 
+          <OutreachCard lead={lead} />
+
           {lead.notes && (
             <Card>
               <CardHeader>
@@ -295,6 +299,117 @@ function EditForm({ lead, onDone }: { lead: Lead; onDone: () => void }) {
       </div>
     </form>
   );
+}
+
+function OutreachCard({ lead }: { lead: Lead }) {
+  const lastLabel = lead.lastContactedAt
+    ? formatRelative(new Date(lead.lastContactedAt))
+    : null;
+  const attempts = lead.contactAttempts ?? 0;
+  const followUp = lead.followUpAt ?? "";
+  const isOverdue =
+    lead.followUpAt && new Date(lead.followUpAt) < startOfToday();
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Outreach</CardTitle>
+        <CardDescription className="text-xs">
+          Track when you last reached out and when to circle back.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 text-sm">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="text-xs text-muted-foreground">Last contacted</span>
+          <span className="tabular-nums">
+            {lastLabel ? (
+              <>
+                {lastLabel}
+                <span className="ms-2 text-xs text-muted-foreground">
+                  ({attempts} {attempts === 1 ? "attempt" : "attempts"})
+                </span>
+              </>
+            ) : (
+              <span className="text-muted-foreground/60">Never</span>
+            )}
+          </span>
+        </div>
+
+        <form action={logLeadContactAction}>
+          <input type="hidden" name="id" value={lead.id} />
+          <SubmitButton variant="outline" size="sm" className="w-full">
+            Log contact attempt
+          </SubmitButton>
+        </form>
+
+        <form
+          action={setLeadFollowUpAction}
+          className="flex flex-col gap-2 border-t pt-3"
+        >
+          <input type="hidden" name="id" value={lead.id} />
+          <Label
+            htmlFor={`follow-${lead.id}`}
+            className="text-xs text-muted-foreground"
+          >
+            Follow-up date
+          </Label>
+          <div className="flex items-center gap-2">
+            <Input
+              id={`follow-${lead.id}`}
+              name="followUpAt"
+              type="date"
+              defaultValue={followUp}
+              className="h-9"
+            />
+            <SubmitButton size="sm">Save</SubmitButton>
+          </div>
+          {lead.followUpAt && (
+            <p
+              className={`text-xs ${
+                isOverdue ? "text-destructive" : "text-muted-foreground"
+              }`}
+            >
+              {isOverdue ? "Overdue: " : "Due "}
+              {formatDate(lead.followUpAt)}
+            </p>
+          )}
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function startOfToday(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatRelative(date: Date): string {
+  const diffMs = Date.now() - date.getTime();
+  const diffMin = Math.round(diffMs / 60000);
+  if (diffMin < 1) return "Just now";
+  if (diffMin < 60) return `${diffMin} min ago`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.round(diffHr / 24);
+  if (diffDay < 30) return `${diffDay}d ago`;
+  const diffMo = Math.round(diffDay / 30);
+  if (diffMo < 12) return `${diffMo}mo ago`;
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function Field({
