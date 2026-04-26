@@ -18,6 +18,7 @@ export type PropertyGroup = {
   managementCompany: string | null;
   propertyName: string | null;
   contacts: Lead[];
+  contactCount?: number;
   earliestFollowUp: string | null;
   mostRecentContact: Date | null;
 };
@@ -144,8 +145,10 @@ function PropertyGroupCard({
           </div>
           <div className="flex items-center gap-2 text-xs">
             <Badge variant="outline">
-              {group.contacts.length}{" "}
-              {group.contacts.length === 1 ? "contact" : "contacts"}
+              {group.contactCount ?? group.contacts.length}{" "}
+              {(group.contactCount ?? group.contacts.length) === 1
+                ? "contact"
+                : "contacts"}
             </Badge>
             {group.earliestFollowUp && (
               <span

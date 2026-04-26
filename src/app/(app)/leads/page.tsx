@@ -3,6 +3,7 @@ import {
   LEADS_PAGE_DEFAULT_LIMIT,
   getLead,
   getLatestBidForLead,
+  getLeadPropertyGroups,
   getLeads,
   type Lead,
 } from "@/lib/store";
@@ -13,10 +14,7 @@ import { LeadsToolbar } from "@/components/leads-toolbar";
 import { LeadDetailBody } from "@/components/lead-detail-body";
 import { LeadDetailAside } from "@/components/lead-detail-aside";
 import { LeadsRow } from "@/components/leads-row";
-import {
-  LeadsByProperty,
-  groupLeadsByProperty,
-} from "@/components/leads-by-property";
+import { LeadsByProperty } from "@/components/leads-by-property";
 import { leadFullName } from "@/lib/leads/name";
 import {
   LEAD_STATUSES,
@@ -132,19 +130,27 @@ export default async function LeadsPage({
   };
   const leadId = params.lead;
 
-  const [leadsResult, activeLead, activeLeadBid] = await Promise.all([
-    getLeads({
-      q: query.q || null,
-      status: query.status,
-      sourceTag: query.source,
-      limit: query.limit,
-    }),
+  const listOptions = {
+    q: query.q || null,
+    status: query.status,
+    sourceTag: query.source,
+    limit: query.limit,
+  };
+
+  const [listResult, activeLead, activeLeadBid] = await Promise.all([
+    query.view === "property"
+      ? getLeadPropertyGroups(listOptions)
+      : getLeads(listOptions),
     leadId ? getLead(leadId) : Promise.resolve(null),
     leadId ? getLatestBidForLead(leadId) : Promise.resolve(null),
   ]);
 
-  const { rows, total } = leadsResult;
-  const hasMore = rows.length < total;
+  const propertyGroups =
+    "groups" in listResult ? listResult.groups : null;
+  const rows = "rows" in listResult ? listResult.rows : [];
+  const visible = propertyGroups ? propertyGroups.length : rows.length;
+  const { total } = listResult;
+  const hasMore = visible < total;
   const hasFilters = Boolean(query.q || query.status || query.source);
   const closeHref = buildCloseHref(query);
 
@@ -159,15 +165,15 @@ export default async function LeadsPage({
           </div>
         )}
 
-        <FilterStrip query={query} total={total} visible={rows.length} />
+        <FilterStrip query={query} total={total} visible={visible} />
 
-        {rows.length === 0 ? (
+        {visible === 0 ? (
           <EmptyState query={query} hasFilters={hasFilters} />
         ) : (
           <>
-            {query.view === "property" ? (
+            {propertyGroups ? (
               <LeadsByProperty
-                groups={groupLeadsByProperty(rows)}
+                groups={propertyGroups}
                 buildLeadHref={(id) => buildLeadHref(id, query)}
                 activeLeadId={leadId}
               />
@@ -188,7 +194,7 @@ export default async function LeadsPage({
                     })}`}
                     scroll={false}
                   >
-                    Load {Math.min(LEADS_PAGE_DEFAULT_LIMIT, total - rows.length)}{" "}
+                    Load {Math.min(LEADS_PAGE_DEFAULT_LIMIT, total - visible)}{" "}
                     more
                   </Link>
                 </Button>

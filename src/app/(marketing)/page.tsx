@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -7,9 +6,7 @@ import {
   Camera,
   Check,
   FileSearch,
-  FileSignature,
   Layers,
-  LineChart,
   ListChecks,
   MessageSquareText,
   ScanLine,
@@ -19,14 +16,10 @@ import {
   Workflow as WorkflowIcon,
 } from "lucide-react";
 import type { ComponentType } from "react";
-import { getSessionUser } from "@/lib/supabase/auth-cache";
 
 type Icon = ComponentType<{ className?: string }>;
 
-export default async function Home() {
-  const user = await getSessionUser();
-  if (user) redirect("/dashboard");
-
+export default function Home() {
   return (
     <div className="relative isolate overflow-hidden bg-[var(--color-ink)] text-white">
       <Hero />
