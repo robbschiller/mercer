@@ -11,7 +11,17 @@ import {
   projects,
   projectUpdates,
 } from "@/db/schema";
-import { eq, desc, and, asc, sql, ilike, or, type SQL } from "drizzle-orm";
+import {
+  eq,
+  desc,
+  and,
+  asc,
+  sql,
+  ilike,
+  or,
+  inArray,
+  type SQL,
+} from "drizzle-orm";
 import { getSessionUser } from "@/lib/supabase/auth-cache";
 import { computeTotalSqft } from "@/lib/dimensions";
 import { buildSatelliteProxyPath } from "@/lib/maps/satellite-path";
@@ -27,6 +37,8 @@ export type Lead = typeof leads.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type ProjectUpdate = typeof projectUpdates.$inferSelect;
 export type BuildingWithSqft = Building & { totalSqft: number };
+
+const NO_PROPERTY_ADDRESS_KEY = "__no_address__";
 
 async function requireUser() {
   const user = await getSessionUser();
@@ -240,8 +252,16 @@ export async function getBuildingsForBid(bidId: string) {
 export async function getBidPageData(bidId: string) {
   const user = await requireUser();
 
+  const bidRows = await db
+    .select()
+    .from(bids)
+    .where(and(eq(bids.id, bidId), eq(bids.userId, user.id)))
+    .limit(1);
+
+  const bid = bidRows[0] ?? null;
+  if (!bid) return null;
+
   const [
-    bidRows,
     buildingRows,
     surfaceRows,
     lineItemRows,
@@ -250,11 +270,6 @@ export async function getBidPageData(bidId: string) {
     proposalShareRows,
   ] =
     await Promise.all([
-      db
-        .select()
-        .from(bids)
-        .where(and(eq(bids.id, bidId), eq(bids.userId, user.id)))
-        .limit(1),
       db
         .select({
           building: buildings,
@@ -297,9 +312,6 @@ export async function getBidPageData(bidId: string) {
         .where(eq(proposals.bidId, bidId))
         .orderBy(desc(proposalShares.createdAt)),
     ]);
-
-  const bid = bidRows[0] ?? null;
-  if (!bid) return null;
 
   const buildingsWithSqft = buildingRows.map((r) => ({
     ...r.building,
@@ -826,9 +838,20 @@ export type ProjectWithBid = {
   >;
 };
 
-export async function getProjects(): Promise<ProjectWithBid[]> {
+export type GetProjectsOptions = {
+  status?: ProjectStatus | null;
+  limit?: number;
+  offset?: number;
+};
+
+export async function getProjects(
+  options: GetProjectsOptions = {},
+): Promise<ProjectWithBid[]> {
   const user = await requireUser();
-  return db
+  const conditions: SQL[] = [eq(projects.userId, user.id)];
+  if (options.status) conditions.push(eq(projects.status, options.status));
+
+  const query = db
     .select({
       project: projects,
       bid: {
@@ -842,8 +865,26 @@ export async function getProjects(): Promise<ProjectWithBid[]> {
     })
     .from(projects)
     .innerJoin(bids, eq(bids.id, projects.bidId))
-    .where(eq(projects.userId, user.id))
-    .orderBy(desc(projects.updatedAt));
+    .where(and(...conditions)!)
+    .orderBy(desc(projects.updatedAt), desc(projects.id));
+
+  if (options.limit != null || options.offset != null) {
+    return query
+      .limit(Math.max(1, options.limit ?? 100))
+      .offset(Math.max(0, options.offset ?? 0));
+  }
+
+  return query;
+}
+
+export async function getProjectListData(options: {
+  status?: ProjectStatus | null;
+} = {}): Promise<{ projects: ProjectWithBid[]; counts: ProjectStatusCounts }> {
+  const [rows, counts] = await Promise.all([
+    getProjects({ status: options.status ?? null }),
+    getProjectStatusCounts(),
+  ]);
+  return { projects: rows, counts };
 }
 
 export async function getProject(id: string): Promise<ProjectWithBid | null> {
@@ -1251,32 +1292,31 @@ export type GetLeadsResult = {
   offset: number;
 };
 
+export type LeadPropertyGroup = {
+  key: string;
+  address: string | null;
+  managementCompany: string | null;
+  propertyName: string | null;
+  contacts: Lead[];
+  contactCount: number;
+  earliestFollowUp: string | null;
+  mostRecentContact: Date | null;
+};
+
+export type GetLeadPropertyGroupsResult = {
+  groups: LeadPropertyGroup[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
 /** Escape Postgres `ILIKE` metacharacters before wrapping in `%…%`. */
 function escapeIlike(needle: string): string {
   return needle.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
-/**
- * Lead list query with SQL-level filtering + pagination.
- *
- * The where clause is built once and reused for both the page query and the
- * count query, which run in parallel. Uses the `leads_user_id_created_at_idx`
- * composite index from `drizzle/manual/003_leads.sql` for the primary ordering
- * + user scope; the `ILIKE` OR-group runs against the already-narrowed row
- * set so a trigram index is not yet warranted at this data scale (per-user
- * lead counts in the low thousands).
- */
-export async function getLeads(
-  options: GetLeadsOptions = {},
-): Promise<GetLeadsResult> {
-  const user = await requireUser();
-  const limit = Math.max(
-    1,
-    Math.min(options.limit ?? LEADS_PAGE_DEFAULT_LIMIT, LEADS_PAGE_MAX_LIMIT),
-  );
-  const offset = Math.max(0, options.offset ?? 0);
-
-  const conditions: SQL[] = [eq(leads.userId, user.id)];
+function leadListConditions(userId: string, options: GetLeadsOptions): SQL[] {
+  const conditions: SQL[] = [eq(leads.userId, userId)];
 
   const status = options.status?.trim() || null;
   if (status) conditions.push(eq(leads.status, status as LeadStatus));
@@ -1299,6 +1339,40 @@ export async function getLeads(
     if (searchable) conditions.push(searchable);
   }
 
+  return conditions;
+}
+
+function clampLeadLimit(limit: number | undefined): number {
+  return Math.max(
+    1,
+    Math.min(limit ?? LEADS_PAGE_DEFAULT_LIMIT, LEADS_PAGE_MAX_LIMIT),
+  );
+}
+
+function clampOffset(offset: number | undefined): number {
+  return Math.max(0, offset ?? 0);
+}
+
+const leadPropertyGroupKey = sql<string>`coalesce(lower(nullif(btrim(${leads.resolvedAddress}), '')), '__no_address__')`;
+
+/**
+ * Lead list query with SQL-level filtering + pagination.
+ *
+ * The where clause is built once and reused for both the page query and the
+ * count query, which run in parallel. Uses the `leads_user_id_created_at_idx`
+ * composite index from `drizzle/manual/003_leads.sql` for the primary ordering
+ * + user scope; the `ILIKE` OR-group runs against the already-narrowed row
+ * set so a trigram index is not yet warranted at this data scale (per-user
+ * lead counts in the low thousands).
+ */
+export async function getLeads(
+  options: GetLeadsOptions = {},
+): Promise<GetLeadsResult> {
+  const user = await requireUser();
+  const limit = clampLeadLimit(options.limit);
+  const offset = clampOffset(options.offset);
+  const conditions = leadListConditions(user.id, options);
+
   const where = and(...conditions)!;
 
   const [rows, totalRows] = await Promise.all([
@@ -1306,7 +1380,7 @@ export async function getLeads(
       .select()
       .from(leads)
       .where(where)
-      .orderBy(desc(leads.createdAt))
+      .orderBy(desc(leads.createdAt), desc(leads.id))
       .limit(limit)
       .offset(offset),
     db
@@ -1317,6 +1391,96 @@ export async function getLeads(
 
   return {
     rows,
+    total: Number(totalRows[0]?.count ?? 0),
+    limit,
+    offset,
+  };
+}
+
+export async function getLeadPropertyGroups(
+  options: GetLeadsOptions = {},
+): Promise<GetLeadPropertyGroupsResult> {
+  const user = await requireUser();
+  const limit = clampLeadLimit(options.limit);
+  const offset = clampOffset(options.offset);
+  const conditions = leadListConditions(user.id, options);
+  const where = and(...conditions)!;
+
+  const grouped = db
+    .select({
+      key: leadPropertyGroupKey.as("key"),
+      address: sql<string | null>`min(nullif(btrim(${leads.resolvedAddress}), ''))`.as(
+        "address",
+      ),
+      managementCompany: sql<string | null>`min(nullif(btrim(${leads.company}), ''))`.as(
+        "management_company",
+      ),
+      propertyName: sql<string | null>`min(nullif(btrim(${leads.propertyName}), ''))`.as(
+        "property_name",
+      ),
+      contactCount: sql<number>`count(*)::int`.as("contact_count"),
+      earliestFollowUp: sql<string | null>`min(${leads.followUpAt})::text`.as(
+        "earliest_follow_up",
+      ),
+      mostRecentContact: sql<Date | null>`max(${leads.lastContactedAt})`.as(
+        "most_recent_contact",
+      ),
+    })
+    .from(leads)
+    .where(where)
+    .groupBy(leadPropertyGroupKey)
+    .as("lead_property_groups");
+
+  const [groups, totalRows] = await Promise.all([
+    db
+      .select()
+      .from(grouped)
+      .orderBy(
+        sql`${grouped.earliestFollowUp} asc nulls last`,
+        asc(grouped.address),
+        asc(grouped.key),
+      )
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(grouped),
+  ]);
+
+  if (groups.length === 0) {
+    return { groups: [], total: Number(totalRows[0]?.count ?? 0), limit, offset };
+  }
+
+  const groupKeys = groups.map((group) => group.key);
+  const contactRows = await db
+    .select()
+    .from(leads)
+    .where(and(where, inArray(leadPropertyGroupKey, groupKeys))!)
+    .orderBy(asc(leads.resolvedAddress), asc(leads.company), asc(leads.name), desc(leads.id));
+
+  const contactsByGroup = new Map<string, Lead[]>();
+  for (const lead of contactRows) {
+    const key =
+      lead.resolvedAddress?.trim().toLowerCase() || NO_PROPERTY_ADDRESS_KEY;
+    const list = contactsByGroup.get(key);
+    if (list) {
+      list.push(lead);
+    } else {
+      contactsByGroup.set(key, [lead]);
+    }
+  }
+
+  return {
+    groups: groups.map((group) => ({
+      key: group.key,
+      address: group.address,
+      managementCompany: group.managementCompany,
+      propertyName: group.propertyName,
+      contacts: contactsByGroup.get(group.key) ?? [],
+      contactCount: Number(group.contactCount),
+      earliestFollowUp: group.earliestFollowUp,
+      mostRecentContact: group.mostRecentContact,
+    })),
     total: Number(totalRows[0]?.count ?? 0),
     limit,
     offset,
