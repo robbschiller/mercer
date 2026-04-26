@@ -24,6 +24,8 @@ import {
   createLeadsBatch,
   updateLead,
   updateLeadStatus,
+  logLeadContact,
+  setLeadFollowUp,
   getLead,
   acceptProposalShare,
   declineProposalShare,
@@ -65,6 +67,8 @@ import {
   updateLeadStatusSchema,
   updateLeadSchema,
   enrichLeadActionSchema,
+  logLeadContactSchema,
+  setLeadFollowUpSchema,
   updateProjectStatusSchema,
   updateProjectDetailsSchema,
   createProjectUpdateSchema,
@@ -645,6 +649,54 @@ export async function updateLeadAction(formData: FormData) {
   }
   revalidatePath("/leads");
   revalidatePath(`/leads/${id}`);
+}
+
+export async function logLeadContactAction(formData: FormData) {
+  const result = logLeadContactSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    const id = (formData.get("id") as string) || "";
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(
+      id
+        ? `/leads?lead=${id}&error=${encodeURIComponent(message)}`
+        : `/leads?error=${encodeURIComponent(message)}`,
+    );
+  }
+  try {
+    await logLeadContact(result.data.id);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to log contact";
+    redirect(
+      `/leads?lead=${result.data.id}&error=${encodeURIComponent(message)}`,
+    );
+  }
+  revalidatePath("/leads");
+  revalidatePath(`/leads/${result.data.id}`);
+}
+
+export async function setLeadFollowUpAction(formData: FormData) {
+  const result = setLeadFollowUpSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    const id = (formData.get("id") as string) || "";
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(
+      id
+        ? `/leads?lead=${id}&error=${encodeURIComponent(message)}`
+        : `/leads?error=${encodeURIComponent(message)}`,
+    );
+  }
+  try {
+    await setLeadFollowUp(result.data.id, result.data.followUpAt);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to set follow-up";
+    redirect(
+      `/leads?lead=${result.data.id}&error=${encodeURIComponent(message)}`,
+    );
+  }
+  revalidatePath("/leads");
+  revalidatePath(`/leads/${result.data.id}`);
 }
 
 export async function enrichLeadAction(formData: FormData) {

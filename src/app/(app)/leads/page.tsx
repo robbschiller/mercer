@@ -13,6 +13,10 @@ import { LeadsToolbar } from "@/components/leads-toolbar";
 import { LeadDetailBody } from "@/components/lead-detail-body";
 import { LeadDetailAside } from "@/components/lead-detail-aside";
 import { LeadsRow } from "@/components/leads-row";
+import {
+  LeadsByProperty,
+  groupLeadsByProperty,
+} from "@/components/leads-by-property";
 import { leadFullName } from "@/lib/leads/name";
 import {
   LEAD_STATUSES,
@@ -47,12 +51,19 @@ function enrichmentIcon(
   }
 }
 
+type LeadsView = "property" | "contact";
+
 type LeadsQuery = {
   q: string;
   status: LeadStatus | null;
   source: string | null;
   limit: number;
+  view: LeadsView;
 };
+
+function parseView(raw: string | undefined): LeadsView {
+  return raw === "contact" ? "contact" : "property";
+}
 
 function parseStatus(raw: string | undefined): LeadStatus | null {
   const v = raw?.trim();
@@ -77,10 +88,12 @@ function buildQueryString(
   const status = "status" in overrides ? overrides.status : query.status;
   const source = "source" in overrides ? overrides.source : query.source;
   const limit = overrides.limit ?? query.limit;
+  const view = overrides.view ?? query.view;
   if (q) sp.set("q", q);
   if (status) sp.set("status", status);
   if (source) sp.set("source", source);
   if (limit !== LEADS_PAGE_DEFAULT_LIMIT) sp.set("limit", String(limit));
+  if (view === "contact") sp.set("view", "contact");
   if (overrides.lead) sp.set("lead", overrides.lead);
   return sp.toString();
 }
@@ -105,6 +118,7 @@ export default async function LeadsPage({
     source?: string;
     limit?: string;
     lead?: string;
+    view?: string;
     error?: string;
   }>;
 }) {
@@ -114,6 +128,7 @@ export default async function LeadsPage({
     status: parseStatus(params.status),
     source: params.source?.trim() || null,
     limit: parseLimit(params.limit),
+    view: parseView(params.view),
   };
   const leadId = params.lead;
 
@@ -136,7 +151,7 @@ export default async function LeadsPage({
   return (
     <div className="flex min-h-full">
       <div className="min-w-0 flex-1 px-4 py-8">
-        <LeadsToolbar query={query.q} />
+        <LeadsToolbar query={query.q} view={query.view} />
 
         {params.imported && (
           <div className="mb-4 rounded-md border border-emerald-600/30 bg-emerald-600/5 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-400">
@@ -150,11 +165,19 @@ export default async function LeadsPage({
           <EmptyState query={query} hasFilters={hasFilters} />
         ) : (
           <>
-            <LeadsTable
-              leads={rows}
-              query={query}
-              activeLeadId={leadId}
-            />
+            {query.view === "property" ? (
+              <LeadsByProperty
+                groups={groupLeadsByProperty(rows)}
+                buildLeadHref={(id) => buildLeadHref(id, query)}
+                activeLeadId={leadId}
+              />
+            ) : (
+              <LeadsTable
+                leads={rows}
+                query={query}
+                activeLeadId={leadId}
+              />
+            )}
             {hasMore && (
               <div className="mt-4 flex items-center justify-center">
                 <Button variant="outline" asChild>

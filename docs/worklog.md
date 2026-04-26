@@ -4,6 +4,79 @@ Running log of in-flight work on the lead-to-close MVP (docs/plan.md). Chronolog
 
 ---
 
+## 2026-04-26 — Leads outreach state + property-grouped list view
+
+**Goal:** Pick the two highest-leverage non-AI improvements to the leads feature now that the BAAA 2026 list (1,224 rows) is in the system, and ship them on a `leads` branch. The demo proved the import path; the daily-use shape is what was missing. Two improvements landed: (1) the leads list is now property-first instead of contact-first, and (2) outreach state (last contacted, follow-up date, attempt count) is tracked per lead.
+
+### Why these two
+
+The first session against the real BAAA list surfaced the unit-of-work mismatch. The CSV `Address / City / State / Zip` columns had been read as the attendee's *registered office*; closer inspection showed otherwise. Those columns are the **property the attendee manages**, and one attendee typically appears on multiple rows (one per property). The same person at Greystar covering five communities shows up five times with five different addresses. With a flat contact-first table, the operator can't see "what properties am I working" without scanning. Property grouping reframes the same rows around the actionable unit.
+
+The outreach state was even more obvious: there was no way to record "I called this person yesterday, follow up next Tuesday." The lead detail had a Status enum (`new / quoted / won / lost`) but no concept of "I'm in the middle of working this." For a 1,224-row trade-show list where Jordan needs to work through dozens per week, this is a daily-use blocker.
+
+Neither needs an AI agent. Both unlock the surface area where the qualification agent (Milestone 3) eventually plugs in.
+
+### Shipped
+
+#### Outreach state schema + actions (`drizzle/manual/010_leads_outreach.sql`, `src/db/schema.ts`, `src/lib/store.ts`, `src/lib/validations.ts`, `src/lib/actions.ts`)
+
+New columns on `leads`:
+
+- `last_contacted_at timestamptz` — most recent recorded outreach.
+- `follow_up_at date` — when to circle back. Date (not timestamp) because the contractor is scheduling against a calendar day, not a clock time.
+- `contact_attempts integer NOT NULL DEFAULT 0` — running counter.
+
+Partial index `leads_user_id_follow_up_at_idx ON leads (user_id, follow_up_at) WHERE follow_up_at IS NOT NULL` so the eventual "due today" filter doesn't scan the whole table for users with thousands of leads.
+
+Two store helpers:
+
+- `logLeadContact(id)` — sets `last_contacted_at = now()` and `contact_attempts = contact_attempts + 1` in a single update (uses a Drizzle `sql` template for the increment so the count is atomic, no read-modify-write race).
+- `setLeadFollowUp(id, followUpAt)` — accepts a `YYYY-MM-DD` string or `null`. Null clears the follow-up.
+
+Server actions (`logLeadContactAction`, `setLeadFollowUpAction`) wrap each helper with a Zod schema, the standard `requireUser()` ownership check via `db.update().where(userId)`, and `revalidatePath('/leads')` + `revalidatePath('/leads/${id}')`. The follow-up schema accepts `''` and coerces to `null` so the form's empty date input clears the value.
+
+#### Outreach card on the lead detail (`src/components/lead-detail-body.tsx`)
+
+New `<OutreachCard>` slotted above the Notes card on the existing detail aside. Three pieces of UI:
+
+1. *Last contacted* line. Renders relative time (`Just now`, `12m ago`, `3h ago`, `5d ago`, `2mo ago`) plus the attempt count in parens, or "Never" when there's no record.
+2. *Log contact attempt* button — single SubmitButton wrapped around `logLeadContactAction`. One click increments + timestamps. The page revalidates and the relative time and counter update in place.
+3. *Follow-up date* form — a `<Input type="date">` bound to `setLeadFollowUpAction`. Below the input, a colored caption: "Due Apr 30, 2026" in muted gray when the date is in the future, "Overdue: Apr 30, 2026" in destructive red when it's past today.
+
+The relative-time helper rounds to the nearest minute / hour / day / month and uses the user's locale for any date that's older than a year.
+
+#### Property-grouped list view (`src/components/leads-by-property.tsx` — new, `src/components/leads-toolbar.tsx`, `src/app/(app)/leads/page.tsx`)
+
+`/leads` now defaults to a property-first layout. The new `groupLeadsByProperty(rows: Lead[]): PropertyGroup[]` function in `src/components/leads-by-property.tsx` keys groups on `lead.resolvedAddress?.trim().toLowerCase()`, with an `__no_address__` bucket for rows that don't have one yet. Each group also carries a `managementCompany` and `propertyName` (whichever it sees first across that group's rows), the earliest follow-up date across contacts, and the most recent last-contacted timestamp. Groups sort by earliest follow-up date ascending (so overdue and upcoming float to the top), then alphabetical by address as a stable tiebreaker — properties without a follow-up sort last.
+
+The component renders one `<Card>` per group:
+
+- Header (light-muted background): the property address as the heading, a subtitle that joins property name + management company with a middle dot, a contact count Badge, and the earliest follow-up indicator (red when overdue).
+- Body: a borderless table of contacts with name (links to detail), email/phone, last-contacted relative time + attempt count, follow-up date with overdue color, status Badge, and enrichment label.
+
+The flat contact-first table is preserved as `view=contact`. A new toggle in `LeadsToolbar` (a tablist with two pills, "By property" / "By contact") drives the URL — `LeadsToolbar` was promoted from a search-only client component to also own the view switch, with `useSearchParams` building the toggle hrefs so they preserve `q` / `status` / `source` / `limit` / `lead`.
+
+The page wires everything up: `LeadsQuery` gains a `view: "property" | "contact"` field, `parseView` defaults to `"property"`, `buildQueryString` propagates the view, and the conditional render swaps `<LeadsByProperty>` for `<LeadsTable>` based on the active view.
+
+### Found while shipping (not fixed in this branch)
+
+- **`getLeads` ordering is not stable.** The current order-by is `desc(createdAt)` only. Bulk imports stamp many rows with the same `created_at`, so `LIMIT 100 ORDER BY created_at DESC` returns a non-deterministic slice between requests. With property grouping, this is visible: groups visibly shuffle in/out of the page across navigations on the BAAA dataset. Pre-existing issue, not caused by these changes. Captured as the top item in `docs/plan.md → Open now`. Fix is a one-liner (add `id` or `updated_at` as the secondary key) but warrants its own PR + a manual verification pass on the BAAA list.
+- **No "due today" / "overdue" filter chips.** The only way to find rows due this week is to scroll the property list. Captured as `Open now` item #2.
+- **Role-weighted contact ranking inside a property group is still TODO.** The earlier `0837321 ranking people by title` commit message is misleading: there's no code that reads `Role with Company` out of `rawRow`. Worth a closer look — the BAAA list does carry that column verbatim in `raw_row`, so once stabilized, the contact list inside each property card should sort decision-makers above coordinators. Marked deferred in the plan's Enrichment rethink.
+
+### Verification
+
+- `bun run lint` — clean.
+- `bunx tsc --noEmit` — clean.
+- Manual run against the seeded BAAA dataset: imported rows show as a property-grouped list by default; toggling to `By contact` restores the flat table; logging a contact attempt updates "Last contacted" to "Just now (1 attempt)" without a hard refresh; setting a follow-up date renders the overdue caption red when the date is past, gray when it's in the future; property cards roll up the earliest follow-up across contacts at that property.
+
+### Docs synced
+
+- `docs/plan.md` — PRD-alignment row for *Lead capture & qualification* updated to mention property-grouped list + outreach state. Open-now list reordered: stable secondary sort and filter chips are the new top items. *Enrichment rethink* rewritten with a 2026-04-26 correction header reframing the CSV address as the property (not the office), the two new shipped items moved into the section as `[shipped 2026-04-26]`, and the legacy "ranking people by title" line moved into a `[deferred — was claimed shipped]` callout. New entry added to *Shipped (summary)*.
+- `docs/prd.md` — §5.1 capabilities mention the property-grouped list and outreach state. §6.1 reframed the *Lead* preface from "company-level opportunity" to "(contact, property) pair" to match the data model. *Resolved office address* subheading retitled to *Resolved property address* with text describing the CSV-first / Places-fallback path. New *Outreach state* subheading documents the three new fields. §8 *What's Built Today* gained two bullets covering the property view and outreach state.
+
+---
+
 ## 2026-04-24 — Demo shipped, post-demo dev-loop perf pass
 
 **Goal:** The two-week Jordan POC demo landed — real BAAA 2026 attendee CSV (1,224 rows) flowed end-to-end and the five-minute walkthrough is recorded. With the demo bar cleared, follow up on the dev-loop slowness that had been noticeable while iterating on top of the 1,224-row dataset. Triaged three distinct causes, fixed them in one pass.
