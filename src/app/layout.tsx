@@ -3,6 +3,7 @@ import { Fraunces, Geist, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AnalyticsLoader } from "@/components/analytics-loader";
 import { ThemeProvider } from "@/components/theme-provider";
+import { getAppOrigin } from "@/lib/env";
 
 const geist = Geist({
   subsets: ["latin"],
@@ -23,10 +24,8 @@ const fraunces = Fraunces({
   axes: ["SOFT", "WONK", "opsz"],
 });
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://mercer-bids.vercel.app";
-
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
+  metadataBase: new URL(getAppOrigin()),
   title: {
     default: "Mercer: the sales platform for commercial multifamily exterior renovation",
     template: "%s · Mercer",

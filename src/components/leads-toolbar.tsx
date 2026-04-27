@@ -9,9 +9,10 @@ import { Input } from "@/components/ui/input";
 
 type Props = {
   query: string;
+  view: "property" | "contact";
 };
 
-export function LeadsToolbar({ query }: Props) {
+export function LeadsToolbar({ query, view }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -35,10 +36,50 @@ export function LeadsToolbar({ query }: Props) {
     return () => clearTimeout(timer);
   }, [value, query, pathname, router, searchParams]);
 
+  const buildViewHref = (next: "property" | "contact"): string => {
+    const sp = new URLSearchParams(searchParams.toString());
+    if (next === "contact") sp.set("view", "contact");
+    else sp.delete("view");
+    const qs = sp.toString();
+    return qs ? `${pathname}?${qs}` : pathname;
+  };
+
   return (
     <div className="mb-6 flex items-center justify-between gap-3 flex-wrap">
       <h1 className="text-3xl font-medium tracking-tight">Leads</h1>
       <div className="flex items-center gap-2">
+        <div
+          className="inline-flex items-center rounded-md border bg-card p-0.5 text-xs"
+          role="tablist"
+          aria-label="Group leads by"
+        >
+          <Link
+            href={buildViewHref("property")}
+            scroll={false}
+            role="tab"
+            aria-selected={view === "property"}
+            className={`rounded px-2.5 py-1 transition-colors ${
+              view === "property"
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            By property
+          </Link>
+          <Link
+            href={buildViewHref("contact")}
+            scroll={false}
+            role="tab"
+            aria-selected={view === "contact"}
+            className={`rounded px-2.5 py-1 transition-colors ${
+              view === "contact"
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            By contact
+          </Link>
+        </div>
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input

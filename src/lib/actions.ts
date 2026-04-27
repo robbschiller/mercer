@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import {
   updateBid,
   deleteBid,
@@ -15,7 +16,6 @@ import {
   createLineItem,
   updateLineItem,
   deleteLineItem,
-  getUserDefaults,
   upsertUserDefaults,
   getBidPageData,
   createProposal,
@@ -24,6 +24,8 @@ import {
   createLeadsBatch,
   updateLead,
   updateLeadStatus,
+  logLeadContact,
+  setLeadFollowUp,
   getLead,
   acceptProposalShare,
   declineProposalShare,
@@ -65,6 +67,8 @@ import {
   updateLeadStatusSchema,
   updateLeadSchema,
   enrichLeadActionSchema,
+  logLeadContactSchema,
+  setLeadFollowUpSchema,
   updateProjectStatusSchema,
   updateProjectDetailsSchema,
   createProjectUpdateSchema,
@@ -544,9 +548,8 @@ export async function createLeadAction(formData: FormData) {
  *   - sourceTag: string (optional)
  *
  * Flow: parse CSV → auto-map columns → bulk insert with enrichment_status
- * "pending" → kick off enrichment worker inline (Places-only). Redirects to
- * /leads so the user sees the new rows. Enrichment runs during the action
- * so by the time the redirect resolves, satellite previews are populated.
+ * "pending" → schedule enrichment after the response. Redirects immediately
+ * so large trade-show files do not sit inside one long-running server action.
  */
 export async function importLeadsAction(formData: FormData) {
   const file = formData.get("file");
@@ -589,14 +592,13 @@ export async function importLeadsAction(formData: FormData) {
 
   const inserted = await createLeadsBatch(leadsToInsert, parsedMeta.data.sourceTag ?? null);
 
-  // Enrichment runs inline so the user sees resolved addresses on the next page.
-  // If this grows unwieldy we can switch to a fire-and-forget pattern with
-  // waitUntil() on Vercel, but for <100 rows / Places call it's fine.
-  try {
-    await runEnrichmentForBatch(inserted);
-  } catch (err) {
-    console.error("[importLeadsAction] enrichment batch error:", err);
-  }
+  after(async () => {
+    try {
+      await runEnrichmentForBatch(inserted);
+    } catch (err) {
+      console.error("[importLeadsAction] enrichment batch error:", err);
+    }
+  });
 
   revalidatePath("/leads");
   redirect(`/leads?imported=${inserted.length}`);
@@ -645,6 +647,54 @@ export async function updateLeadAction(formData: FormData) {
   }
   revalidatePath("/leads");
   revalidatePath(`/leads/${id}`);
+}
+
+export async function logLeadContactAction(formData: FormData) {
+  const result = logLeadContactSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    const id = (formData.get("id") as string) || "";
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(
+      id
+        ? `/leads?lead=${id}&error=${encodeURIComponent(message)}`
+        : `/leads?error=${encodeURIComponent(message)}`,
+    );
+  }
+  try {
+    await logLeadContact(result.data.id);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to log contact";
+    redirect(
+      `/leads?lead=${result.data.id}&error=${encodeURIComponent(message)}`,
+    );
+  }
+  revalidatePath("/leads");
+  revalidatePath(`/leads/${result.data.id}`);
+}
+
+export async function setLeadFollowUpAction(formData: FormData) {
+  const result = setLeadFollowUpSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    const id = (formData.get("id") as string) || "";
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(
+      id
+        ? `/leads?lead=${id}&error=${encodeURIComponent(message)}`
+        : `/leads?error=${encodeURIComponent(message)}`,
+    );
+  }
+  try {
+    await setLeadFollowUp(result.data.id, result.data.followUpAt);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to set follow-up";
+    redirect(
+      `/leads?lead=${result.data.id}&error=${encodeURIComponent(message)}`,
+    );
+  }
+  revalidatePath("/leads");
+  revalidatePath(`/leads/${result.data.id}`);
 }
 
 export async function enrichLeadAction(formData: FormData) {
@@ -770,4 +820,3 @@ export async function createProjectUpdateAction(formData: FormData) {
     projectWithBid.bid.id
   );
 }
-

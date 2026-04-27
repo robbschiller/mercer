@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getProjects } from "@/lib/store";
+import { getProjectListData } from "@/lib/store";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,14 +46,7 @@ export default async function ProjectsPage({
   const { status } = await searchParams;
   const filter = parseProjectStatus(status);
 
-  const all = await getProjects();
-  const projects = filter ? all.filter((p) => p.project.status === filter) : all;
-
-  const counts = all.reduce<Record<string, number>>((acc, p) => {
-    acc[p.project.status] = (acc[p.project.status] ?? 0) + 1;
-    acc.all = (acc.all ?? 0) + 1;
-    return acc;
-  }, {});
+  const { projects, counts } = await getProjectListData({ status: filter });
 
   return (
     <div className="container mx-auto px-4 py-8 flex flex-col gap-6">
@@ -72,7 +65,7 @@ export default async function ProjectsPage({
           const isActive =
             opt.value === "all" ? !filter : filter === opt.value;
           const href = opt.value === "all" ? "/projects" : `/projects?status=${opt.value}`;
-          const count = counts[opt.value] ?? 0;
+          const count = opt.value === "all" ? counts.total : counts[opt.value] ?? 0;
           return (
             <Link
               key={opt.value}

@@ -165,6 +165,8 @@ A **lead-qualification agent** runs on every imported row. Given a name, company
 - Lead-qualification agent run per lead with: resolved property portfolio, estimated paint-timing score, generated brief, satellite thumbnails for top candidate properties
 - Confidence score per enrichment with graceful degradation (low-confidence leads surface as "needs human review" rather than fabricated data)
 - Lead list view with ranking by qualification score, filtering by source and status, and detail view per lead
+- **Property-grouped list view** as the default. Trade-show CSV rows are property-level, not contact-level: one attendee covering five communities appears five times with five different addresses. The list groups rows by `resolved_address`, sorted by earliest follow-up date then alpha, with a `By contact` toggle that restores the flat table when a contact-first read is needed.
+- **Outreach state per lead**: `last_contacted_at`, `follow_up_at`, `contact_attempts`. Lead detail surfaces a one-click "log contact attempt" (timestamps + increments the counter) and a follow-up date input. Property-card headers roll up the earliest follow-up across contacts at that property and flag overdue dates.
 - Lead status: new / qualified / quoted / won / lost
 - Manual override and correction of agent output (becomes training data)
 
@@ -383,7 +385,7 @@ Field shapes call out type, nullability, and a one-line purpose note. Aspiration
 
 ### 6.1 Lead fields
 
-Grounded in the current `leads` table. The lead is the **company-level opportunity**: who you're trying to win work from. Property-being-painted information lives on the bid, not the lead.
+Grounded in the current `leads` table. The lead is a **(contact, property) pair**: a person at a management company associated with a specific multifamily property. One attendee at a trade show typically appears as N leads (one per property they manage); the same property may carry multiple contacts. The list UI groups by property to make this shape navigable; the data model keeps the row at contact-times-property granularity so per-contact outreach state and per-property capture/bid lineage both have a home.
 
 *Identity*
 
@@ -405,18 +407,26 @@ Grounded in the current `leads` table. The lead is the **company-level opportuni
 - `raw_row` (jsonb, nullable) — unmapped CSV columns from import, kept verbatim for later use.
 - `notes` (text, not null, default `''`) — freeform contractor notes.
 
-*Resolved office address (Places-only)*
+*Resolved property address*
 
-This is the **company's office** address, not a property to bid on. Resolved by the synchronous Places lookup in the import pipeline.
+This is the **multifamily property the contact manages**, not a corporate office. The trade-show CSV carries the property `Address / City / State / Zip` directly; the enrichment runner uses those when present and only falls back to a Places lookup keyed on `company` when the CSV row is address-less. The property-grouped list view groups by this column.
 
-- `resolved_address` (text, nullable) — formatted address from Google Places.
-- `latitude`, `longitude` (double precision, nullable) — coordinates of the office.
+- `resolved_address` (text, nullable) — formatted property address. Authoritative when the CSV provided it; backfilled by Places for sparse rows.
+- `latitude`, `longitude` (double precision, nullable) — property coordinates.
 - `google_place_id` (text, nullable) — Places identifier for re-lookup.
 
 *Enrichment state*
 
 - `enrichment_status` (text enum, nullable) — `idle | pending | success | failed | skipped`.
 - `enrichment_error` (text, nullable) — last error message when status is `failed`.
+
+*Outreach state*
+
+Per-contact outreach tracking. Sits on the lead row because contact attempts are per-person, not per-property: two different people at the same management company managing the same property still get tracked independently.
+
+- `last_contacted_at` (timestamptz, nullable) — most recent recorded outreach. Updated by the "log contact attempt" action.
+- `follow_up_at` (date, nullable) — date the contractor wants to circle back. The list view surfaces overdue dates in red and rolls up the earliest across contacts at each property.
+- `contact_attempts` (integer, not null, default `0`) — running count incremented every time a contact attempt is logged.
 
 *Historical, no longer written for new leads*
 
@@ -610,6 +620,8 @@ As of this PRD, the following is live at mercer-bids.vercel.app:
 - Bid status tracking (draft / sent / won / lost) with automatic updates on proposal response
 - OSM building footprints on bid detail (hidden pending accuracy resolution)
 - Lead import (CSV) with column auto-mapping, source tags, enrichment status, lead detail
+- Property-grouped leads list (default) with `By contact` toggle; rows group by `resolved_address` (the CSV-derived property address) and groups sort by earliest follow-up
+- Per-lead outreach state: `last_contacted_at`, `follow_up_at`, `contact_attempts`, with log-contact and follow-up controls in the lead detail aside and overdue rollups on property cards
 - Lead-to-bid conversion with pre-filled bid creation
 - Shareable proposal pages at `/p/[slug]` with accept/decline and status propagation
 - Dashboard at `/dashboard` with lead and bid summary counts
