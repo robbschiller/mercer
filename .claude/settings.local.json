@@ -34,7 +34,10 @@
       "Bash(node_modules/.bin/eslint src/app/\\\\\\(app\\\\\\)/leads src/components/lead-detail-sheet.tsx src/components/lead-detail-body.tsx)",
       "Bash(node_modules/.bin/eslint src/app/\\\\\\(app\\\\\\)/leads/page.tsx src/components/leads-row.tsx)",
       "Bash(node_modules/.bin/next lint *)",
-      "Bash(node_modules/.bin/eslint src/app/\\\\\\(app\\\\\\)/leads/page.tsx src/components/leads-row.tsx src/components/lead-detail-body.tsx)"
+      "Bash(node_modules/.bin/eslint src/app/\\\\\\(app\\\\\\)/leads/page.tsx src/components/leads-row.tsx src/components/lead-detail-body.tsx)",
+      "Bash(pkill -f \"next dev\")",
+      "Bash(pkill -f \"next-server\")",
+      "Bash(pkill -f \"node.*next\")"
     ]
   }
 }
