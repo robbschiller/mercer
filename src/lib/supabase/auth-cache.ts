@@ -5,6 +5,7 @@ import {
   AUTH_HEADER_USER_ID,
 } from "./middleware";
 import { createClient } from "./server";
+import { getUserContext } from "@/lib/user-context";
 
 export type SessionUser = { id: string; email: string | null } | null;
 
@@ -41,6 +42,14 @@ export type SessionUser = { id: string; email: string | null } | null;
  * `store.ts → requireUser()` all reuse the same result).
  */
 export const getSessionUser = cache(async (): Promise<SessionUser> => {
+  // Non-cookie principals (e.g. MCP token-resolved requests) set the
+  // user via AsyncLocalStorage at the request boundary. Checked first
+  // so the MCP path doesn't fall through to the cookie/header logic.
+  const ctx = getUserContext();
+  if (ctx) {
+    return { id: ctx.userId, email: ctx.email };
+  }
+
   const h = await headers();
   const headerId = h.get(AUTH_HEADER_USER_ID);
   if (headerId) {
