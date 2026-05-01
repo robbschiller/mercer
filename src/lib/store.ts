@@ -20,6 +20,7 @@ import {
   ilike,
   or,
   inArray,
+  isNull,
   type SQL,
 } from "drizzle-orm";
 import { getSessionUser } from "@/lib/supabase/auth-cache";
@@ -1272,11 +1273,29 @@ export const LEADS_PAGE_MAX_LIMIT = 500;
 /** Default page size when the caller doesn't specify one. */
 export const LEADS_PAGE_DEFAULT_LIMIT = 100;
 
+export const LEADS_FOLLOW_UP_FILTERS = [
+  "overdue",
+  "today",
+  "this_week",
+  "none",
+] as const;
+export type LeadsFollowUpFilter = (typeof LEADS_FOLLOW_UP_FILTERS)[number];
+
+export const LEADS_SORTS = [
+  "recent",
+  "follow_up",
+  "last_contact",
+  "stalest",
+] as const;
+export type LeadsSort = (typeof LEADS_SORTS)[number];
+
 export type GetLeadsOptions = {
   /** Free-text search across name/company/property/email/phone/address/tag. */
   q?: string | null;
   status?: LeadStatus | null;
   sourceTag?: string | null;
+  followUp?: LeadsFollowUpFilter | null;
+  sort?: LeadsSort | null;
   /** Number of rows to return (clamped to `[1, LEADS_PAGE_MAX_LIMIT]`). */
   limit?: number;
   /** Rows to skip (clamped to `>= 0`). */
@@ -1323,6 +1342,23 @@ function leadListConditions(userId: string, options: GetLeadsOptions): SQL[] {
 
   const sourceTag = options.sourceTag?.trim() || null;
   if (sourceTag) conditions.push(eq(leads.sourceTag, sourceTag));
+
+  switch (options.followUp ?? null) {
+    case "overdue":
+      conditions.push(sql`${leads.followUpAt} < current_date`);
+      break;
+    case "today":
+      conditions.push(sql`${leads.followUpAt} = current_date`);
+      break;
+    case "this_week":
+      conditions.push(
+        sql`${leads.followUpAt} >= current_date and ${leads.followUpAt} <= current_date + interval '6 days'`,
+      );
+      break;
+    case "none":
+      conditions.push(isNull(leads.followUpAt));
+      break;
+  }
 
   const q = options.q?.trim() || null;
   if (q) {
@@ -1375,12 +1411,14 @@ export async function getLeads(
 
   const where = and(...conditions)!;
 
+  const orderBy = leadRowOrderBy(options.sort ?? "recent");
+
   const [rows, totalRows] = await Promise.all([
     db
       .select()
       .from(leads)
       .where(where)
-      .orderBy(desc(leads.createdAt), desc(leads.id))
+      .orderBy(...orderBy)
       .limit(limit)
       .offset(offset),
     db
@@ -1395,6 +1433,30 @@ export async function getLeads(
     limit,
     offset,
   };
+}
+
+function leadRowOrderBy(sort: LeadsSort): SQL[] {
+  switch (sort) {
+    case "follow_up":
+      return [
+        sql`${leads.followUpAt} asc nulls last`,
+        sql`${leads.createdAt} desc`,
+        sql`${leads.id} desc`,
+      ];
+    case "last_contact":
+      return [
+        sql`${leads.lastContactedAt} desc nulls last`,
+        sql`${leads.id} desc`,
+      ];
+    case "stalest":
+      return [
+        sql`${leads.lastContactedAt} asc nulls last`,
+        sql`${leads.id} desc`,
+      ];
+    case "recent":
+    default:
+      return [sql`${leads.createdAt} desc`, sql`${leads.id} desc`];
+  }
 }
 
 export async function getLeadPropertyGroups(
@@ -1425,21 +1487,50 @@ export async function getLeadPropertyGroups(
       mostRecentContact: sql<Date | null>`max(${leads.lastContactedAt})`.as(
         "most_recent_contact",
       ),
+      mostRecentCreated: sql<Date>`max(${leads.createdAt})`.as(
+        "most_recent_created",
+      ),
     })
     .from(leads)
     .where(where)
     .groupBy(leadPropertyGroupKey)
     .as("lead_property_groups");
 
+  const groupOrderBy = (() => {
+    switch (options.sort ?? "follow_up") {
+      case "recent":
+        return [
+          sql`${grouped.mostRecentCreated} desc nulls last`,
+          asc(grouped.address),
+          asc(grouped.key),
+        ];
+      case "last_contact":
+        return [
+          sql`${grouped.mostRecentContact} desc nulls last`,
+          asc(grouped.address),
+          asc(grouped.key),
+        ];
+      case "stalest":
+        return [
+          sql`${grouped.mostRecentContact} asc nulls last`,
+          asc(grouped.address),
+          asc(grouped.key),
+        ];
+      case "follow_up":
+      default:
+        return [
+          sql`${grouped.earliestFollowUp} asc nulls last`,
+          asc(grouped.address),
+          asc(grouped.key),
+        ];
+    }
+  })();
+
   const [groups, totalRows] = await Promise.all([
     db
       .select()
       .from(grouped)
-      .orderBy(
-        sql`${grouped.earliestFollowUp} asc nulls last`,
-        asc(grouped.address),
-        asc(grouped.key),
-      )
+      .orderBy(...groupOrderBy)
       .limit(limit)
       .offset(offset),
     db
