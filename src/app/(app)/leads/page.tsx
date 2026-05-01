@@ -1,11 +1,15 @@
 import Link from "next/link";
 import {
+  LEADS_FOLLOW_UP_FILTERS,
   LEADS_PAGE_DEFAULT_LIMIT,
+  LEADS_SORTS,
   getLead,
   getLatestBidForLead,
   getLeadPropertyGroups,
   getLeads,
   type Lead,
+  type LeadsFollowUpFilter,
+  type LeadsSort,
 } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -55,6 +59,8 @@ type LeadsQuery = {
   q: string;
   status: LeadStatus | null;
   source: string | null;
+  followUp: LeadsFollowUpFilter | null;
+  sort: LeadsSort | null;
   limit: number;
   view: LeadsView;
 };
@@ -71,6 +77,30 @@ function parseStatus(raw: string | undefined): LeadStatus | null {
     : null;
 }
 
+function parseFollowUp(raw: string | undefined): LeadsFollowUpFilter | null {
+  const v = raw?.trim();
+  if (!v) return null;
+  return (LEADS_FOLLOW_UP_FILTERS as readonly string[]).includes(v)
+    ? (v as LeadsFollowUpFilter)
+    : null;
+}
+
+function parseSort(raw: string | undefined): LeadsSort | null {
+  const v = raw?.trim();
+  if (!v) return null;
+  return (LEADS_SORTS as readonly string[]).includes(v)
+    ? (v as LeadsSort)
+    : null;
+}
+
+function defaultSortForView(view: LeadsView): LeadsSort {
+  return view === "property" ? "follow_up" : "recent";
+}
+
+function effectiveSort(query: LeadsQuery): LeadsSort {
+  return query.sort ?? defaultSortForView(query.view);
+}
+
 function parseLimit(raw: string | undefined): number {
   const n = Number.parseInt(raw ?? "", 10);
   if (!Number.isFinite(n) || n <= 0) return LEADS_PAGE_DEFAULT_LIMIT;
@@ -85,11 +115,16 @@ function buildQueryString(
   const q = overrides.q ?? query.q;
   const status = "status" in overrides ? overrides.status : query.status;
   const source = "source" in overrides ? overrides.source : query.source;
+  const followUp =
+    "followUp" in overrides ? overrides.followUp : query.followUp;
+  const sort = "sort" in overrides ? overrides.sort : query.sort;
   const limit = overrides.limit ?? query.limit;
   const view = overrides.view ?? query.view;
   if (q) sp.set("q", q);
   if (status) sp.set("status", status);
   if (source) sp.set("source", source);
+  if (followUp) sp.set("followUp", followUp);
+  if (sort) sp.set("sort", sort);
   if (limit !== LEADS_PAGE_DEFAULT_LIMIT) sp.set("limit", String(limit));
   if (view === "contact") sp.set("view", "contact");
   if (overrides.lead) sp.set("lead", overrides.lead);
@@ -114,6 +149,8 @@ export default async function LeadsPage({
     q?: string;
     status?: string;
     source?: string;
+    followUp?: string;
+    sort?: string;
     limit?: string;
     lead?: string;
     view?: string;
@@ -125,6 +162,8 @@ export default async function LeadsPage({
     q: (params.q ?? "").trim(),
     status: parseStatus(params.status),
     source: params.source?.trim() || null,
+    followUp: parseFollowUp(params.followUp),
+    sort: parseSort(params.sort),
     limit: parseLimit(params.limit),
     view: parseView(params.view),
   };
@@ -134,6 +173,8 @@ export default async function LeadsPage({
     q: query.q || null,
     status: query.status,
     sourceTag: query.source,
+    followUp: query.followUp,
+    sort: effectiveSort(query),
     limit: query.limit,
   };
 
@@ -151,7 +192,9 @@ export default async function LeadsPage({
   const visible = propertyGroups ? propertyGroups.length : rows.length;
   const { total } = listResult;
   const hasMore = visible < total;
-  const hasFilters = Boolean(query.q || query.status || query.source);
+  const hasFilters = Boolean(
+    query.q || query.status || query.source || query.followUp,
+  );
   const closeHref = buildCloseHref(query);
 
   return (
@@ -165,7 +208,12 @@ export default async function LeadsPage({
           </div>
         )}
 
-        <FilterStrip query={query} total={total} visible={visible} />
+        <LeadsFilterBar
+          query={query}
+          total={total}
+          visible={visible}
+          leadId={leadId}
+        />
 
         {visible === 0 ? (
           <EmptyState query={query} hasFilters={hasFilters} />
@@ -218,55 +266,127 @@ export default async function LeadsPage({
   );
 }
 
-function FilterStrip({
+const FOLLOW_UP_CHOICES: {
+  value: LeadsFollowUpFilter | null;
+  label: string;
+}[] = [
+  { value: null, label: "All" },
+  { value: "overdue", label: "Overdue" },
+  { value: "today", label: "Due today" },
+  { value: "this_week", label: "Due this week" },
+  { value: "none", label: "No follow-up" },
+];
+
+const SORT_CHOICES: { value: LeadsSort; label: string }[] = [
+  { value: "recent", label: "Newest" },
+  { value: "follow_up", label: "Follow-up" },
+  { value: "last_contact", label: "Last contact" },
+  { value: "stalest", label: "Stalest" },
+];
+
+function LeadsFilterBar({
   query,
   total,
   visible,
+  leadId,
 }: {
   query: LeadsQuery;
   total: number;
   visible: number;
+  leadId?: string;
 }) {
-  const chips: { label: string; clearHref: string }[] = [];
+  const lead = leadId ?? null;
+  const buildHref = (overrides: Partial<LeadsQuery> & { lead?: string | null }): string => {
+    const qs = buildQueryString(query, { lead, ...overrides });
+    return qs ? `/leads?${qs}` : "/leads";
+  };
+
+  const activeSort = effectiveSort(query);
+  const activeFollowUp = query.followUp ?? null;
+
+  const removableChips: { label: string; clearHref: string }[] = [];
   if (query.status) {
-    chips.push({
+    removableChips.push({
       label: `Status: ${leadStatusLabel(query.status)}`,
-      clearHref:
-        buildQueryString(query, { status: null }) === ""
-          ? "/leads"
-          : `/leads?${buildQueryString(query, { status: null })}`,
+      clearHref: buildHref({ status: null }),
     });
   }
   if (query.source) {
-    chips.push({
+    removableChips.push({
       label: `Source: ${query.source}`,
-      clearHref:
-        buildQueryString(query, { source: null }) === ""
-          ? "/leads"
-          : `/leads?${buildQueryString(query, { source: null })}`,
+      clearHref: buildHref({ source: null }),
     });
   }
 
-  if (chips.length === 0 && total === 0) return null;
+  const showSecondRow = removableChips.length > 0 || total > 0;
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-      {chips.map((chip) => (
-        <Link
-          key={chip.label}
-          href={chip.clearHref}
-          className="inline-flex items-center gap-1 rounded-full border bg-card px-2.5 py-1 hover:bg-muted/40"
-          scroll={false}
-        >
-          {chip.label}
-          <X className="h-3 w-3" aria-hidden />
-          <span className="sr-only">Remove filter</span>
-        </Link>
-      ))}
-      {total > 0 && (
-        <span className="ms-auto tabular-nums">
-          Showing {visible} of {total}
-        </span>
+    <div className="mb-4 space-y-2">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="text-muted-foreground">Follow-up:</span>
+          {FOLLOW_UP_CHOICES.map((choice) => {
+            const active = activeFollowUp === choice.value;
+            return (
+              <Link
+                key={choice.label}
+                href={buildHref({ followUp: choice.value })}
+                scroll={false}
+                aria-pressed={active}
+                className={
+                  active
+                    ? "rounded-full bg-foreground px-2.5 py-1 text-background"
+                    : "rounded-full border bg-card px-2.5 py-1 text-muted-foreground hover:bg-muted/40"
+                }
+              >
+                {choice.label}
+              </Link>
+            );
+          })}
+        </div>
+        <div className="ms-auto flex flex-wrap items-center gap-1">
+          <span className="text-muted-foreground">Sort:</span>
+          {SORT_CHOICES.map((choice) => {
+            const active = activeSort === choice.value;
+            return (
+              <Link
+                key={choice.value}
+                href={buildHref({ sort: choice.value })}
+                scroll={false}
+                aria-pressed={active}
+                className={
+                  active
+                    ? "rounded-full bg-foreground px-2.5 py-1 text-background"
+                    : "rounded-full border bg-card px-2.5 py-1 text-muted-foreground hover:bg-muted/40"
+                }
+              >
+                {choice.label}
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+
+      {showSecondRow && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          {removableChips.map((chip) => (
+            <Link
+              key={chip.label}
+              href={chip.clearHref}
+              className="inline-flex items-center gap-1 rounded-full border bg-card px-2.5 py-1 hover:bg-muted/40"
+              scroll={false}
+            >
+              {chip.label}
+              <X className="h-3 w-3" aria-hidden />
+              <span className="sr-only">Remove filter</span>
+            </Link>
+          ))}
+          {total > 0 && (
+            <span className="ms-auto tabular-nums">
+              Showing {visible} of {total}
+            </span>
+          )}
+        </div>
       )}
     </div>
   );
