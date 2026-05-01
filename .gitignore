@@ -42,5 +42,7 @@ next-env.d.ts
 # conductor
 .context/
 
-# claude worktrees
+# claude
 .claude/worktrees/
+.claude/settings.local.json
+.claude/launch.json
