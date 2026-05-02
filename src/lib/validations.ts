@@ -309,3 +309,55 @@ export const createProjectUpdateSchema = z.object({
     .max(4000, "Update is too long"),
   visibleOnPublicUrl: formCheckbox,
 });
+
+// ── Onboarding ──
+
+/**
+ * Permissive URL coerce: accepts "example.com" by prepending https:// before
+ * validating, since contractors will type it without a scheme.
+ */
+const websiteUrl = z
+  .string()
+  .trim()
+  .min(1, "Enter your company website")
+  .transform((v) => (/^https?:\/\//i.test(v) ? v : `https://${v}`))
+  .refine(
+    (v) => {
+      try {
+        const u = new URL(v);
+        return u.hostname.includes(".");
+      } catch {
+        return false;
+      }
+    },
+    { message: "Enter a valid website URL" }
+  );
+
+const optionalHexColor = z
+  .union([z.string(), z.null(), z.undefined()])
+  .transform((v) => {
+    if (v == null) return null;
+    const trimmed = v.trim();
+    return trimmed === "" ? null : trimmed;
+  })
+  .refine((v) => v === null || /^#[0-9a-fA-F]{6}$/.test(v), {
+    message: "Color must be a 6-digit hex like #1A2B3C",
+  });
+
+export const submitWebsiteSchema = z.object({
+  websiteUrl,
+});
+
+export const confirmCompanyProfileSchema = z.object({
+  companyName: z.string().trim().min(1, "Company name is required"),
+  street: optionalText,
+  city: optionalText,
+  state: optionalText,
+  zip: optionalText,
+  phone: optionalText,
+  email: optionalText,
+});
+
+export const confirmThemeSchema = z.object({
+  primaryColor: optionalHexColor,
+});

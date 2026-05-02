@@ -34,7 +34,15 @@ import {
   updateProjectDetails,
   createProjectUpdate,
   getShareSlugsForBid,
+  markOnboardingWebsiteSubmitted,
+  markOnboardingProfileConfirmed,
+  markOnboardingComplete,
+  skipOnboarding,
+  upsertCompanyProfile,
+  setEnrichmentResult,
 } from "./store";
+import { getSessionUser } from "./supabase/auth-cache";
+import { enrichCompanyFromWebsite } from "./onboarding/enrich-from-website";
 import { getAppOrigin } from "./env";
 import { parseCsv, autoMapColumns, mapRowsToLeads } from "./leads/csv";
 import {
@@ -72,6 +80,9 @@ import {
   updateProjectStatusSchema,
   updateProjectDetailsSchema,
   createProjectUpdateSchema,
+  submitWebsiteSchema,
+  confirmCompanyProfileSchema,
+  confirmThemeSchema,
 } from "./validations";
 import { calculateBidPricing } from "./pricing";
 import type { ProposalSnapshot } from "./pdf/types";
@@ -819,4 +830,82 @@ export async function createProjectUpdateAction(formData: FormData) {
     result.data.projectId,
     projectWithBid.bid.id
   );
+}
+
+// ── Onboarding ──
+
+const ENRICHMENT_HARD_TIMEOUT_MS = 15000;
+
+export async function submitOnboardingWebsiteAction(formData: FormData) {
+  const result = submitWebsiteSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(
+      `/onboarding?step=website&error=${encodeURIComponent(message)}`
+    );
+  }
+  const websiteUrl = result.data.websiteUrl;
+  await markOnboardingWebsiteSubmitted(websiteUrl);
+
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(new Error("enrichment hard timeout")),
+    ENRICHMENT_HARD_TIMEOUT_MS
+  );
+  try {
+    const extraction = await enrichCompanyFromWebsite(websiteUrl, {
+      signal: controller.signal,
+    });
+    await setEnrichmentResult(user.id, {
+      status: "success",
+      data: extraction,
+      raw: extraction,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await setEnrichmentResult(user.id, {
+      status: "failed",
+      error: message,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+
+  redirect("/onboarding?step=confirm");
+}
+
+export async function confirmOnboardingProfileAction(formData: FormData) {
+  const result = confirmCompanyProfileSchema.safeParse(
+    formDataToObject(formData)
+  );
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(
+      `/onboarding?step=confirm&error=${encodeURIComponent(message)}`
+    );
+  }
+  await upsertCompanyProfile(result.data);
+  await markOnboardingProfileConfirmed();
+  redirect("/onboarding?step=theme");
+}
+
+export async function confirmOnboardingThemeAction(formData: FormData) {
+  const result = confirmThemeSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(
+      `/onboarding?step=theme&error=${encodeURIComponent(message)}`
+    );
+  }
+  await upsertCompanyProfile(result.data);
+  await markOnboardingComplete();
+  redirect("/bids");
+}
+
+export async function skipOnboardingAction() {
+  await skipOnboarding();
+  redirect("/bids");
 }

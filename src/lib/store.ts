@@ -10,6 +10,8 @@ import {
   leads,
   projects,
   projectUpdates,
+  companyProfiles,
+  onboardings,
 } from "@/db/schema";
 import {
   eq,
@@ -37,6 +39,8 @@ export type ProposalShare = typeof proposalShares.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type ProjectUpdate = typeof projectUpdates.$inferSelect;
+export type CompanyProfile = typeof companyProfiles.$inferSelect;
+export type Onboarding = typeof onboardings.$inferSelect;
 export type BuildingWithSqft = Building & { totalSqft: number };
 
 const NO_PROPERTY_ADDRESS_KEY = "__no_address__";
@@ -1818,4 +1822,190 @@ export async function getDashboardPipelineFinances(options?: {
     openPipelineUsd: parseTotal(openRows),
     wonBookedUsd: parseTotal(wonRows),
   };
+}
+
+// ── Onboarding ──
+
+export async function getOnboardingState(userId?: string) {
+  const id = userId ?? (await requireUser()).id;
+  const rows = await db
+    .select()
+    .from(onboardings)
+    .where(eq(onboardings.userId, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export function isOnboardingComplete(state: Onboarding | null): boolean {
+  if (!state) return false;
+  return state.skipped || state.completedAt !== null;
+}
+
+export async function markOnboardingWebsiteSubmitted(websiteUrl: string) {
+  const user = await requireUser();
+  const now = new Date();
+
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(onboardings)
+      .values({ userId: user.id, websiteSubmittedAt: now })
+      .onConflictDoUpdate({
+        target: onboardings.userId,
+        set: { websiteSubmittedAt: now },
+      });
+
+    await tx
+      .insert(companyProfiles)
+      .values({
+        userId: user.id,
+        websiteUrl,
+        enrichmentStatus: "pending",
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: companyProfiles.userId,
+        set: {
+          websiteUrl,
+          enrichmentStatus: "pending",
+          enrichmentError: null,
+          updatedAt: now,
+        },
+      });
+  });
+}
+
+export async function markOnboardingProfileConfirmed() {
+  const user = await requireUser();
+  const now = new Date();
+  await db
+    .insert(onboardings)
+    .values({ userId: user.id, profileConfirmedAt: now })
+    .onConflictDoUpdate({
+      target: onboardings.userId,
+      set: { profileConfirmedAt: now },
+    });
+}
+
+export async function markOnboardingComplete() {
+  const user = await requireUser();
+  const now = new Date();
+  await db
+    .insert(onboardings)
+    .values({
+      userId: user.id,
+      themeConfirmedAt: now,
+      completedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: onboardings.userId,
+      set: { themeConfirmedAt: now, completedAt: now },
+    });
+}
+
+export async function skipOnboarding() {
+  const user = await requireUser();
+  const now = new Date();
+  await db
+    .insert(onboardings)
+    .values({ userId: user.id, skipped: true, completedAt: now })
+    .onConflictDoUpdate({
+      target: onboardings.userId,
+      set: { skipped: true, completedAt: now },
+    });
+}
+
+// ── Company Profile ──
+
+export async function getCompanyProfile(userId?: string) {
+  const id = userId ?? (await requireUser()).id;
+  const rows = await db
+    .select()
+    .from(companyProfiles)
+    .where(eq(companyProfiles.userId, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function setEnrichmentResult(
+  userId: string,
+  result:
+    | {
+        status: "success";
+        data: Partial<
+          Pick<
+            CompanyProfile,
+            | "companyName"
+            | "tagline"
+            | "street"
+            | "city"
+            | "state"
+            | "zip"
+            | "phone"
+            | "email"
+            | "logoUrl"
+            | "primaryColor"
+          >
+        >;
+        raw?: unknown;
+      }
+    | { status: "failed"; error: string }
+) {
+  const now = new Date();
+  if (result.status === "success") {
+    const cleaned = Object.fromEntries(
+      Object.entries(result.data).filter(([, v]) => v != null && v !== "")
+    );
+    await db
+      .update(companyProfiles)
+      .set({
+        ...cleaned,
+        enrichmentStatus: "success",
+        enrichmentError: null,
+        enrichmentRaw: (result.raw ?? null) as CompanyProfile["enrichmentRaw"],
+        updatedAt: now,
+      })
+      .where(eq(companyProfiles.userId, userId));
+  } else {
+    await db
+      .update(companyProfiles)
+      .set({
+        enrichmentStatus: "failed",
+        enrichmentError: result.error.slice(0, 500),
+        updatedAt: now,
+      })
+      .where(eq(companyProfiles.userId, userId));
+  }
+}
+
+export async function upsertCompanyProfile(
+  data: Partial<
+    Pick<
+      CompanyProfile,
+      | "websiteUrl"
+      | "companyName"
+      | "tagline"
+      | "street"
+      | "city"
+      | "state"
+      | "zip"
+      | "phone"
+      | "email"
+      | "logoUrl"
+      | "primaryColor"
+      | "accentColor"
+      | "bodyFont"
+    >
+  >
+) {
+  const user = await requireUser();
+  const now = new Date();
+  const rows = await db
+    .insert(companyProfiles)
+    .values({ userId: user.id, ...data, updatedAt: now })
+    .onConflictDoUpdate({
+      target: companyProfiles.userId,
+      set: { ...data, updatedAt: now },
+    })
+    .returning();
+  return rows[0];
 }

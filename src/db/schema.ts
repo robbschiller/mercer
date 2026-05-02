@@ -221,3 +221,57 @@ export const userDefaults = pgTable("user_defaults", {
     .notNull()
     .defaultNow(),
 });
+
+/**
+ * Company profile: brand data captured by the onboarding wizard and
+ * surfaced on the themed bid (PDF + /p/[slug]). One row per user; mirrors
+ * the user_defaults pattern. Populated by the LLM extractor against
+ * `website_url`, then editable on /settings → "Bid branding". See PRD
+ * §5.4 (proposal as live surface) and docs/plan.md → Phase G.
+ */
+export const companyProfiles = pgTable("company_profiles", {
+  userId: uuid("user_id").primaryKey(),
+  websiteUrl: text("website_url"),
+  companyName: text("company_name"),
+  tagline: text("tagline"),
+  street: text("street"),
+  city: text("city"),
+  state: text("state"),
+  zip: text("zip"),
+  phone: text("phone"),
+  email: text("email"),
+  logoUrl: text("logo_url"),
+  primaryColor: text("primary_color"),
+  accentColor: text("accent_color"),
+  bodyFont: text("body_font"),
+  enrichmentStatus: text("enrichment_status"),
+  enrichmentError: text("enrichment_error"),
+  enrichmentRaw: jsonb("enrichment_raw"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Onboarding state: per-step timestamps for the post-signup wizard.
+ * Existence of a row with completedAt or skipped=true releases the
+ * (app)/layout gate. See docs/plan.md → Phase G.
+ */
+export const onboardings = pgTable("onboardings", {
+  userId: uuid("user_id").primaryKey(),
+  startedAt: timestamp("started_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  websiteSubmittedAt: timestamp("website_submitted_at", {
+    withTimezone: true,
+  }),
+  profileConfirmedAt: timestamp("profile_confirmed_at", {
+    withTimezone: true,
+  }),
+  themeConfirmedAt: timestamp("theme_confirmed_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  skipped: boolean("skipped").notNull().default(false),
+});

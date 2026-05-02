@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/supabase/auth-cache";
+import { getOnboardingState, isOnboardingComplete } from "@/lib/store";
 import {
   SidebarInset,
   SidebarProvider,
@@ -14,6 +15,9 @@ export default async function AppLayout({
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
+
+  const onboarding = await getOnboardingState(user.id);
+  if (!isOnboardingComplete(onboarding)) redirect("/onboarding");
 
   return (
     <SidebarProvider>
