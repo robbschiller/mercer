@@ -21,8 +21,9 @@ The deployed product today (Phase 0) is the non-AI substrate of that workflow: l
 
 ### Leads
 - CSV import with auto-mapping, source tags, and a clean sample fixture for demos.
-- Lead list with card and table views, filters by status and source.
-- Lead enrichment via Google Places (resolves the contractor's office address, lat/lng, and Place ID; satellite imagery is *not* generated at the lead layer — that belongs to the bid).
+- **Property-grouped list view (default).** Trade-show CSV rows are property-level (one attendee with five communities shows up five times with five addresses), so `/leads` groups by `resolvedAddress` and sorts groups by earliest follow-up. A `By contact` toggle restores the original flat table. Page-at-a-time pagination on both views with SQL-pushed search/status/source filters.
+- **Per-lead outreach state.** `last_contacted_at`, `follow_up_at`, and `contact_attempts` columns drive an Outreach card on the lead detail (one-click "log contact attempt", follow-up date input with overdue indicator). Property-card headers roll up the earliest follow-up across contacts at that property and flag overdue dates in red.
+- Lead enrichment via Google Places: the CSV property address is treated as authoritative; Places fills in lat/lng and Place ID, and only resolves a fresh address when the row is `company`-only. Satellite imagery is *not* generated at the lead layer — that belongs to the bid.
 - Lead detail with manual override, status workflow (`new` / `quoted` / `won` / `lost`), and a one-click "Create bid from lead" handoff.
 
 ### Bids
@@ -102,6 +103,9 @@ src/
 │   ├── app-sidebar*.tsx         # Authenticated sidebar nav
 │   ├── new-bid-wizard.tsx       # Address → confirm → details flow
 │   ├── bid-*.tsx, building-*.tsx, surface-*.tsx, pricing-*.tsx, line-item-*.tsx
+│   ├── leads-by-property.tsx    # Property-grouped list (default /leads view)
+│   ├── leads-toolbar.tsx        # Search input + property/contact view toggle
+│   ├── lead-detail-body.tsx, lead-detail-aside.tsx, leads-row.tsx
 │   ├── proposal-list.tsx        # Generate + share + history
 │   ├── public-proposal-response.tsx # Accept/decline form on /p/[slug]
 │   ├── osm-footprints-section.tsx
@@ -124,7 +128,7 @@ src/
 │   └── supabase/                # Client/server helpers + auth cache
 ├── proxy.ts                     # Next.js proxy (replaces middleware.ts)
 drizzle/
-└── manual/                      # Hand-written additive SQL migrations (001 → 009)
+└── manual/                      # Hand-written additive SQL migrations (001 → 011)
 docs/
 ├── prd.md                       # Product requirements: vision, personas, scope, milestones, AI principles
 ├── plan.md                      # Live execution tracker (shipped / open / paused / decisions)
