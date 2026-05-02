@@ -1315,6 +1315,11 @@ export type GetLeadsResult = {
   offset: number;
 };
 
+export type LeadSourceOption = {
+  label: string;
+  value: string;
+};
+
 export type LeadPropertyGroup = {
   key: string;
   address: string | null;
@@ -1437,6 +1442,28 @@ export async function getLeads(
     limit,
     offset,
   };
+}
+
+export async function getLeadSourceOptions(): Promise<LeadSourceOption[]> {
+  const user = await requireUser();
+  const rows = await db
+    .selectDistinct({
+      value: leads.sourceTag,
+    })
+    .from(leads)
+    .where(
+      and(
+        eq(leads.userId, user.id),
+        sql`${leads.sourceTag} is not null`,
+        sql`btrim(${leads.sourceTag}) <> ''`,
+      ),
+    )
+    .orderBy(asc(leads.sourceTag));
+
+  return rows.flatMap((row) => {
+    const value = row.value?.trim();
+    return value ? [{ label: value, value }] : [];
+  });
 }
 
 function leadRowOrderBy(sort: LeadsSort): SQL[] {
