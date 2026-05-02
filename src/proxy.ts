@@ -31,6 +31,7 @@ export const config = {
     "/bids/:path*",
     "/projects/:path*",
     "/settings/:path*",
+    "/onboarding/:path*",
     "/login",
     "/signup",
   ],
