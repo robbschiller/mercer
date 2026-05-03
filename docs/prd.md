@@ -2,7 +2,7 @@
 
 **Status:** Draft
 **Audience:** Robbie + Timmy
-**Last updated:** April 2026
+**Last updated:** May 2026
 
 ---
 
@@ -165,9 +165,9 @@ A **lead-qualification agent** runs on every imported row. Given a name, company
 - Lead-qualification agent run per lead with: resolved property portfolio, estimated paint-timing score, generated brief, satellite thumbnails for top candidate properties
 - Confidence score per enrichment with graceful degradation (low-confidence leads surface as "needs human review" rather than fabricated data)
 - Lead list view with ranking by qualification score, filtering by source and status, and detail view per lead
-- **Property-grouped list view** as the default. Trade-show CSV rows are property-level, not contact-level: one attendee covering five communities appears five times with five different addresses. The list groups rows by `resolved_address`, sorted by earliest follow-up date then alpha, with a `By contact` toggle that restores the flat table when a contact-first read is needed.
-- **Outreach state per lead**: `last_contacted_at`, `follow_up_at`, `contact_attempts`. Lead detail surfaces a one-click "log contact attempt" (timestamps + increments the counter) and a follow-up date input. Property-card headers roll up the earliest follow-up across contacts at that property and flag overdue dates.
-- Lead status: new / qualified / quoted / won / lost
+- **Property-first lead table** as the default. Trade-show CSV rows are property-level, not contact-level: one attendee covering five communities appears five times with five different addresses. The live `/leads` surface uses Niko search/filter/sort/pagination and shows one row per property with embedded contacts, account/company, pipeline mix, portfolio count, earliest follow-up, and a resizable property detail side panel. A contact-row table remains available via `view=contact` for debugging or contact-first work.
+- **Outreach state per lead**: `last_contacted_at`, `follow_up_at`, `contact_attempts`. Lead detail surfaces a one-click "log contact attempt" (timestamps + increments the counter) and a follow-up date input. The property table rolls up the earliest follow-up across contacts at that property.
+- Live lead status: new / quoted / won / lost. `qualified` is reserved for the qualification-agent-driven flow in Milestone 3.
 - Manual override and correction of agent output (becomes training data)
 
 **Deferred**
@@ -330,7 +330,7 @@ Out of scope for Phase 1. The bid is frozen at acceptance; the proposal snapshot
 A single view of deal state, with AI as the query interface.
 
 **Capabilities**
-- Funnel view: leads → qualified → quoted → won, with conversion rates
+- Funnel view: leads → quoted → won today, expanding to leads → qualified → quoted → won when the qualification agent ships
 - Counts by status and source tag
 - Total pipeline $ value (lead-stage estimates + active bid totals + won deal contract values)
 - Drill-down from each count to underlying records
@@ -409,14 +409,14 @@ Grounded in the normalized lead-domain model. A lead is a **property-level sales
 *Company context*
 
 - `company` (text, nullable) — management company / property group name. The qualification agent (Milestone 3) keys off this to resolve the portfolio.
-- `property_name` (text, nullable) — a specific property the contact mentioned. Hint, not a foreign key; the bid captures the actual property to bid on.
+- `property_name` (text, nullable) — compatibility display field for the property name while screens migrate to `properties.name`.
 - `source_tag` (text, nullable) — per-import provenance ("NAA Orlando 2026", "inbound 2026-04-12", "outbound — Sherwin rep referral").
 - `raw_row` (jsonb, nullable) — unmapped CSV columns from import, kept verbatim for later use.
 - `notes` (text, not null, default `''`) — freeform contractor notes.
 
 *Resolved property address*
 
-This is the **multifamily property the contact manages**, not a corporate office. The trade-show CSV carries the property `Address / City / State / Zip` directly; the enrichment runner uses those when present and only falls back to a Places lookup keyed on `company` when the CSV row is address-less. The property-grouped list view groups by this column.
+This is the **multifamily property the contact manages**, not a corporate office. The trade-show CSV carries the property `Address / City / State / Zip` directly; the enrichment runner uses those when present and only falls back to a Places lookup keyed on `company` when the CSV row is address-less. The property-first list view groups by this column when legacy rows do not yet have enough normalized property context.
 
 - `resolved_address` (text, nullable) — formatted property address. Authoritative when the CSV provided it; backfilled by Places for sparse rows.
 - `latitude`, `longitude` (double precision, nullable) — property coordinates.
@@ -447,7 +447,7 @@ Per-contact outreach tracking. Sits on the lead row because contact attempts are
 
 *Workflow*
 
-- `status` (text enum, not null, default `new`) — `new | qualified | quoted | won | lost`. Note `qualified` is reserved for the qualification-agent-driven flow (Milestone 3); pre-Milestone-3 leads jump straight from `new` to `quoted` on first bid.
+- `status` (text enum, not null, default `new`) — live enum is `new | quoted | won | lost`. `qualified` is reserved for the qualification-agent-driven flow (Milestone 3); pre-Milestone-3 leads jump straight from `new` to `quoted` on first bid.
 
 ### 6.2 Bid fields
 
@@ -559,15 +559,15 @@ Copied from `proposal_share` at create-time so the project carries the signer ev
 
 #### 6.3.1 project_update fields
 
-Child entity that drives both the public status page and the contractor-internal feed. Introduced in Slice 3 of the project layer (§5.5 public status-page pivot); not in the live schema yet.
+Child entity that drives both the public status page and the contractor-internal feed. Introduced in Slice 3 of the project layer (§5.5 public status-page pivot) and live in the current schema.
 
 - `id` (uuid, PK).
 - `project_id` (uuid, not null, FK → `projects.id` on delete cascade).
 - `author_type` (text enum, not null) — `human | crew_auto | agent`.
-- `author_name` (text, nullable) — display name; null for `crew_auto` / `agent`.
+- `author_name` (text, not null, default `''`) — display name; empty for `crew_auto` / `agent`.
 - `body` (text, not null).
 - `attachments_ref` (jsonb, nullable) — pointers to capture / photo storage refs.
-- `visible_on_public_url` (boolean, not null, default `true`) — when false, update is contractor-internal only and never appears on `/p/[slug]`.
+- `visible_on_public_url` (boolean, not null, default `false`) — internal-by-default; when true, update appears on `/p/[slug]`.
 - `created_at` (timestamptz, not null).
 
 ### AI Architecture Principles
@@ -627,11 +627,14 @@ As of this PRD, the following is live at mercer-bids.vercel.app:
 - Bid status tracking (draft / sent / won / lost) with automatic updates on proposal response
 - OSM building footprints on bid detail (hidden pending accuracy resolution)
 - Lead import (CSV) with column auto-mapping, source tags, enrichment status, lead detail
-- Property-grouped leads list (default) with `By contact` toggle; rows group by `resolved_address` (the CSV-derived property address) and groups sort by earliest follow-up
-- Per-lead outreach state: `last_contacted_at`, `follow_up_at`, `contact_attempts`, with log-contact and follow-up controls in the lead detail aside and overdue rollups on property cards
+- Property-first Niko leads table (default) with embedded contacts, account/company, pipeline mix, portfolio count, follow-up rollup, Niko search/filter/sort/pagination, and a resizable property detail side panel. Contact-row table remains available via `view=contact`.
+- Normalized lead-domain model (`accounts`, `properties`, `contacts`, relationship tables, `activity_events`, `audit_log`) with compatibility fields on legacy leads during migration
+- Per-lead outreach state: `last_contacted_at`, `follow_up_at`, `contact_attempts`, with log-contact and follow-up controls in the lead detail aside and overdue rollups on property rows
 - Lead-to-bid conversion with pre-filled bid creation
 - Shareable proposal pages at `/p/[slug]` with accept/decline and status propagation
 - Dashboard at `/dashboard` with lead and bid summary counts
+- Onboarding wizard at `/onboarding` with website capture, Anthropic Haiku profile extraction when configured, confirm/edit step, theme confirmation, and skip path
+- Project layer with `/projects`, `/projects/[id]`, automatic project creation on proposal acceptance, project status state machine, public project updates, and `/p/[slug]` status-page pivot post-acceptance
 
 **What's not built:** none of the AI-native operations described in §5. The current app is a Phase 0 proof of the data model and the non-AI surfaces. The product described in this PRD starts from here.
 

@@ -13,6 +13,7 @@ The deployed product today (Phase 0) is the non-AI substrate of that workflow: l
 | `(marketing)` | Public landing page; redirects to `/dashboard` if signed in | `/` |
 | `(auth)` | Branded sign-in / sign-up shell that mirrors the marketing surface, with the Mercer wordmark linking back to `/` | `/login`, `/signup` |
 | `(app)` | Authenticated app behind a sidebar shell | `/dashboard`, `/leads`, `/leads/[id]`, `/leads/import`, `/leads/new`, `/bids`, `/bids/[id]`, `/bids/new`, `/projects`, `/projects/[id]`, `/settings` |
+| `(onboarding)` | Post-signup branding wizard with website enrichment and theme confirmation | `/onboarding` |
 | Public sharing | No-auth proposal/status page | `/p/[slug]` (proposal pre-acceptance, project status page post-acceptance) |
 | Auth callback | Supabase OAuth redirect handler | `/auth/callback` |
 | Image proxy | Server-side Maps Static fetch (key never reaches the browser) | `/api/maps/satellite` |
@@ -21,9 +22,11 @@ The deployed product today (Phase 0) is the non-AI substrate of that workflow: l
 
 ### Leads
 - CSV import with auto-mapping, source tags, and a clean sample fixture for demos.
-- **Property-grouped list view (default).** Trade-show CSV rows are property-level (one attendee with five communities shows up five times with five addresses), so `/leads` groups by `resolvedAddress` and sorts groups by earliest follow-up. A `By contact` toggle restores the original flat table. Page-at-a-time pagination on both views with SQL-pushed search/status/source filters.
-- **Per-lead outreach state.** `last_contacted_at`, `follow_up_at`, and `contact_attempts` columns drive an Outreach card on the lead detail (one-click "log contact attempt", follow-up date input with overdue indicator). Property-card headers roll up the earliest follow-up across contacts at that property and flag overdue dates in red.
-- Lead enrichment via Google Places: the CSV property address is treated as authoritative; Places fills in lat/lng and Place ID, and only resolves a fresh address when the row is `company`-only. Satellite imagery is *not* generated at the lead layer — that belongs to the bid.
+- **Property-first Niko table (default).** Trade-show CSV rows are property-level (one attendee with five communities shows up five times with five addresses), so `/leads` shows one row per property with embedded contact chips, account/company, pipeline mix, portfolio count, and follow-up. Niko owns search, filter, sort, and pagination; the legacy contact-row table remains available via `view=contact`.
+- **Normalized lead domain model.** Imports and manual lead creation normalize into durable `accounts`, `properties`, `contacts`, `property_contacts`, `leads`, and `lead_contacts`, while compatibility fields remain on `leads` during the transition. `activity_events` stores the readable sales timeline and `audit_log` stores structured change history.
+- **Property detail side panel.** Clicking a property opens a resizable sidebar with property/account context, contacts at that property, status breakdown, next action, and bid handoff.
+- **Per-lead outreach state.** `last_contacted_at`, `follow_up_at`, and `contact_attempts` columns drive an Outreach card on the lead detail (one-click "log contact attempt", follow-up date input with overdue indicator). The property table rolls up earliest follow-up across contacts.
+- Lead enrichment via Google Places: the CSV property address is treated as authoritative; Places fills in lat/lng and Place ID, and only resolves a fresh address when the row is `company`-only. Satellite imagery is generated at the bid layer.
 - Lead detail with manual override, status workflow (`new` / `quoted` / `won` / `lost`), and a one-click "Create bid from lead" handoff.
 
 ### Bids
@@ -54,6 +57,7 @@ The deployed product today (Phase 0) is the non-AI substrate of that workflow: l
 - Project rollup card (active, overdue, per-status counts) linking into `/projects?status=…`.
 
 ### Brand and theming
+- New users pass through a 3-step onboarding wizard that captures a website, uses Anthropic Haiku to extract company profile/brand hints when configured, and confirms the bid theme. Users can skip the wizard.
 - Marketing landing page on a custom ink + amber + blueprint palette with a Fraunces editorial display headline.
 - Theme-aware `(auth)` shell (parchment in light mode, ink in dark mode) sharing the marketing texture and wordmark.
 - Light brand accents in the app: Fraunces page titles and an `amber` button variant on the most-primary CTA per surface; the rest of the app stays neutral so dense data flows stay legible.
@@ -65,7 +69,7 @@ For status of every roadmap item (shipped, in flight, paused, decisions blocking
 | Layer | Technology |
 | ----- | ---------- |
 | Framework | Next.js 16 (App Router, RSC, server actions) |
-| UI | React 19, Tailwind CSS 4, shadcn-style primitives over Radix UI |
+| UI | React 19, Tailwind CSS 4, shadcn-style primitives over Radix UI, Niko table |
 | Fonts | Geist (sans), JetBrains Mono, Fraunces (variable display) via `next/font` |
 | Database | PostgreSQL via Supabase |
 | ORM | Drizzle ORM (`drizzle-orm`, `drizzle-kit`, `postgres` driver) |
@@ -75,6 +79,7 @@ For status of every roadmap item (shipped, in flight, paused, decisions blocking
 | Storage | Supabase Storage |
 | Geospatial | `@turf/area`, `@turf/helpers`; OpenStreetMap via Overpass |
 | Maps | Google Maps Platform: Places API (New) for autocomplete, Maps Static API for satellite (server-side, proxied) |
+| LLM | Anthropic Haiku for onboarding website enrichment |
 | Theming | `next-themes` |
 | Analytics | Vercel Web Analytics |
 | Language | TypeScript |
@@ -93,6 +98,7 @@ src/
 │   │   ├── bids/                # list, [id], new (wizard)
 │   │   ├── projects/            # list, [id]
 │   │   └── settings/
+│   ├── (onboarding)/            # /onboarding website/profile/theme wizard
 │   ├── p/[slug]/                # Public proposal → project status page
 │   ├── api/maps/satellite/      # Server-side Maps Static proxy
 │   ├── auth/callback/           # Supabase OAuth redirect
@@ -101,11 +107,14 @@ src/
 ├── components/
 │   ├── ui/                      # Reusable primitives (button with amber variant, card, input, sidebar, …)
 │   ├── app-sidebar*.tsx         # Authenticated sidebar nav
+│   ├── niko-table/              # Semkoo/Niko data table primitives + filters/sort/pagination
 │   ├── new-bid-wizard.tsx       # Address → confirm → details flow
 │   ├── bid-*.tsx, building-*.tsx, surface-*.tsx, pricing-*.tsx, line-item-*.tsx
-│   ├── leads-by-property.tsx    # Property-grouped list (default /leads view)
-│   ├── leads-toolbar.tsx        # Search input + property/contact view toggle
-│   ├── lead-detail-body.tsx, lead-detail-aside.tsx, leads-row.tsx
+│   ├── property-leads-table.tsx # Property-first Niko table (default /leads view)
+│   ├── property-detail-panel.tsx# Property sidebar panel with embedded contacts
+│   ├── leads-table.tsx          # Legacy contact-row Niko table (?view=contact)
+│   ├── leads-toolbar.tsx        # Leads title + import/new actions
+│   ├── lead-detail-body.tsx, lead-detail-aside.tsx, leads-row.tsx, leads-by-property.tsx
 │   ├── proposal-list.tsx        # Generate + share + history
 │   ├── public-proposal-response.tsx # Accept/decline form on /p/[slug]
 │   ├── osm-footprints-section.tsx
@@ -113,7 +122,7 @@ src/
 │   ├── theme-provider.tsx, theme-toggle.tsx
 │   └── page-loading.tsx         # Per-surface skeletons
 ├── db/
-│   ├── schema.ts                # Drizzle tables: leads, bids, buildings, surfaces, line_items, user_defaults, proposals, proposal_shares, projects, project_updates
+│   ├── schema.ts                # Drizzle tables: lead domain, bids, proposals, projects, onboarding, etc.
 │   └── index.ts
 ├── lib/
 │   ├── actions.ts               # Server actions (auth, lead/bid/project CRUD, share + accept/decline, proposal generation)
@@ -128,7 +137,7 @@ src/
 │   └── supabase/                # Client/server helpers + auth cache
 ├── proxy.ts                     # Next.js proxy (replaces middleware.ts)
 drizzle/
-└── manual/                      # Hand-written additive SQL migrations (001 → 011)
+└── manual/                      # Hand-written additive SQL migrations (001 → 013)
 docs/
 ├── prd.md                       # Product requirements: vision, personas, scope, milestones, AI principles
 ├── plan.md                      # Live execution tracker (shipped / open / paused / decisions)
@@ -172,6 +181,7 @@ Optional:
 | `GOOGLE_MAPS_STATIC_API_KEY` | **Server-only** key for [Maps Static API](https://developers.google.com/maps/documentation/maps-static/overview) (satellite thumbnails on bid detail and the new-bid confirm step). Used through `/api/maps/satellite`; never exposed to the client. Without it, satellite previews are skipped. |
 | `NEXT_PUBLIC_APP_URL` | Public origin (no trailing slash). Used when generating proposals so the PDF can fetch the satellite image server-side. On Vercel, `VERCEL_URL` is used if unset; set this for a stable canonical URL (e.g. a custom domain). |
 | `OVERPASS_API_URL` | Overpass interpreter base URL (default `https://overpass-api.de/api/interpreter`). Use a self-hosted Overpass for heavy traffic. |
+| `ANTHROPIC_API_KEY` | Enables onboarding website enrichment with Anthropic Haiku. Without it, onboarding still advances and users can fill the company profile manually. |
 
 ### 3. Apply the database schema
 We rely on hand-written additive SQL migrations in [`drizzle/manual/`](drizzle/manual/) (one per change, never edited after merge). Apply them all in order:
@@ -179,7 +189,7 @@ We rely on hand-written additive SQL migrations in [`drizzle/manual/`](drizzle/m
 bun run db:apply-manual
 ```
 
-This creates `leads`, `bids`, `buildings`, `surfaces`, `line_items`, `user_defaults`, `proposals`, `proposal_shares`, `projects`, and `project_updates`, along with the supporting indexes.
+This creates the normalized lead-domain tables (`accounts`, `properties`, `contacts`, `property_contacts`, `leads`, `lead_contacts`, `activity_events`, `audit_log`), bid/proposal/project tables, onboarding/company profile tables, and supporting indexes.
 
 `drizzle-kit push` is also available (`bun run db:push`) but **prefer the manual migrations** — push is known to crash against Supabase introspection on some schemas, and we use additive SQL as the source of truth per [`AGENTS.md`](AGENTS.md) → "Database Change Rules."
 
