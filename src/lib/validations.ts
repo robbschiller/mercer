@@ -208,6 +208,7 @@ export const createLeadSchema = z.object({
   phone: optionalText,
   company: optionalText,
   propertyName: optionalText,
+  resolvedAddress: optionalText,
   notes: z
     .union([z.string(), z.undefined()])
     .transform((v) => (v ?? "").trim()),
@@ -229,6 +230,7 @@ export const updateLeadSchema = z.object({
   phone: optionalText,
   company: optionalText,
   propertyName: optionalText,
+  resolvedAddress: optionalText,
   notes: z
     .union([z.string(), z.undefined()])
     .transform((v) => (v ?? "").trim()),
