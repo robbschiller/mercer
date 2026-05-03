@@ -1,20 +1,27 @@
 "use client";
 
 import Link from "next/link";
+import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageHeaderActions } from "@/components/page-header-actions";
 
 export function LeadsToolbar() {
   return (
-    <div className="mb-6 flex items-center justify-between gap-3 flex-wrap">
-      <h1 className="text-3xl font-medium tracking-tight">Leads</h1>
-      <div className="flex items-center gap-2">
-        <Button variant="outline" asChild>
-          <Link href="/leads/import">Import CSV</Link>
-        </Button>
-        <Button variant="amber" asChild>
-          <Link href="/leads/new">New lead</Link>
-        </Button>
-      </div>
-    </div>
+    <PageHeaderActions>
+      <Button
+        variant="outline"
+        size="icon"
+        aria-label="Import CSV"
+        title="Import CSV"
+        asChild
+      >
+        <Link href="/leads/import">
+          <Download className="size-4" />
+        </Link>
+      </Button>
+      <Button variant="amber" asChild>
+        <Link href="/leads/new">New lead</Link>
+      </Button>
+    </PageHeaderActions>
   );
 }

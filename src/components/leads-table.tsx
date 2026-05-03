@@ -405,57 +405,59 @@ export function LeadsTable({
         pageCount,
       }}
     >
-      <DataTableToolbarSection className="mb-3 justify-between p-0">
-        <DataTableSearchFilter<LeadTableRow>
-          value={query.q}
-          onChange={(q) => pushQuery({ q: q.trim(), page: 1 })}
-          placeholder="Search leads..."
-          className="min-w-64 max-w-md"
-        />
-        <div className="flex items-center gap-2">
-          <DataTableFilterMenu<LeadTableRow>
-            filters={filters}
-            onFiltersChange={(nextFilters) => {
-              pushQuery({
-                status: filterValue(nextFilters, "status"),
-                source: filterValue(nextFilters, "sourceTag"),
-                followUp: filterValue(nextFilters, "followUpAt"),
-                page: 1,
-              })
+      <div className="overflow-hidden rounded-md border bg-card">
+        <DataTableToolbarSection className="justify-between border-b p-0 px-3 py-2">
+          <DataTableSearchFilter<LeadTableRow>
+            value={query.q}
+            onChange={(q) => pushQuery({ q: q.trim(), page: 1 })}
+            placeholder="Search leads..."
+            className="min-w-64 max-w-md [&_input]:border-0 [&_input]:shadow-none [&_input]:focus-visible:ring-0"
+          />
+          <div className="flex items-center gap-2">
+            <DataTableFilterMenu<LeadTableRow>
+              filters={filters}
+              onFiltersChange={(nextFilters) => {
+                pushQuery({
+                  status: filterValue(nextFilters, "status"),
+                  source: filterValue(nextFilters, "sourceTag"),
+                  followUp: filterValue(nextFilters, "followUpAt"),
+                  page: 1,
+                })
+              }}
+              autoOptions={false}
+              showCounts={false}
+            />
+            <DataTableSortMenu<LeadTableRow>
+              onSortingChange={(nextSorting) =>
+                pushQuery({ sort: sortParamFor(nextSorting), page: 1 })
+              }
+            />
+          </div>
+        </DataTableToolbarSection>
+        <DataTable className="rounded-none border-0 border-b">
+          <DataTableHeader className="bg-muted/40" />
+          <DataTableBody<LeadTableRow>
+            onRowClick={(lead) => {
+              startTransition(() => router.push(lead.href, { scroll: false }))
             }}
-            autoOptions={false}
-            showCounts={false}
-          />
-          <DataTableSortMenu<LeadTableRow>
-            onSortingChange={(nextSorting) =>
-              pushQuery({ sort: sortParamFor(nextSorting), page: 1 })
-            }
-          />
-        </div>
-      </DataTableToolbarSection>
-      <DataTable className="rounded-md bg-card">
-        <DataTableHeader className="bg-muted/40" />
-        <DataTableBody<LeadTableRow>
-          onRowClick={(lead) => {
-            startTransition(() => router.push(lead.href, { scroll: false }))
-          }}
-        >
-          <DataTableEmptyBody className="h-28 text-center text-sm text-muted-foreground">
-            No leads match this view.
-          </DataTableEmptyBody>
-        </DataTableBody>
-      </DataTable>
-      <DataTablePagination<LeadTableRow>
-        totalCount={total}
-        pageSizeOptions={[25, 50, 100, 250, 500]}
-        defaultPageSize={query.limit}
-        onPageChange={(pageIndex) => pushQuery({ page: pageIndex + 1 })}
-        onNextPage={(pageIndex) => pushQuery({ page: pageIndex + 1 })}
-        onPreviousPage={(pageIndex) => pushQuery({ page: pageIndex + 1 })}
-        onPageSizeChange={(limit, pageIndex) =>
-          pushQuery({ limit, page: pageIndex + 1 })
-        }
-      />
+          >
+            <DataTableEmptyBody className="h-28 text-center text-sm text-muted-foreground">
+              No leads match this view.
+            </DataTableEmptyBody>
+          </DataTableBody>
+        </DataTable>
+        <DataTablePagination<LeadTableRow>
+          totalCount={total}
+          pageSizeOptions={[25, 50, 100, 250, 500]}
+          defaultPageSize={query.limit}
+          onPageChange={(pageIndex) => pushQuery({ page: pageIndex + 1 })}
+          onNextPage={(pageIndex) => pushQuery({ page: pageIndex + 1 })}
+          onPreviousPage={(pageIndex) => pushQuery({ page: pageIndex + 1 })}
+          onPageSizeChange={(limit, pageIndex) =>
+            pushQuery({ limit, page: pageIndex + 1 })
+          }
+        />
+      </div>
     </DataTableRoot>
   )
 }

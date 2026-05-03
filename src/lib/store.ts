@@ -19,6 +19,7 @@ import {
   projectUpdates,
   companyProfiles,
   onboardings,
+  orgMemberships,
 } from "@/db/schema";
 import {
   eq,
@@ -32,7 +33,7 @@ import {
   isNull,
   type SQL,
 } from "drizzle-orm";
-import { getSessionUser } from "@/lib/supabase/auth-cache";
+import { getOrgContext } from "@/lib/org-context";
 import { computeTotalSqft } from "@/lib/dimensions";
 import { buildSatelliteProxyPath } from "@/lib/maps/satellite-path";
 
@@ -59,14 +60,20 @@ export type BuildingWithSqft = Building & { totalSqft: number };
 
 const NO_PROPERTY_ADDRESS_KEY = "__no_address__";
 
+/**
+ * Auth context for store queries. `id` is the session user (the actor).
+ * `ownerUserId` is the tenant scope — for solo accounts equals id; for an
+ * invited member it's the org owner's user id. Existing schema columns
+ * named `user_id` semantically hold ownerUserId.
+ */
 async function requireUser() {
-  const user = await getSessionUser();
-  if (!user) throw new Error("Not authenticated");
-  return user;
+  const ctx = await getOrgContext();
+  if (!ctx) throw new Error("Not authenticated");
+  return ctx;
 }
 
 async function requireBidOwnership(bidId: string, existingUserId?: string) {
-  const userId = existingUserId ?? (await requireUser()).id;
+  const userId = existingUserId ?? (await requireUser()).ownerUserId;
   const rows = await db
     .select({ id: bids.id })
     .from(bids)
@@ -77,7 +84,7 @@ async function requireBidOwnership(bidId: string, existingUserId?: string) {
 }
 
 async function requireBuildingOwnership(buildingId: string, existingUserId?: string) {
-  const userId = existingUserId ?? (await requireUser()).id;
+  const userId = existingUserId ?? (await requireUser()).ownerUserId;
   const rows = await db
     .select({ id: buildings.id, bidId: buildings.bidId })
     .from(buildings)
@@ -95,7 +102,7 @@ export async function getBids() {
   return db
     .select()
     .from(bids)
-    .where(eq(bids.userId, user.id))
+    .where(eq(bids.userId, user.ownerUserId))
     .orderBy(desc(bids.updatedAt));
 }
 
@@ -120,7 +127,7 @@ export async function getBidsWithSummary() {
     .from(buildings)
     .innerJoin(bids, eq(buildings.bidId, bids.id))
     .leftJoin(surfaces, eq(surfaces.buildingId, buildings.id))
-    .where(eq(bids.userId, user.id))
+    .where(eq(bids.userId, user.ownerUserId))
     .groupBy(buildings.bidId)
     .as("building_agg");
 
@@ -133,7 +140,7 @@ export async function getBidsWithSummary() {
     })
     .from(proposals)
     .innerJoin(bids, eq(proposals.bidId, bids.id))
-    .where(eq(bids.userId, user.id))
+    .where(eq(bids.userId, user.ownerUserId))
     .groupBy(proposals.bidId)
     .as("proposal_agg");
 
@@ -147,7 +154,7 @@ export async function getBidsWithSummary() {
     .from(bids)
     .leftJoin(buildingAgg, eq(buildingAgg.bidId, bids.id))
     .leftJoin(proposalAgg, eq(proposalAgg.bidId, bids.id))
-    .where(eq(bids.userId, user.id))
+    .where(eq(bids.userId, user.ownerUserId))
     .orderBy(desc(bids.updatedAt));
 
   return rows.map((r) => ({
@@ -163,7 +170,7 @@ export async function getBid(id: string) {
   const rows = await db
     .select()
     .from(bids)
-    .where(and(eq(bids.id, id), eq(bids.userId, user.id)))
+    .where(and(eq(bids.id, id), eq(bids.userId, user.ownerUserId)))
     .limit(1);
   return rows[0] ?? null;
 }
@@ -200,7 +207,7 @@ export async function createBid(
         sourceTag: leads.sourceTag,
       })
       .from(leads)
-      .where(and(eq(leads.id, leadId), eq(leads.userId, user.id)))
+      .where(and(eq(leads.id, leadId), eq(leads.userId, user.ownerUserId)))
       .limit(1);
     if (!leadRows[0]) {
       throw new Error("Lead not found");
@@ -212,11 +219,11 @@ export async function createBid(
       ? await db
           .select()
           .from(properties)
-          .where(and(eq(properties.id, data.propertyId), eq(properties.userId, user.id)))
+          .where(and(eq(properties.id, data.propertyId), eq(properties.userId, user.ownerUserId)))
           .limit(1)
           .then((rows) => rows[0] ?? null)
       : await findOrCreateProperty({
-          userId: user.id,
+          userId: user.ownerUserId,
           accountId: leadContext?.accountId ?? null,
           name: data.propertyName,
           address: data.address,
@@ -243,11 +250,11 @@ export async function createBid(
       googlePlaceId: data.googlePlaceId ?? null,
       leadId,
       satelliteImageUrl: buildSatelliteProxyPath(lat, lng),
-      userId: user.id,
+      userId: user.ownerUserId,
     })
     .returning();
   await createActivityEvent({
-    userId: user.id,
+    userId: user.ownerUserId,
     leadId,
     contactId: primaryContactId,
     propertyId,
@@ -258,7 +265,7 @@ export async function createBid(
     body: data.notes,
   });
   await writeAuditLog({
-    userId: user.id,
+    userId: user.ownerUserId,
     entityType: "bid",
     entityId: rows[0].id,
     action: "create",
@@ -295,7 +302,7 @@ export async function updateBid(
   const rows = await db
     .update(bids)
     .set(patch as typeof data & { updatedAt: Date; satelliteImageUrl?: string | null })
-    .where(and(eq(bids.id, id), eq(bids.userId, user.id)))
+    .where(and(eq(bids.id, id), eq(bids.userId, user.ownerUserId)))
     .returning();
   const bid = rows[0] ?? null;
   if (bid?.propertyId) {
@@ -310,11 +317,11 @@ export async function updateBid(
         satelliteImageUrl: bid.satelliteImageUrl,
         updatedAt: new Date(),
       })
-      .where(and(eq(properties.id, bid.propertyId), eq(properties.userId, user.id)));
+      .where(and(eq(properties.id, bid.propertyId), eq(properties.userId, user.ownerUserId)));
   }
   if (bid) {
     await writeAuditLog({
-      userId: user.id,
+      userId: user.ownerUserId,
       entityType: "bid",
       entityId: bid.id,
       action: "update",
@@ -330,7 +337,7 @@ export async function deleteBid(id: string) {
   const user = await requireUser();
   await db
     .delete(bids)
-    .where(and(eq(bids.id, id), eq(bids.userId, user.id)));
+    .where(and(eq(bids.id, id), eq(bids.userId, user.ownerUserId)));
   return true;
 }
 
@@ -364,7 +371,7 @@ export async function getBidPageData(bidId: string) {
   const bidRows = await db
     .select()
     .from(bids)
-    .where(and(eq(bids.id, bidId), eq(bids.userId, user.id)))
+    .where(and(eq(bids.id, bidId), eq(bids.userId, user.ownerUserId)))
     .limit(1);
 
   const bid = bidRows[0] ?? null;
@@ -558,7 +565,7 @@ export async function updateSurface(
     .from(surfaces)
     .innerJoin(buildings, eq(surfaces.buildingId, buildings.id))
     .innerJoin(bids, eq(buildings.bidId, bids.id))
-    .where(and(eq(surfaces.id, id), eq(bids.userId, user.id)))
+    .where(and(eq(surfaces.id, id), eq(bids.userId, user.ownerUserId)))
     .limit(1);
 
   if (!rows[0]) throw new Error("Surface not found");
@@ -591,7 +598,7 @@ export async function deleteSurface(id: string) {
     .from(surfaces)
     .innerJoin(buildings, eq(surfaces.buildingId, buildings.id))
     .innerJoin(bids, eq(buildings.bidId, bids.id))
-    .where(and(eq(surfaces.id, id), eq(bids.userId, user.id)))
+    .where(and(eq(surfaces.id, id), eq(bids.userId, user.ownerUserId)))
     .limit(1);
 
   if (!rows[0]) throw new Error("Surface not found");
@@ -624,7 +631,7 @@ export async function updateBidPricing(
   const rows = await db
     .update(bids)
     .set({ ...data, updatedAt: new Date() })
-    .where(and(eq(bids.id, id), eq(bids.userId, user.id)))
+    .where(and(eq(bids.id, id), eq(bids.userId, user.ownerUserId)))
     .returning();
   return rows[0] ?? null;
 }
@@ -678,7 +685,7 @@ export async function updateLineItem(
     .select({ bidId: lineItems.bidId })
     .from(lineItems)
     .innerJoin(bids, eq(lineItems.bidId, bids.id))
-    .where(and(eq(lineItems.id, id), eq(bids.userId, user.id)))
+    .where(and(eq(lineItems.id, id), eq(bids.userId, user.ownerUserId)))
     .limit(1);
 
   if (!existing[0]) throw new Error("Line item not found");
@@ -703,7 +710,7 @@ export async function deleteLineItem(id: string) {
     .select({ bidId: lineItems.bidId })
     .from(lineItems)
     .innerJoin(bids, eq(lineItems.bidId, bids.id))
-    .where(and(eq(lineItems.id, id), eq(bids.userId, user.id)))
+    .where(and(eq(lineItems.id, id), eq(bids.userId, user.ownerUserId)))
     .limit(1);
 
   if (!existing[0]) throw new Error("Line item not found");
@@ -725,7 +732,7 @@ export async function getUserDefaults() {
   const rows = await db
     .select()
     .from(userDefaults)
-    .where(eq(userDefaults.userId, user.id))
+    .where(eq(userDefaults.userId, user.ownerUserId))
     .limit(1);
   return rows[0] ?? null;
 }
@@ -745,7 +752,7 @@ export async function upsertUserDefaults(
 
   const rows = await db
     .insert(userDefaults)
-    .values({ userId: user.id, ...data, updatedAt: new Date() })
+    .values({ userId: user.ownerUserId, ...data, updatedAt: new Date() })
     .onConflictDoUpdate({
       target: userDefaults.userId,
       set: { ...data, updatedAt: new Date() },
@@ -785,7 +792,7 @@ export async function createProposalShare(proposalId: string) {
     .select({ id: proposals.id, bidId: proposals.bidId })
     .from(proposals)
     .innerJoin(bids, eq(proposals.bidId, bids.id))
-    .where(and(eq(proposals.id, proposalId), eq(bids.userId, user.id)))
+    .where(and(eq(proposals.id, proposalId), eq(bids.userId, user.ownerUserId)))
     .limit(1);
   const proposalRow = proposalRows[0];
   if (!proposalRow) throw new Error("Proposal not found");
@@ -966,7 +973,7 @@ export async function getProjectByBidId(
   const rows = await db
     .select()
     .from(projects)
-    .where(and(eq(projects.bidId, bidId), eq(projects.userId, user.id)))
+    .where(and(eq(projects.bidId, bidId), eq(projects.userId, user.ownerUserId)))
     .limit(1);
   return rows[0] ?? null;
 }
@@ -994,7 +1001,7 @@ export async function getProjects(
   options: GetProjectsOptions = {},
 ): Promise<ProjectWithBid[]> {
   const user = await requireUser();
-  const conditions: SQL[] = [eq(projects.userId, user.id)];
+  const conditions: SQL[] = [eq(projects.userId, user.ownerUserId)];
   if (options.status) conditions.push(eq(projects.status, options.status));
 
   const query = db
@@ -1049,7 +1056,7 @@ export async function getProject(id: string): Promise<ProjectWithBid | null> {
     })
     .from(projects)
     .innerJoin(bids, eq(bids.id, projects.bidId))
-    .where(and(eq(projects.id, id), eq(projects.userId, user.id)))
+    .where(and(eq(projects.id, id), eq(projects.userId, user.ownerUserId)))
     .limit(1);
   return rows[0] ?? null;
 }
@@ -1091,7 +1098,7 @@ export async function updateProjectStatus(
   const existing = await db
     .select()
     .from(projects)
-    .where(and(eq(projects.id, id), eq(projects.userId, user.id)))
+    .where(and(eq(projects.id, id), eq(projects.userId, user.ownerUserId)))
     .limit(1);
   const current = existing[0];
   if (!current) return null;
@@ -1126,7 +1133,7 @@ export async function updateProjectStatus(
   const rows = await db
     .update(projects)
     .set(patch)
-    .where(and(eq(projects.id, id), eq(projects.userId, user.id)))
+    .where(and(eq(projects.id, id), eq(projects.userId, user.ownerUserId)))
     .returning();
   return rows[0] ?? null;
 }
@@ -1152,7 +1159,7 @@ export async function updateProjectDetails(
       notes: data.notes,
       updatedAt: new Date(),
     })
-    .where(and(eq(projects.id, id), eq(projects.userId, user.id)))
+    .where(and(eq(projects.id, id), eq(projects.userId, user.ownerUserId)))
     .returning();
   return rows[0] ?? null;
 }
@@ -1181,7 +1188,7 @@ export async function createProjectUpdate(
   const owned = await db
     .select({ id: projects.id })
     .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.userId, user.id)))
+    .where(and(eq(projects.id, projectId), eq(projects.userId, user.ownerUserId)))
     .limit(1);
   if (!owned[0]) throw new Error("Project not found");
 
@@ -1336,7 +1343,7 @@ export async function getBidStatusCounts(): Promise<BidStatusCounts> {
       count: sql<number>`count(*)::int`,
     })
     .from(bids)
-    .where(eq(bids.userId, user.id))
+    .where(eq(bids.userId, user.ownerUserId))
     .groupBy(bids.status);
 
   const counts: BidStatusCounts = { total: 0, draft: 0, sent: 0, won: 0, lost: 0 };
@@ -1359,7 +1366,7 @@ export async function getProjectStatusCounts(): Promise<ProjectStatusCounts> {
       overdue: sql<number>`count(*) filter (where ${projects.targetEndDate} is not null and ${projects.targetEndDate} < current_date and ${projects.status} <> 'complete')::int`,
     })
     .from(projects)
-    .where(eq(projects.userId, user.id))
+    .where(eq(projects.userId, user.ownerUserId))
     .groupBy(projects.status);
 
   const counts: ProjectStatusCounts = {
@@ -1397,8 +1404,8 @@ export async function getLeadStatusCounts(options?: {
     .from(leads)
     .where(
       tag
-        ? and(eq(leads.userId, user.id), eq(leads.sourceTag, tag))
-        : eq(leads.userId, user.id)
+        ? and(eq(leads.userId, user.ownerUserId), eq(leads.sourceTag, tag))
+        : eq(leads.userId, user.ownerUserId)
     )
     .groupBy(leads.status);
 
@@ -1559,7 +1566,7 @@ export async function getLeads(
   const user = await requireUser();
   const limit = clampLeadLimit(options.limit);
   const offset = clampOffset(options.offset);
-  const conditions = leadListConditions(user.id, options);
+  const conditions = leadListConditions(user.ownerUserId, options);
 
   const where = and(...conditions)!;
 
@@ -1596,7 +1603,7 @@ export async function getLeadSourceOptions(): Promise<LeadSourceOption[]> {
     .from(leads)
     .where(
       and(
-        eq(leads.userId, user.id),
+        eq(leads.userId, user.ownerUserId),
         sql`${leads.sourceTag} is not null`,
         sql`btrim(${leads.sourceTag}) <> ''`,
       ),
@@ -1639,7 +1646,7 @@ export async function getLeadPropertyGroups(
   const user = await requireUser();
   const limit = clampLeadLimit(options.limit);
   const offset = clampOffset(options.offset);
-  const conditions = leadListConditions(user.id, options);
+  const conditions = leadListConditions(user.ownerUserId, options);
   const where = and(...conditions)!;
 
   const grouped = db
@@ -1729,7 +1736,7 @@ export async function getLeadPropertyGroups(
           .from(properties)
           .where(
             and(
-              eq(properties.userId, user.id),
+              eq(properties.userId, user.ownerUserId),
               inArray(properties.accountId, accountIds),
             ),
           )
@@ -1796,19 +1803,19 @@ export async function createLead(
 ) {
   const user = await requireUser();
   const account = await findOrCreateAccount({
-    userId: user.id,
+    userId: user.ownerUserId,
     name: data.company,
     sourceTag: data.sourceTag ?? null,
   });
   const property = await findOrCreateProperty({
-    userId: user.id,
+    userId: user.ownerUserId,
     accountId: account?.id ?? null,
     name: data.propertyName,
     address: data.resolvedAddress,
     sourceTag: data.sourceTag ?? null,
   });
   const contact = await findOrCreateContact({
-    userId: user.id,
+    userId: user.ownerUserId,
     accountId: account?.id ?? null,
     name: data.name,
     email: data.email ?? null,
@@ -1816,7 +1823,7 @@ export async function createLead(
     sourceTag: data.sourceTag ?? null,
   });
   const propertyContact = await upsertPropertyContact({
-    userId: user.id,
+    userId: user.ownerUserId,
     propertyId: property?.id ?? null,
     contactId: contact.id,
     sourceTag: data.sourceTag ?? null,
@@ -1824,7 +1831,7 @@ export async function createLead(
   const rows = await db
     .insert(leads)
     .values({
-      userId: user.id,
+      userId: user.ownerUserId,
       accountId: account?.id ?? null,
       propertyId: property?.id ?? null,
       primaryContactId: contact.id,
@@ -1839,7 +1846,7 @@ export async function createLead(
     })
     .returning();
   await createLeadContactLink({
-    userId: user.id,
+    userId: user.ownerUserId,
     leadId: rows[0].id,
     contactId: contact.id,
     propertyContactId: propertyContact?.id ?? null,
@@ -1847,7 +1854,7 @@ export async function createLead(
     isPrimary: true,
   });
   await createActivityEvent({
-    userId: user.id,
+    userId: user.ownerUserId,
     leadId: rows[0].id,
     contactId: contact.id,
     propertyId: property?.id ?? null,
@@ -1857,7 +1864,7 @@ export async function createLead(
     body: data.notes ?? "",
   });
   await writeAuditLog({
-    userId: user.id,
+    userId: user.ownerUserId,
     entityType: "lead",
     entityId: rows[0].id,
     action: "create",
@@ -1871,7 +1878,7 @@ export async function getLead(id: string) {
   const rows = await db
     .select()
     .from(leads)
-    .where(and(eq(leads.id, id), eq(leads.userId, user.id)))
+    .where(and(eq(leads.id, id), eq(leads.userId, user.ownerUserId)))
     .limit(1);
   return rows[0] ?? null;
 }
@@ -1881,7 +1888,7 @@ export async function getLatestBidForLead(leadId: string) {
   const rows = await db
     .select({ id: bids.id, status: bids.status, updatedAt: bids.updatedAt })
     .from(bids)
-    .where(and(eq(bids.userId, user.id), eq(bids.leadId, leadId)))
+    .where(and(eq(bids.userId, user.ownerUserId), eq(bids.leadId, leadId)))
     .orderBy(desc(bids.updatedAt))
     .limit(1);
   return rows[0] ?? null;
@@ -2271,12 +2278,12 @@ export async function createLeadsBatch(
 
   for (const r of rows) {
     const account = await findOrCreateAccount({
-      userId: user.id,
+      userId: user.ownerUserId,
       name: r.company,
       sourceTag,
     });
     const property = await findOrCreateProperty({
-      userId: user.id,
+      userId: user.ownerUserId,
       accountId: account?.id ?? null,
       name: r.propertyName,
       address: r.csvAddress,
@@ -2285,7 +2292,7 @@ export async function createLeadsBatch(
       enrichmentStatus: "pending",
     });
     const contact = await findOrCreateContact({
-      userId: user.id,
+      userId: user.ownerUserId,
       accountId: account?.id ?? null,
       name: r.name,
       email: r.email,
@@ -2294,7 +2301,7 @@ export async function createLeadsBatch(
       sourceTag,
     });
     const propertyContact = await upsertPropertyContact({
-      userId: user.id,
+      userId: user.ownerUserId,
       propertyId: property?.id ?? null,
       contactId: contact.id,
       role: rawRole(r.rawRow),
@@ -2304,7 +2311,7 @@ export async function createLeadsBatch(
     const leadRows = await db
       .insert(leads)
       .values({
-        userId: user.id,
+        userId: user.ownerUserId,
         accountId: account?.id ?? null,
         propertyId: property?.id ?? null,
         primaryContactId: contact.id,
@@ -2321,7 +2328,7 @@ export async function createLeadsBatch(
       .returning();
     const lead = leadRows[0];
     await createLeadContactLink({
-      userId: user.id,
+      userId: user.ownerUserId,
       leadId: lead.id,
       contactId: contact.id,
       propertyContactId: propertyContact?.id ?? null,
@@ -2329,7 +2336,7 @@ export async function createLeadsBatch(
       isPrimary: true,
     });
     await createActivityEvent({
-      userId: user.id,
+      userId: user.ownerUserId,
       leadId: lead.id,
       contactId: contact.id,
       propertyId: property?.id ?? null,
@@ -2341,7 +2348,7 @@ export async function createLeadsBatch(
       occurredAt: lead.createdAt,
     });
     await writeAuditLog({
-      userId: user.id,
+      userId: user.ownerUserId,
       entityType: "lead",
       entityId: lead.id,
       action: "create",
@@ -2374,7 +2381,7 @@ export async function updateLeadEnrichment(
   const rows = await db
     .update(leads)
     .set({ ...patch, updatedAt: new Date() })
-    .where(and(eq(leads.id, id), eq(leads.userId, user.id)))
+    .where(and(eq(leads.id, id), eq(leads.userId, user.ownerUserId)))
     .returning();
   const lead = rows[0] ?? null;
   if (lead?.propertyId) {
@@ -2390,11 +2397,11 @@ export async function updateLeadEnrichment(
         enrichmentError: patch.enrichmentError ?? lead.enrichmentError,
         updatedAt: new Date(),
       })
-      .where(and(eq(properties.id, lead.propertyId), eq(properties.userId, user.id)));
+      .where(and(eq(properties.id, lead.propertyId), eq(properties.userId, user.ownerUserId)));
   }
   if (lead) {
     await writeAuditLog({
-      userId: user.id,
+      userId: user.ownerUserId,
       entityType: "lead",
       entityId: lead.id,
       action: "update",
@@ -2426,12 +2433,12 @@ export async function updateLead(
   const previous = await getLead(id);
   if (!previous) return null;
   const account = await findOrCreateAccount({
-    userId: user.id,
+    userId: user.ownerUserId,
     name: patch.company ?? previous.company,
     sourceTag: previous.sourceTag,
   });
   const property = await findOrCreateProperty({
-    userId: user.id,
+    userId: user.ownerUserId,
     accountId: account?.id ?? previous.accountId ?? null,
     name: patch.propertyName ?? previous.propertyName,
     address: patch.resolvedAddress ?? previous.resolvedAddress,
@@ -2445,7 +2452,7 @@ export async function updateLead(
     rawSource: previous.rawRow,
   });
   const contact = await findOrCreateContact({
-    userId: user.id,
+    userId: user.ownerUserId,
     accountId: account?.id ?? previous.accountId ?? null,
     name: patch.name ?? previous.name,
     email: patch.email ?? previous.email,
@@ -2454,7 +2461,7 @@ export async function updateLead(
     sourceTag: previous.sourceTag,
   });
   const propertyContact = await upsertPropertyContact({
-    userId: user.id,
+    userId: user.ownerUserId,
     propertyId: property?.id ?? previous.propertyId,
     contactId: contact.id,
     role: rawRole(previous.rawRow),
@@ -2470,12 +2477,12 @@ export async function updateLead(
       primaryContactId: contact.id,
       updatedAt: new Date(),
     })
-    .where(and(eq(leads.id, id), eq(leads.userId, user.id)))
+    .where(and(eq(leads.id, id), eq(leads.userId, user.ownerUserId)))
     .returning();
   const lead = rows[0] ?? null;
   if (lead) {
     await createLeadContactLink({
-      userId: user.id,
+      userId: user.ownerUserId,
       leadId: lead.id,
       contactId: contact.id,
       propertyContactId: propertyContact?.id ?? null,
@@ -2483,7 +2490,7 @@ export async function updateLead(
       isPrimary: true,
     });
     await writeAuditLog({
-      userId: user.id,
+      userId: user.ownerUserId,
       entityType: "lead",
       entityId: lead.id,
       action: "update",
@@ -2504,12 +2511,12 @@ export async function logLeadContact(id: string) {
       contactAttempts: sql`${leads.contactAttempts} + 1`,
       updatedAt: new Date(),
     })
-    .where(and(eq(leads.id, id), eq(leads.userId, user.id)))
+    .where(and(eq(leads.id, id), eq(leads.userId, user.ownerUserId)))
     .returning();
   const lead = rows[0] ?? null;
   if (lead) {
     await createActivityEvent({
-      userId: user.id,
+      userId: user.ownerUserId,
       leadId: lead.id,
       contactId: lead.primaryContactId,
       propertyId: lead.propertyId,
@@ -2518,7 +2525,7 @@ export async function logLeadContact(id: string) {
       title: "Contact attempt logged",
     });
     await writeAuditLog({
-      userId: user.id,
+      userId: user.ownerUserId,
       entityType: "lead",
       entityId: lead.id,
       action: "update",
@@ -2538,12 +2545,12 @@ export async function setLeadFollowUp(id: string, followUpAt: string | null) {
   const rows = await db
     .update(leads)
     .set({ followUpAt, updatedAt: new Date() })
-    .where(and(eq(leads.id, id), eq(leads.userId, user.id)))
+    .where(and(eq(leads.id, id), eq(leads.userId, user.ownerUserId)))
     .returning();
   const lead = rows[0] ?? null;
   if (lead) {
     await createActivityEvent({
-      userId: user.id,
+      userId: user.ownerUserId,
       leadId: lead.id,
       contactId: lead.primaryContactId,
       propertyId: lead.propertyId,
@@ -2553,7 +2560,7 @@ export async function setLeadFollowUp(id: string, followUpAt: string | null) {
       metadata: { followUpAt },
     });
     await writeAuditLog({
-      userId: user.id,
+      userId: user.ownerUserId,
       entityType: "lead",
       entityId: lead.id,
       action: "update",
@@ -2575,12 +2582,12 @@ export async function updateLeadStatus(id: string, status: Lead["status"]) {
       closedAt: status === "won" || status === "lost" ? new Date() : null,
       updatedAt: new Date(),
     })
-    .where(and(eq(leads.id, id), eq(leads.userId, user.id)))
+    .where(and(eq(leads.id, id), eq(leads.userId, user.ownerUserId)))
     .returning();
   const lead = rows[0] ?? null;
   if (lead) {
     await createActivityEvent({
-      userId: user.id,
+      userId: user.ownerUserId,
       leadId: lead.id,
       contactId: lead.primaryContactId,
       propertyId: lead.propertyId,
@@ -2590,7 +2597,7 @@ export async function updateLeadStatus(id: string, status: Lead["status"]) {
       metadata: { from: previous?.status ?? null, to: status },
     });
     await writeAuditLog({
-      userId: user.id,
+      userId: user.ownerUserId,
       entityType: "lead",
       entityId: lead.id,
       action: "update",
@@ -2608,7 +2615,7 @@ export async function getLeadSourceTags(): Promise<string[]> {
   const rows = await db
     .selectDistinct({ sourceTag: leads.sourceTag })
     .from(leads)
-    .where(eq(leads.userId, user.id));
+    .where(eq(leads.userId, user.ownerUserId));
   return rows
     .map((r) => r.sourceTag)
     .filter((t): t is string => !!t)
@@ -2645,7 +2652,7 @@ export async function getDashboardPipelineFinances(options?: {
         FROM proposals p
         INNER JOIN bids b ON b.id = p.bid_id
         LEFT JOIN leads l ON l.id = b.lead_id
-        WHERE b.user_id = ${user.id}
+        WHERE b.user_id = ${user.ownerUserId}
           AND b.status IN ('draft', 'sent')
           ${sourceFilter}
         ORDER BY p.bid_id, p.created_at DESC
@@ -2659,7 +2666,7 @@ export async function getDashboardPipelineFinances(options?: {
         FROM proposals p
         INNER JOIN bids b ON b.id = p.bid_id
         LEFT JOIN leads l ON l.id = b.lead_id
-        WHERE b.user_id = ${user.id}
+        WHERE b.user_id = ${user.ownerUserId}
           AND b.status = 'won'
           ${sourceFilter}
         ORDER BY p.bid_id, p.created_at DESC
@@ -2677,7 +2684,7 @@ export async function getDashboardPipelineFinances(options?: {
 // ── Onboarding ──
 
 export async function getOnboardingState(userId?: string) {
-  const id = userId ?? (await requireUser()).id;
+  const id = userId ?? (await requireUser()).ownerUserId;
   const rows = await db
     .select()
     .from(onboardings)
@@ -2698,7 +2705,7 @@ export async function markOnboardingWebsiteSubmitted(websiteUrl: string) {
   await db.transaction(async (tx) => {
     await tx
       .insert(onboardings)
-      .values({ userId: user.id, websiteSubmittedAt: now })
+      .values({ userId: user.ownerUserId, websiteSubmittedAt: now })
       .onConflictDoUpdate({
         target: onboardings.userId,
         set: { websiteSubmittedAt: now },
@@ -2707,7 +2714,7 @@ export async function markOnboardingWebsiteSubmitted(websiteUrl: string) {
     await tx
       .insert(companyProfiles)
       .values({
-        userId: user.id,
+        userId: user.ownerUserId,
         websiteUrl,
         enrichmentStatus: "pending",
         updatedAt: now,
@@ -2729,7 +2736,7 @@ export async function markOnboardingProfileConfirmed() {
   const now = new Date();
   await db
     .insert(onboardings)
-    .values({ userId: user.id, profileConfirmedAt: now })
+    .values({ userId: user.ownerUserId, profileConfirmedAt: now })
     .onConflictDoUpdate({
       target: onboardings.userId,
       set: { profileConfirmedAt: now },
@@ -2742,7 +2749,7 @@ export async function markOnboardingComplete() {
   await db
     .insert(onboardings)
     .values({
-      userId: user.id,
+      userId: user.ownerUserId,
       themeConfirmedAt: now,
       completedAt: now,
     })
@@ -2757,7 +2764,7 @@ export async function skipOnboarding() {
   const now = new Date();
   await db
     .insert(onboardings)
-    .values({ userId: user.id, skipped: true, completedAt: now })
+    .values({ userId: user.ownerUserId, skipped: true, completedAt: now })
     .onConflictDoUpdate({
       target: onboardings.userId,
       set: { skipped: true, completedAt: now },
@@ -2767,7 +2774,7 @@ export async function skipOnboarding() {
 // ── Company Profile ──
 
 export async function getCompanyProfile(userId?: string) {
-  const id = userId ?? (await requireUser()).id;
+  const id = userId ?? (await requireUser()).ownerUserId;
   const rows = await db
     .select()
     .from(companyProfiles)
@@ -2851,11 +2858,64 @@ export async function upsertCompanyProfile(
   const now = new Date();
   const rows = await db
     .insert(companyProfiles)
-    .values({ userId: user.id, ...data, updatedAt: now })
+    .values({ userId: user.ownerUserId, ...data, updatedAt: now })
     .onConflictDoUpdate({
       target: companyProfiles.userId,
       set: { ...data, updatedAt: now },
     })
     .returning();
   return rows[0];
+}
+
+// ── Org members ──
+
+export type OrgMember = typeof orgMemberships.$inferSelect;
+
+export async function listOrgMembers() {
+  const user = await requireUser();
+  return db
+    .select()
+    .from(orgMemberships)
+    .where(eq(orgMemberships.ownerUserId, user.ownerUserId))
+    .orderBy(asc(orgMemberships.createdAt));
+}
+
+export async function inviteOrgMember(input: { email: string; role: "admin" | "member" }) {
+  const user = await requireUser();
+  if (user.role !== "owner" && user.role !== "admin") {
+    throw new Error("Only owners and admins can invite members");
+  }
+  const email = input.email.trim();
+  if (!email) throw new Error("Email is required");
+  const now = new Date();
+
+  const inserted = await db
+    .insert(orgMemberships)
+    .values({
+      ownerUserId: user.ownerUserId,
+      email,
+      role: input.role,
+      status: "invited",
+      invitedAt: now,
+      invitedByUserId: user.userId,
+      updatedAt: now,
+    })
+    .onConflictDoNothing()
+    .returning();
+  return inserted[0] ?? null;
+}
+
+export async function removeOrgMember(membershipId: string) {
+  const user = await requireUser();
+  if (user.role !== "owner" && user.role !== "admin") {
+    throw new Error("Only owners and admins can remove members");
+  }
+  await db
+    .delete(orgMemberships)
+    .where(
+      and(
+        eq(orgMemberships.id, membershipId),
+        eq(orgMemberships.ownerUserId, user.ownerUserId),
+      ),
+    );
 }

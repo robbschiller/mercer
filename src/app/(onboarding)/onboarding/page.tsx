@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/submit-button";
 import { Button } from "@/components/ui/button";
-import { getSessionUser } from "@/lib/supabase/auth-cache";
+import { getOrgContext } from "@/lib/org-context";
 import {
   getOnboardingState,
   getCompanyProfile,
@@ -35,15 +35,18 @@ export default async function OnboardingPage({
 }: {
   searchParams: Promise<{ step?: string; error?: string }>;
 }) {
-  const user = await getSessionUser();
-  if (!user) redirect("/login");
+  const ctx = await getOrgContext();
+  if (!ctx) redirect("/login");
 
-  const state = await getOnboardingState(user.id);
+  // Invited members shouldn't redo onboarding — their org's owner already did it.
+  if (ctx.role !== "owner") redirect("/bids");
+
+  const state = await getOnboardingState(ctx.ownerUserId);
   if (isOnboardingComplete(state)) redirect("/bids");
 
   const { step: rawStep, error } = await searchParams;
   const step = parseStep(rawStep);
-  const profile = await getCompanyProfile(user.id);
+  const profile = await getCompanyProfile(ctx.ownerUserId);
 
   return (
     <Card className="w-full border-[var(--color-parchment-border)] bg-[var(--color-parchment-soft)]/85 shadow-xl backdrop-blur-md dark:border-white/10 dark:bg-white/5 dark:text-white">

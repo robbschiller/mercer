@@ -363,3 +363,34 @@ export const confirmCompanyProfileSchema = z.object({
 export const confirmThemeSchema = z.object({
   primaryColor: optionalHexColor,
 });
+
+export const updateCompanyProfileSchema = z.object({
+  websiteUrl: z
+    .union([z.string(), z.undefined(), z.null()])
+    .transform((v) => {
+      if (v == null) return null;
+      const trimmed = v.trim();
+      return trimmed === "" ? null : trimmed;
+    }),
+  companyName: z.string().trim().min(1, "Company name is required"),
+  tagline: optionalText,
+  street: optionalText,
+  city: optionalText,
+  state: optionalText,
+  zip: optionalText,
+  phone: optionalText,
+  email: optionalText,
+  logoUrl: optionalText,
+  primaryColor: optionalHexColor,
+  accentColor: optionalHexColor,
+  bodyFont: optionalText,
+});
+
+export const inviteOrgMemberSchema = z.object({
+  email: z.string().trim().email("Enter a valid email address"),
+  role: z.enum(["admin", "member"]).default("member"),
+});
+
+export const removeOrgMemberSchema = z.object({
+  membershipId: z.string().uuid("Invalid membership ID"),
+});

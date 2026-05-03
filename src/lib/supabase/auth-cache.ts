@@ -3,10 +3,15 @@ import { headers } from "next/headers";
 import {
   AUTH_HEADER_USER_EMAIL,
   AUTH_HEADER_USER_ID,
+  AUTH_HEADER_USER_NAME,
 } from "./middleware";
 import { createClient } from "./server";
 
-export type SessionUser = { id: string; email: string | null } | null;
+export type SessionUser = {
+  id: string;
+  email: string | null;
+  name: string | null;
+} | null;
 
 /**
  * Per-request cached session user for Server Components.
@@ -47,6 +52,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser> => {
     return {
       id: headerId,
       email: h.get(AUTH_HEADER_USER_EMAIL) || null,
+      name: h.get(AUTH_HEADER_USER_NAME) || null,
     };
   }
 
@@ -55,5 +61,12 @@ export const getSessionUser = cache(async (): Promise<SessionUser> => {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return null;
-  return { id: user.id, email: user.email ?? null };
+  const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
+  const name =
+    typeof meta.full_name === "string" && meta.full_name.trim()
+      ? meta.full_name.trim()
+      : typeof meta.name === "string" && meta.name.trim()
+        ? meta.name.trim()
+        : null;
+  return { id: user.id, email: user.email ?? null, name };
 });

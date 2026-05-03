@@ -413,6 +413,34 @@ export const companyProfiles = pgTable("company_profiles", {
 });
 
 /**
+ * Org membership: links additional users to an "org" identified by the
+ * original signup user (`ownerUserId`). The owner has no row of their own
+ * unless explicitly inserted; tenant queries scope by ownerUserId, which
+ * for solo accounts is the user's own id. Pending invites have userId=null
+ * and status='invited'; when the invitee signs in with the matching email
+ * we backfill userId and flip status to 'active'.
+ */
+export const orgMemberships = pgTable("org_memberships", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ownerUserId: uuid("owner_user_id").notNull(),
+  userId: uuid("user_id"),
+  email: text("email").notNull(),
+  role: text("role").notNull().default("member"),
+  status: text("status").notNull().default("invited"),
+  invitedAt: timestamp("invited_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  invitedByUserId: uuid("invited_by_user_id"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
  * Onboarding state: per-step timestamps for the post-signup wizard.
  * Existence of a row with completedAt or skipped=true releases the
  * (app)/layout gate. See docs/plan.md → Phase G.
