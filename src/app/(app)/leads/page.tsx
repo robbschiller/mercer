@@ -16,7 +16,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { LeadsToolbar } from "@/components/leads-toolbar";
 import { LeadDetailBody } from "@/components/lead-detail-body";
 import { LeadDetailAside } from "@/components/lead-detail-aside";
-import { LeadsByProperty } from "@/components/leads-by-property";
+import { PropertyDetailPanel } from "@/components/property-detail-panel";
+import { PropertyLeadsTable } from "@/components/property-leads-table";
 import { LeadsTable } from "@/components/leads-table";
 import { LEAD_STATUSES, type LeadStatus } from "@/lib/status-meta";
 
@@ -83,7 +84,10 @@ function parsePage(raw: string | undefined): number {
 
 function buildQueryString(
   query: LeadsQuery,
-  overrides: Partial<LeadsQuery> & { lead?: string | null } = {},
+  overrides: Partial<LeadsQuery> & {
+    lead?: string | null;
+    property?: string | null;
+  } = {},
 ): string {
   const sp = new URLSearchParams();
   const q = overrides.q ?? query.q;
@@ -104,11 +108,17 @@ function buildQueryString(
   if (page > 1) sp.set("page", String(page));
   if (view === "contact") sp.set("view", "contact");
   if (overrides.lead) sp.set("lead", overrides.lead);
+  if (overrides.property) sp.set("property", overrides.property);
   return sp.toString();
 }
 
 function buildLeadHref(id: string, query: LeadsQuery): string {
   const qs = buildQueryString(query, { lead: id });
+  return qs ? `/leads?${qs}` : "/leads";
+}
+
+function buildPropertyHref(key: string, query: LeadsQuery): string {
+  const qs = buildQueryString(query, { property: key });
   return qs ? `/leads?${qs}` : "/leads";
 }
 
@@ -130,6 +140,7 @@ export default async function LeadsPage({
     limit?: string;
     page?: string;
     lead?: string;
+    property?: string;
     view?: string;
     error?: string;
   }>;
@@ -146,6 +157,7 @@ export default async function LeadsPage({
     view: parseView(params.view),
   };
   const leadId = params.lead;
+  const propertyKey = params.property;
 
   const listOptions = {
     q: query.q || null,
@@ -169,6 +181,9 @@ export default async function LeadsPage({
   const propertyGroups =
     "groups" in listResult ? listResult.groups : null;
   const rows = "rows" in listResult ? listResult.rows : [];
+  const activeProperty = propertyGroups?.find(
+    (group) => group.key === propertyKey,
+  );
   const visible = propertyGroups ? propertyGroups.length : rows.length;
   const { total } = listResult;
   const hasFilters = Boolean(
@@ -177,12 +192,9 @@ export default async function LeadsPage({
   const closeHref = buildCloseHref(query);
 
   return (
-    <div className="flex min-h-full">
-      <div className="min-w-0 flex-1 px-4 py-8">
-        <LeadsToolbar
-          view={query.view}
-          query={query.view === "property" ? query.q : undefined}
-        />
+    <div className="flex min-h-full w-full overflow-hidden">
+      <div className="min-w-0 flex-1 overflow-hidden px-3 py-6 lg:px-4 lg:py-8">
+        <LeadsToolbar />
 
         {params.imported && (
           <div className="mb-4 rounded-md border border-emerald-600/30 bg-emerald-600/5 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-400">
@@ -195,10 +207,21 @@ export default async function LeadsPage({
         ) : (
           <>
             {propertyGroups ? (
-              <LeadsByProperty
-                groups={propertyGroups}
-                buildLeadHref={(id) => buildLeadHref(id, query)}
-                activeLeadId={leadId}
+              <PropertyLeadsTable
+                groups={propertyGroups.map((group) => ({
+                  ...group,
+                  href: buildPropertyHref(group.key, query),
+                  status: group.contacts[0]?.status ?? null,
+                  sourceTag: group.contacts[0]?.sourceTag ?? null,
+                  followUpAt: group.earliestFollowUp,
+                  lastContactedAt: group.mostRecentContact,
+                  createdAt: group.contacts[0]?.createdAt ?? null,
+                }))}
+                query={query}
+                activePropertyKey={propertyKey}
+                total={total}
+                page={query.page}
+                sourceOptions={sourceOptions}
               />
             ) : (
               <LeadsTable
@@ -217,7 +240,17 @@ export default async function LeadsPage({
         )}
       </div>
 
-      {activeLead && (
+      {activeProperty && (
+        <LeadDetailAside>
+          <PropertyDetailPanel
+            group={activeProperty}
+            closeHref={closeHref}
+            buildLeadHref={(id) => buildLeadHref(id, query)}
+          />
+        </LeadDetailAside>
+      )}
+
+      {!activeProperty && activeLead && (
         <LeadDetailAside>
           <LeadDetailBody
             lead={activeLead}
