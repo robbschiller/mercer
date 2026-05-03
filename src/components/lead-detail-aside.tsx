@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const STORAGE_KEY = "leads:detail-width";
 const MIN_WIDTH = 320;
-const MAX_WIDTH = 720;
-const DEFAULT_WIDTH = 384;
+const MAX_WIDTH = 600;
+const DEFAULT_WIDTH = 360;
 
 export function LeadDetailAside({ children }: { children: React.ReactNode }) {
   const [width, setWidth] = useState<number>(DEFAULT_WIDTH);
@@ -76,7 +76,7 @@ export function LeadDetailAside({ children }: { children: React.ReactNode }) {
       >
         <span className="h-full w-px bg-transparent transition-colors group-hover:bg-border" />
       </div>
-      <div className="p-6">{children}</div>
+      <div className="p-4 lg:p-5">{children}</div>
     </aside>
   );
 }

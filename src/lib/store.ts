@@ -7,7 +7,14 @@ import {
   userDefaults,
   proposals,
   proposalShares,
+  accounts,
+  properties,
+  contacts,
+  propertyContacts,
   leads,
+  leadContacts,
+  activityEvents,
+  auditLog,
   projects,
   projectUpdates,
   companyProfiles,
@@ -36,7 +43,14 @@ export type LineItem = typeof lineItems.$inferSelect;
 export type UserDefault = typeof userDefaults.$inferSelect;
 export type Proposal = typeof proposals.$inferSelect;
 export type ProposalShare = typeof proposalShares.$inferSelect;
+export type Account = typeof accounts.$inferSelect;
+export type Property = typeof properties.$inferSelect;
+export type Contact = typeof contacts.$inferSelect;
+export type PropertyContact = typeof propertyContacts.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
+export type LeadContact = typeof leadContacts.$inferSelect;
+export type ActivityEvent = typeof activityEvents.$inferSelect;
+export type AuditLog = typeof auditLog.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type ProjectUpdate = typeof projectUpdates.$inferSelect;
 export type CompanyProfile = typeof companyProfiles.$inferSelect;
@@ -156,25 +170,70 @@ export async function getBid(id: string) {
 
 export async function createBid(
   data: Pick<Bid, "propertyName" | "address" | "clientName" | "notes"> &
-    Partial<Pick<Bid, "latitude" | "longitude" | "googlePlaceId" | "leadId">>
+    Partial<
+      Pick<
+        Bid,
+        | "latitude"
+        | "longitude"
+        | "googlePlaceId"
+        | "leadId"
+        | "propertyId"
+        | "primaryContactId"
+      >
+    >
 ) {
   const user = await requireUser();
   const lat = data.latitude ?? null;
   const lng = data.longitude ?? null;
   const leadId: string | null = data.leadId ?? null;
+  let leadContext: Pick<
+    Lead,
+    "id" | "accountId" | "propertyId" | "primaryContactId" | "sourceTag"
+  > | null = null;
   if (leadId) {
     const leadRows = await db
-      .select({ id: leads.id })
+      .select({
+        id: leads.id,
+        accountId: leads.accountId,
+        propertyId: leads.propertyId,
+        primaryContactId: leads.primaryContactId,
+        sourceTag: leads.sourceTag,
+      })
       .from(leads)
       .where(and(eq(leads.id, leadId), eq(leads.userId, user.id)))
       .limit(1);
     if (!leadRows[0]) {
       throw new Error("Lead not found");
     }
+    leadContext = leadRows[0];
   }
+  const property =
+    data.propertyId
+      ? await db
+          .select()
+          .from(properties)
+          .where(and(eq(properties.id, data.propertyId), eq(properties.userId, user.id)))
+          .limit(1)
+          .then((rows) => rows[0] ?? null)
+      : await findOrCreateProperty({
+          userId: user.id,
+          accountId: leadContext?.accountId ?? null,
+          name: data.propertyName,
+          address: data.address,
+          latitude: lat,
+          longitude: lng,
+          googlePlaceId: data.googlePlaceId ?? null,
+          satelliteImageUrl: buildSatelliteProxyPath(lat, lng),
+          sourceTag: leadContext?.sourceTag ?? null,
+        });
+  const propertyId = data.propertyId ?? leadContext?.propertyId ?? property?.id ?? null;
+  const primaryContactId =
+    data.primaryContactId ?? leadContext?.primaryContactId ?? null;
   const rows = await db
     .insert(bids)
     .values({
+      propertyId,
+      primaryContactId,
       propertyName: data.propertyName,
       address: data.address,
       clientName: data.clientName,
@@ -187,6 +246,24 @@ export async function createBid(
       userId: user.id,
     })
     .returning();
+  await createActivityEvent({
+    userId: user.id,
+    leadId,
+    contactId: primaryContactId,
+    propertyId,
+    accountId: leadContext?.accountId ?? property?.accountId ?? null,
+    bidId: rows[0].id,
+    type: "bid_created",
+    title: "Bid created",
+    body: data.notes,
+  });
+  await writeAuditLog({
+    userId: user.id,
+    entityType: "bid",
+    entityId: rows[0].id,
+    action: "create",
+    newValues: rows[0],
+  });
   return rows[0];
 }
 
@@ -207,6 +284,7 @@ export async function updateBid(
   >
 ) {
   const user = await requireUser();
+  const previous = await getBid(id);
   const patch: Record<string, unknown> = { ...data, updatedAt: new Date() };
   if (data.latitude !== undefined || data.longitude !== undefined) {
     patch.satelliteImageUrl = buildSatelliteProxyPath(
@@ -219,6 +297,32 @@ export async function updateBid(
     .set(patch as typeof data & { updatedAt: Date; satelliteImageUrl?: string | null })
     .where(and(eq(bids.id, id), eq(bids.userId, user.id)))
     .returning();
+  const bid = rows[0] ?? null;
+  if (bid?.propertyId) {
+    await db
+      .update(properties)
+      .set({
+        name: bid.propertyName,
+        address: bid.address,
+        latitude: bid.latitude,
+        longitude: bid.longitude,
+        googlePlaceId: bid.googlePlaceId,
+        satelliteImageUrl: bid.satelliteImageUrl,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(properties.id, bid.propertyId), eq(properties.userId, user.id)));
+  }
+  if (bid) {
+    await writeAuditLog({
+      userId: user.id,
+      entityType: "bid",
+      entityId: bid.id,
+      action: "update",
+      previousValues: previous,
+      newValues: bid,
+      changedFields: Object.keys(data),
+    });
+  }
   return rows[0] ?? null;
 }
 
@@ -729,6 +833,8 @@ async function respondToProposalShare(
         bidId: proposals.bidId,
         bidUserId: bids.userId,
         leadId: bids.leadId,
+        propertyId: bids.propertyId,
+        primaryContactId: bids.primaryContactId,
       })
       .from(proposalShares)
       .innerJoin(proposals, eq(proposalShares.proposalId, proposals.id))
@@ -752,12 +858,47 @@ async function respondToProposalShare(
       .update(bids)
       .set({ status: outcome, updatedAt: now })
       .where(eq(bids.id, existing.bidId));
+    await tx.insert(auditLog).values({
+      userId: existing.bidUserId,
+      actorUserId: existing.bidUserId,
+      entityType: "bid",
+      entityId: existing.bidId,
+      action: "update",
+      changedFields: ["status"],
+      newValues: { status: outcome },
+      source: "proposal_share",
+    });
 
     if (existing.leadId) {
       await tx
         .update(leads)
-        .set({ status: outcome, updatedAt: now })
+        .set({
+          status: outcome,
+          closedAt: now,
+          updatedAt: now,
+        })
         .where(eq(leads.id, existing.leadId));
+      await tx.insert(activityEvents).values({
+        userId: existing.bidUserId,
+        leadId: existing.leadId,
+        contactId: existing.primaryContactId,
+        propertyId: existing.propertyId,
+        bidId: existing.bidId,
+        type: "proposal_sent",
+        title: outcome === "won" ? "Proposal accepted" : "Proposal declined",
+        metadata: { outcome },
+        occurredAt: now,
+      });
+      await tx.insert(auditLog).values({
+        userId: existing.bidUserId,
+        actorUserId: existing.bidUserId,
+        entityType: "lead",
+        entityId: existing.leadId,
+        action: "update",
+        changedFields: ["status", "closed_at"],
+        newValues: { status: outcome, closedAt: now },
+        source: "proposal_share",
+      });
     }
 
     let projectId: string | null = null;
@@ -1315,13 +1456,20 @@ export type GetLeadsResult = {
   offset: number;
 };
 
+export type LeadSourceOption = {
+  label: string;
+  value: string;
+};
+
 export type LeadPropertyGroup = {
   key: string;
+  accountId: string | null;
   address: string | null;
   managementCompany: string | null;
   propertyName: string | null;
   contacts: Lead[];
   contactCount: number;
+  portfolioCount: number | null;
   earliestFollowUp: string | null;
   mostRecentContact: Date | null;
 };
@@ -1439,6 +1587,28 @@ export async function getLeads(
   };
 }
 
+export async function getLeadSourceOptions(): Promise<LeadSourceOption[]> {
+  const user = await requireUser();
+  const rows = await db
+    .selectDistinct({
+      value: leads.sourceTag,
+    })
+    .from(leads)
+    .where(
+      and(
+        eq(leads.userId, user.id),
+        sql`${leads.sourceTag} is not null`,
+        sql`btrim(${leads.sourceTag}) <> ''`,
+      ),
+    )
+    .orderBy(asc(leads.sourceTag));
+
+  return rows.flatMap((row) => {
+    const value = row.value?.trim();
+    return value ? [{ label: value, value }] : [];
+  });
+}
+
 function leadRowOrderBy(sort: LeadsSort): SQL[] {
   switch (sort) {
     case "follow_up":
@@ -1475,6 +1645,7 @@ export async function getLeadPropertyGroups(
   const grouped = db
     .select({
       key: leadPropertyGroupKey.as("key"),
+      accountId: sql<string | null>`min(${leads.accountId}::text)`.as("account_id"),
       address: sql<string | null>`min(nullif(btrim(${leads.resolvedAddress}), ''))`.as(
         "address",
       ),
@@ -1547,6 +1718,28 @@ export async function getLeadPropertyGroups(
   }
 
   const groupKeys = groups.map((group) => group.key);
+  const accountIds = groups.flatMap((group) => group.accountId ? [group.accountId] : []);
+  const portfolioRows =
+    accountIds.length > 0
+      ? await db
+          .select({
+            accountId: properties.accountId,
+            count: sql<number>`count(distinct ${properties.id})::int`.as("count"),
+          })
+          .from(properties)
+          .where(
+            and(
+              eq(properties.userId, user.id),
+              inArray(properties.accountId, accountIds),
+            ),
+          )
+          .groupBy(properties.accountId)
+      : [];
+  const portfolioCountByAccountId = new Map(
+    portfolioRows.flatMap((row) =>
+      row.accountId ? [[row.accountId, Number(row.count)] as const] : [],
+    ),
+  );
   const contactRows = await db
     .select()
     .from(leads)
@@ -1568,11 +1761,15 @@ export async function getLeadPropertyGroups(
   return {
     groups: groups.map((group) => ({
       key: group.key,
+      accountId: group.accountId,
       address: group.address,
       managementCompany: group.managementCompany,
       propertyName: group.propertyName,
       contacts: contactsByGroup.get(group.key) ?? [],
       contactCount: Number(group.contactCount),
+      portfolioCount: group.accountId
+        ? portfolioCountByAccountId.get(group.accountId) ?? null
+        : null,
       earliestFollowUp: group.earliestFollowUp,
       mostRecentContact: group.mostRecentContact,
     })),
@@ -1592,24 +1789,80 @@ export async function createLead(
         | "phone"
         | "company"
         | "propertyName"
+        | "resolvedAddress"
         | "notes"
       >
     >
 ) {
   const user = await requireUser();
+  const account = await findOrCreateAccount({
+    userId: user.id,
+    name: data.company,
+    sourceTag: data.sourceTag ?? null,
+  });
+  const property = await findOrCreateProperty({
+    userId: user.id,
+    accountId: account?.id ?? null,
+    name: data.propertyName,
+    address: data.resolvedAddress,
+    sourceTag: data.sourceTag ?? null,
+  });
+  const contact = await findOrCreateContact({
+    userId: user.id,
+    accountId: account?.id ?? null,
+    name: data.name,
+    email: data.email ?? null,
+    phone: data.phone ?? null,
+    sourceTag: data.sourceTag ?? null,
+  });
+  const propertyContact = await upsertPropertyContact({
+    userId: user.id,
+    propertyId: property?.id ?? null,
+    contactId: contact.id,
+    sourceTag: data.sourceTag ?? null,
+  });
   const rows = await db
     .insert(leads)
     .values({
       userId: user.id,
+      accountId: account?.id ?? null,
+      propertyId: property?.id ?? null,
+      primaryContactId: contact.id,
       name: data.name,
       sourceTag: data.sourceTag ?? null,
       email: data.email ?? null,
       phone: data.phone ?? null,
       company: data.company ?? null,
       propertyName: data.propertyName ?? null,
+      resolvedAddress: data.resolvedAddress ?? null,
       notes: data.notes ?? "",
     })
     .returning();
+  await createLeadContactLink({
+    userId: user.id,
+    leadId: rows[0].id,
+    contactId: contact.id,
+    propertyContactId: propertyContact?.id ?? null,
+    role: "primary",
+    isPrimary: true,
+  });
+  await createActivityEvent({
+    userId: user.id,
+    leadId: rows[0].id,
+    contactId: contact.id,
+    propertyId: property?.id ?? null,
+    accountId: account?.id ?? null,
+    type: "note",
+    title: "Lead created",
+    body: data.notes ?? "",
+  });
+  await writeAuditLog({
+    userId: user.id,
+    entityType: "lead",
+    entityId: rows[0].id,
+    action: "create",
+    newValues: rows[0],
+  });
   return rows[0];
 }
 
@@ -1649,6 +1902,360 @@ export type LeadImportRow = {
   rawRow: Record<string, string>;
 };
 
+function cleanText(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function rawRole(rawRow: Record<string, string> | null | undefined): string | null {
+  if (!rawRow) return null;
+  return (
+    cleanText(rawRow["Role with Company"]) ??
+    cleanText(rawRow.Role) ??
+    cleanText(rawRow.Title)
+  );
+}
+
+function compactObject(values: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(values).filter(([, value]) => value !== undefined),
+  );
+}
+
+async function writeAuditLog(input: {
+  userId: string;
+  actorUserId?: string | null;
+  entityType: string;
+  entityId: string;
+  action: string;
+  previousValues?: unknown;
+  newValues?: unknown;
+  changedFields?: string[];
+  source?: string;
+}) {
+  await db.insert(auditLog).values({
+    userId: input.userId,
+    actorUserId: input.actorUserId ?? input.userId,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    action: input.action,
+    changedFields: input.changedFields ?? null,
+    previousValues: input.previousValues ?? null,
+    newValues: input.newValues ?? null,
+    source: input.source ?? "app",
+  });
+}
+
+async function createActivityEvent(input: {
+  userId: string;
+  type: string;
+  title: string;
+  body?: string;
+  leadId?: string | null;
+  contactId?: string | null;
+  propertyId?: string | null;
+  accountId?: string | null;
+  bidId?: string | null;
+  metadata?: unknown;
+  occurredAt?: Date;
+}) {
+  await db.insert(activityEvents).values({
+    userId: input.userId,
+    type: input.type,
+    title: input.title,
+    body: input.body ?? "",
+    leadId: input.leadId ?? null,
+    contactId: input.contactId ?? null,
+    propertyId: input.propertyId ?? null,
+    accountId: input.accountId ?? null,
+    bidId: input.bidId ?? null,
+    metadata: input.metadata ?? null,
+    occurredAt: input.occurredAt ?? new Date(),
+  });
+}
+
+async function findOrCreateAccount(input: {
+  userId: string;
+  name: string | null | undefined;
+  sourceTag?: string | null;
+}): Promise<Account | null> {
+  const name = cleanText(input.name);
+  if (!name) return null;
+
+  const existing = await db
+    .select()
+    .from(accounts)
+    .where(
+      and(
+        eq(accounts.userId, input.userId),
+        sql`lower(btrim(${accounts.name})) = lower(${name})`,
+      ),
+    )
+    .limit(1);
+
+  if (existing[0]) return existing[0];
+
+  const inserted = await db
+    .insert(accounts)
+    .values({
+      userId: input.userId,
+      name,
+      sourceTag: input.sourceTag ?? null,
+    })
+    .returning();
+  await writeAuditLog({
+    userId: input.userId,
+    entityType: "account",
+    entityId: inserted[0].id,
+    action: "create",
+    newValues: inserted[0],
+  });
+  return inserted[0];
+}
+
+async function findOrCreateContact(input: {
+  userId: string;
+  accountId?: string | null;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  title?: string | null;
+  sourceTag?: string | null;
+}): Promise<Contact> {
+  const name = cleanText(input.name) ?? "Unknown contact";
+  const email = cleanText(input.email);
+  const phone = cleanText(input.phone);
+
+  const identityCondition = email
+    ? sql`lower(btrim(${contacts.email})) = lower(${email})`
+    : phone
+      ? sql`btrim(${contacts.phone}) = ${phone}`
+      : sql`lower(btrim(${contacts.name})) = lower(${name})`;
+
+  const existing = await db
+    .select()
+    .from(contacts)
+    .where(and(eq(contacts.userId, input.userId), identityCondition))
+    .limit(1);
+
+  if (existing[0]) {
+    const patch = compactObject({
+      accountId: existing[0].accountId ?? input.accountId ?? null,
+      email: existing[0].email ?? email,
+      phone: existing[0].phone ?? phone,
+      title: existing[0].title ?? cleanText(input.title),
+      sourceTag: existing[0].sourceTag ?? input.sourceTag ?? null,
+      updatedAt: new Date(),
+    });
+    const updated = await db
+      .update(contacts)
+      .set(patch)
+      .where(eq(contacts.id, existing[0].id))
+      .returning();
+    return updated[0] ?? existing[0];
+  }
+
+  const inserted = await db
+    .insert(contacts)
+    .values({
+      userId: input.userId,
+      accountId: input.accountId ?? null,
+      name,
+      email,
+      phone,
+      title: cleanText(input.title),
+      sourceTag: input.sourceTag ?? null,
+    })
+    .returning();
+  await writeAuditLog({
+    userId: input.userId,
+    entityType: "contact",
+    entityId: inserted[0].id,
+    action: "create",
+    newValues: inserted[0],
+  });
+  return inserted[0];
+}
+
+async function findOrCreateProperty(input: {
+  userId: string;
+  accountId?: string | null;
+  name?: string | null;
+  address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  googlePlaceId?: string | null;
+  satelliteImageUrl?: string | null;
+  enrichmentStatus?: Lead["enrichmentStatus"];
+  enrichmentError?: string | null;
+  sourceTag?: string | null;
+  rawSource?: Record<string, string> | null;
+}): Promise<Property | null> {
+  const address = cleanText(input.address);
+  const name = cleanText(input.name);
+  if (!address && !name) return null;
+
+  const identityCondition = address
+    ? sql`lower(btrim(${properties.address})) = lower(${address})`
+    : sql`lower(btrim(${properties.name})) = lower(${name})`;
+
+  const existing = await db
+    .select()
+    .from(properties)
+    .where(and(eq(properties.userId, input.userId), identityCondition))
+    .limit(1);
+
+  if (existing[0]) {
+    const patch = compactObject({
+      accountId: existing[0].accountId ?? input.accountId ?? null,
+      name: existing[0].name ?? name,
+      address: existing[0].address ?? address,
+      latitude: existing[0].latitude ?? input.latitude ?? null,
+      longitude: existing[0].longitude ?? input.longitude ?? null,
+      googlePlaceId: existing[0].googlePlaceId ?? input.googlePlaceId ?? null,
+      satelliteImageUrl:
+        existing[0].satelliteImageUrl ?? input.satelliteImageUrl ?? null,
+      enrichmentStatus:
+        input.enrichmentStatus ?? existing[0].enrichmentStatus ?? null,
+      enrichmentError: input.enrichmentError ?? existing[0].enrichmentError ?? null,
+      rawSource: existing[0].rawSource ?? input.rawSource ?? null,
+      sourceTag: existing[0].sourceTag ?? input.sourceTag ?? null,
+      updatedAt: new Date(),
+    });
+    const updated = await db
+      .update(properties)
+      .set(patch)
+      .where(eq(properties.id, existing[0].id))
+      .returning();
+    return updated[0] ?? existing[0];
+  }
+
+  const inserted = await db
+    .insert(properties)
+    .values({
+      userId: input.userId,
+      accountId: input.accountId ?? null,
+      name,
+      address,
+      latitude: input.latitude ?? null,
+      longitude: input.longitude ?? null,
+      googlePlaceId: input.googlePlaceId ?? null,
+      satelliteImageUrl: input.satelliteImageUrl ?? null,
+      enrichmentStatus: input.enrichmentStatus ?? null,
+      enrichmentError: input.enrichmentError ?? null,
+      sourceTag: input.sourceTag ?? null,
+      rawSource: input.rawSource ?? null,
+    })
+    .returning();
+  await writeAuditLog({
+    userId: input.userId,
+    entityType: "property",
+    entityId: inserted[0].id,
+    action: "create",
+    newValues: inserted[0],
+  });
+  return inserted[0];
+}
+
+async function upsertPropertyContact(input: {
+  userId: string;
+  propertyId: string | null | undefined;
+  contactId: string;
+  role?: string | null;
+  sourceTag?: string | null;
+  importRef?: Record<string, string> | null;
+}): Promise<PropertyContact | null> {
+  if (!input.propertyId) return null;
+  const existing = await db
+    .select()
+    .from(propertyContacts)
+    .where(
+      and(
+        eq(propertyContacts.userId, input.userId),
+        eq(propertyContacts.propertyId, input.propertyId),
+        eq(propertyContacts.contactId, input.contactId),
+      ),
+    )
+    .limit(1);
+
+  if (existing[0]) {
+    const updated = await db
+      .update(propertyContacts)
+      .set({
+        role: existing[0].role ?? cleanText(input.role),
+        sourceTag: existing[0].sourceTag ?? input.sourceTag ?? null,
+        importRef: existing[0].importRef ?? input.importRef ?? null,
+        active: true,
+        lastSeenAt: new Date(),
+      })
+      .where(eq(propertyContacts.id, existing[0].id))
+      .returning();
+    return updated[0] ?? existing[0];
+  }
+
+  const inserted = await db
+    .insert(propertyContacts)
+    .values({
+      userId: input.userId,
+      propertyId: input.propertyId,
+      contactId: input.contactId,
+      role: cleanText(input.role),
+      sourceTag: input.sourceTag ?? null,
+      importRef: input.importRef ?? null,
+    })
+    .returning();
+  await writeAuditLog({
+    userId: input.userId,
+    entityType: "property_contact",
+    entityId: inserted[0].id,
+    action: "create",
+    newValues: inserted[0],
+  });
+  return inserted[0];
+}
+
+async function createLeadContactLink(input: {
+  userId: string;
+  leadId: string;
+  contactId: string;
+  propertyContactId?: string | null;
+  role?: string;
+  isPrimary?: boolean;
+}) {
+  const existing = await db
+    .select({ id: leadContacts.id })
+    .from(leadContacts)
+    .where(
+      and(
+        eq(leadContacts.userId, input.userId),
+        eq(leadContacts.leadId, input.leadId),
+        eq(leadContacts.contactId, input.contactId),
+      ),
+    )
+    .limit(1);
+
+  if (existing[0]) return;
+
+  const inserted = await db
+    .insert(leadContacts)
+    .values({
+      userId: input.userId,
+      leadId: input.leadId,
+      contactId: input.contactId,
+      propertyContactId: input.propertyContactId ?? null,
+      role: input.role ?? "primary",
+      isPrimary: input.isPrimary ?? false,
+    })
+    .returning();
+  await writeAuditLog({
+    userId: input.userId,
+    entityType: "lead_contact",
+    entityId: inserted[0].id,
+    action: "create",
+    newValues: inserted[0],
+  });
+}
+
 /**
  * Bulk-insert leads from a CSV import. All rows share the same `sourceTag`
  * and land with enrichment_status = 'pending' so the enrichment worker can
@@ -1660,11 +2267,47 @@ export async function createLeadsBatch(
 ): Promise<Lead[]> {
   if (rows.length === 0) return [];
   const user = await requireUser();
-  return db
-    .insert(leads)
-    .values(
-      rows.map((r) => ({
+  const inserted: Lead[] = [];
+
+  for (const r of rows) {
+    const account = await findOrCreateAccount({
+      userId: user.id,
+      name: r.company,
+      sourceTag,
+    });
+    const property = await findOrCreateProperty({
+      userId: user.id,
+      accountId: account?.id ?? null,
+      name: r.propertyName,
+      address: r.csvAddress,
+      sourceTag,
+      rawSource: r.rawRow,
+      enrichmentStatus: "pending",
+    });
+    const contact = await findOrCreateContact({
+      userId: user.id,
+      accountId: account?.id ?? null,
+      name: r.name,
+      email: r.email,
+      phone: r.phone,
+      title: rawRole(r.rawRow),
+      sourceTag,
+    });
+    const propertyContact = await upsertPropertyContact({
+      userId: user.id,
+      propertyId: property?.id ?? null,
+      contactId: contact.id,
+      role: rawRole(r.rawRow),
+      sourceTag,
+      importRef: r.rawRow,
+    });
+    const leadRows = await db
+      .insert(leads)
+      .values({
         userId: user.id,
+        accountId: account?.id ?? null,
+        propertyId: property?.id ?? null,
+        primaryContactId: contact.id,
         sourceTag,
         name: r.name,
         email: r.email,
@@ -1674,9 +2317,41 @@ export async function createLeadsBatch(
         resolvedAddress: r.csvAddress,
         rawRow: r.rawRow,
         enrichmentStatus: "pending" as const,
-      }))
-    )
-    .returning();
+      })
+      .returning();
+    const lead = leadRows[0];
+    await createLeadContactLink({
+      userId: user.id,
+      leadId: lead.id,
+      contactId: contact.id,
+      propertyContactId: propertyContact?.id ?? null,
+      role: "primary",
+      isPrimary: true,
+    });
+    await createActivityEvent({
+      userId: user.id,
+      leadId: lead.id,
+      contactId: contact.id,
+      propertyId: property?.id ?? null,
+      accountId: account?.id ?? null,
+      type: "import",
+      title: "Lead imported",
+      body: "",
+      metadata: { sourceTag, rawRow: r.rawRow },
+      occurredAt: lead.createdAt,
+    });
+    await writeAuditLog({
+      userId: user.id,
+      entityType: "lead",
+      entityId: lead.id,
+      action: "create",
+      newValues: lead,
+      source: "import",
+    });
+    inserted.push(lead);
+  }
+
+  return inserted;
 }
 
 export async function updateLeadEnrichment(
@@ -1695,26 +2370,128 @@ export async function updateLeadEnrichment(
   >
 ) {
   const user = await requireUser();
+  const previous = await getLead(id);
   const rows = await db
     .update(leads)
     .set({ ...patch, updatedAt: new Date() })
     .where(and(eq(leads.id, id), eq(leads.userId, user.id)))
     .returning();
+  const lead = rows[0] ?? null;
+  if (lead?.propertyId) {
+    await db
+      .update(properties)
+      .set({
+        address: patch.resolvedAddress ?? lead.resolvedAddress,
+        latitude: patch.latitude ?? lead.latitude,
+        longitude: patch.longitude ?? lead.longitude,
+        googlePlaceId: patch.googlePlaceId ?? lead.googlePlaceId,
+        satelliteImageUrl: patch.satelliteImageUrl ?? lead.satelliteImageUrl,
+        enrichmentStatus: patch.enrichmentStatus ?? lead.enrichmentStatus,
+        enrichmentError: patch.enrichmentError ?? lead.enrichmentError,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(properties.id, lead.propertyId), eq(properties.userId, user.id)));
+  }
+  if (lead) {
+    await writeAuditLog({
+      userId: user.id,
+      entityType: "lead",
+      entityId: lead.id,
+      action: "update",
+      previousValues: previous,
+      newValues: lead,
+      changedFields: Object.keys(patch),
+      source: "enrichment",
+    });
+  }
   return rows[0] ?? null;
 }
 
 export async function updateLead(
   id: string,
   patch: Partial<
-    Pick<Lead, "name" | "email" | "phone" | "company" | "propertyName" | "notes">
+    Pick<
+      Lead,
+      | "name"
+      | "email"
+      | "phone"
+      | "company"
+      | "propertyName"
+      | "resolvedAddress"
+      | "notes"
+    >
   >,
 ) {
   const user = await requireUser();
+  const previous = await getLead(id);
+  if (!previous) return null;
+  const account = await findOrCreateAccount({
+    userId: user.id,
+    name: patch.company ?? previous.company,
+    sourceTag: previous.sourceTag,
+  });
+  const property = await findOrCreateProperty({
+    userId: user.id,
+    accountId: account?.id ?? previous.accountId ?? null,
+    name: patch.propertyName ?? previous.propertyName,
+    address: patch.resolvedAddress ?? previous.resolvedAddress,
+    latitude: previous.latitude,
+    longitude: previous.longitude,
+    googlePlaceId: previous.googlePlaceId,
+    satelliteImageUrl: previous.satelliteImageUrl,
+    enrichmentStatus: previous.enrichmentStatus,
+    enrichmentError: previous.enrichmentError,
+    sourceTag: previous.sourceTag,
+    rawSource: previous.rawRow,
+  });
+  const contact = await findOrCreateContact({
+    userId: user.id,
+    accountId: account?.id ?? previous.accountId ?? null,
+    name: patch.name ?? previous.name,
+    email: patch.email ?? previous.email,
+    phone: patch.phone ?? previous.phone,
+    title: rawRole(previous.rawRow),
+    sourceTag: previous.sourceTag,
+  });
+  const propertyContact = await upsertPropertyContact({
+    userId: user.id,
+    propertyId: property?.id ?? previous.propertyId,
+    contactId: contact.id,
+    role: rawRole(previous.rawRow),
+    sourceTag: previous.sourceTag,
+    importRef: previous.rawRow,
+  });
   const rows = await db
     .update(leads)
-    .set({ ...patch, updatedAt: new Date() })
+    .set({
+      ...patch,
+      accountId: account?.id ?? previous.accountId,
+      propertyId: property?.id ?? previous.propertyId,
+      primaryContactId: contact.id,
+      updatedAt: new Date(),
+    })
     .where(and(eq(leads.id, id), eq(leads.userId, user.id)))
     .returning();
+  const lead = rows[0] ?? null;
+  if (lead) {
+    await createLeadContactLink({
+      userId: user.id,
+      leadId: lead.id,
+      contactId: contact.id,
+      propertyContactId: propertyContact?.id ?? null,
+      role: "primary",
+      isPrimary: true,
+    });
+    await writeAuditLog({
+      userId: user.id,
+      entityType: "lead",
+      entityId: lead.id,
+      action: "update",
+      previousValues: previous,
+      newValues: lead,
+      changedFields: Object.keys(patch),
+    });
+  }
   return rows[0] ?? null;
 }
 
@@ -1729,26 +2506,99 @@ export async function logLeadContact(id: string) {
     })
     .where(and(eq(leads.id, id), eq(leads.userId, user.id)))
     .returning();
+  const lead = rows[0] ?? null;
+  if (lead) {
+    await createActivityEvent({
+      userId: user.id,
+      leadId: lead.id,
+      contactId: lead.primaryContactId,
+      propertyId: lead.propertyId,
+      accountId: lead.accountId,
+      type: "call",
+      title: "Contact attempt logged",
+    });
+    await writeAuditLog({
+      userId: user.id,
+      entityType: "lead",
+      entityId: lead.id,
+      action: "update",
+      changedFields: ["last_contacted_at", "contact_attempts"],
+      newValues: {
+        lastContactedAt: lead.lastContactedAt,
+        contactAttempts: lead.contactAttempts,
+      },
+    });
+  }
   return rows[0] ?? null;
 }
 
 export async function setLeadFollowUp(id: string, followUpAt: string | null) {
   const user = await requireUser();
+  const previous = await getLead(id);
   const rows = await db
     .update(leads)
     .set({ followUpAt, updatedAt: new Date() })
     .where(and(eq(leads.id, id), eq(leads.userId, user.id)))
     .returning();
+  const lead = rows[0] ?? null;
+  if (lead) {
+    await createActivityEvent({
+      userId: user.id,
+      leadId: lead.id,
+      contactId: lead.primaryContactId,
+      propertyId: lead.propertyId,
+      accountId: lead.accountId,
+      type: "task",
+      title: followUpAt ? "Follow-up scheduled" : "Follow-up cleared",
+      metadata: { followUpAt },
+    });
+    await writeAuditLog({
+      userId: user.id,
+      entityType: "lead",
+      entityId: lead.id,
+      action: "update",
+      previousValues: { followUpAt: previous?.followUpAt ?? null },
+      newValues: { followUpAt: lead.followUpAt },
+      changedFields: ["follow_up_at"],
+    });
+  }
   return rows[0] ?? null;
 }
 
 export async function updateLeadStatus(id: string, status: Lead["status"]) {
   const user = await requireUser();
+  const previous = await getLead(id);
   const rows = await db
     .update(leads)
-    .set({ status, updatedAt: new Date() })
+    .set({
+      status,
+      closedAt: status === "won" || status === "lost" ? new Date() : null,
+      updatedAt: new Date(),
+    })
     .where(and(eq(leads.id, id), eq(leads.userId, user.id)))
     .returning();
+  const lead = rows[0] ?? null;
+  if (lead) {
+    await createActivityEvent({
+      userId: user.id,
+      leadId: lead.id,
+      contactId: lead.primaryContactId,
+      propertyId: lead.propertyId,
+      accountId: lead.accountId,
+      type: "status_change",
+      title: "Lead status changed",
+      metadata: { from: previous?.status ?? null, to: status },
+    });
+    await writeAuditLog({
+      userId: user.id,
+      entityType: "lead",
+      entityId: lead.id,
+      action: "update",
+      previousValues: { status: previous?.status ?? null },
+      newValues: { status: lead.status, closedAt: lead.closedAt },
+      changedFields: ["status", "closed_at"],
+    });
+  }
   return rows[0] ?? null;
 }
 

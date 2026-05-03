@@ -353,8 +353,15 @@ Primary entities, with AI-native additions called out:
 | Entity | Key fields | Relationships |
 |---|---|---|
 | user | id, email, auth fields, defaults (coverage, labor rate, margin) | — |
-| lead | id, user_id, source_tag, name, email, company, property_name, raw_row (jsonb), resolved_address, lat, lng, place_id, **qualification_score**, **qualification_brief**, **agent_run_id**, status, notes | bids (has many) |
-| bid | id, user_id, lead_id (nullable), property_name, client, address, lat/lng, satellite_image_url, status, subtotal/margin/total, notes | buildings, line_items, proposals, project, **captures** |
+| account | id, user_id, name, website, source_tag, status, notes | properties, contacts |
+| property | id, user_id, account_id, name, address, lat/lng, place_id, satellite_image_url, enrichment fields, source_tag, raw_source | leads, bids, property_contacts |
+| contact | id, user_id, account_id, name, email, phone, title, source_tag, relationship_tier | property_contacts, lead_contacts |
+| property_contact | id, user_id, property_id, contact_id, role, decision_influence, source_tag, import_ref, active, first_seen_at, last_seen_at | property, contact |
+| lead | id, user_id, property_id, account_id, primary_contact_id, source_tag, legacy contact/property compatibility fields, **qualification_score**, **qualification_brief**, **agent_run_id**, status, priority, opened_at, closed_at, notes | lead_contacts, activity_events, bids |
+| lead_contact | id, user_id, lead_id, contact_id, property_contact_id, role, is_primary | lead, contact |
+| activity_event | id, user_id, lead_id/contact_id/property_id/account_id/bid_id, type, title, body, occurred_at, metadata | human-readable timeline |
+| audit_log | id, user_id, actor_user_id, entity_type, entity_id, action, changed_fields, previous_values, new_values, source, created_at | structured change history |
+| bid | id, user_id, lead_id (nullable), property_id, primary_contact_id, property_name, client, address, lat/lng, satellite_image_url, status, subtotal/margin/total, notes | buildings, line_items, proposals, project, **captures** |
 | **capture** | id, bid_id, type (photo/video/satellite/streetview), storage_url, taken_at, gps, **vision_agent_run_id** | surfaces (agent-produced), scope_flags |
 | building | id, bid_id, type_name, count, notes, **capture_refs** | surfaces |
 | surface | id, building_id, surface_name, dimension_inputs (structured), computed_sqft, substrate, **source_type** (agent/human), **confidence_score**, **capture_ref** | — |
@@ -385,7 +392,7 @@ Field shapes call out type, nullability, and a one-line purpose note. Aspiration
 
 ### 6.1 Lead fields
 
-Grounded in the current `leads` table. The lead is a **(contact, property) pair**: a person at a management company associated with a specific multifamily property. One attendee at a trade show typically appears as N leads (one per property they manage); the same property may carry multiple contacts. The list UI groups by property to make this shape navigable; the data model keeps the row at contact-times-property granularity so per-contact outreach state and per-property capture/bid lineage both have a home.
+Grounded in the normalized lead-domain model. A lead is a **property-level sales opportunity**: one property being pursued during one sales cycle. Contacts and properties are durable records linked through `property_contacts`; contacts participating in an opportunity are linked through `lead_contacts`. The old flat contact/property fields remain on `leads` only as compatibility fields while the UI migrates screen by screen.
 
 *Identity*
 

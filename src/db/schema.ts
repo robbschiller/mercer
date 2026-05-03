@@ -18,9 +18,92 @@ import {
   PROJECT_UPDATE_AUTHOR_TYPES,
 } from "@/lib/status-meta";
 
+export const accounts = pgTable("accounts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  name: text("name").notNull(),
+  website: text("website"),
+  sourceTag: text("source_tag"),
+  status: text("status").notNull().default("active"),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const properties = pgTable("properties", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  accountId: uuid("account_id").references(() => accounts.id),
+  name: text("name"),
+  address: text("address"),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
+  googlePlaceId: text("google_place_id"),
+  satelliteImageUrl: text("satellite_image_url"),
+  enrichmentStatus: text("enrichment_status", { enum: ENRICHMENT_STATUSES }),
+  enrichmentError: text("enrichment_error"),
+  sourceTag: text("source_tag"),
+  rawSource: jsonb("raw_source").$type<Record<string, string>>(),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const contacts = pgTable("contacts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  accountId: uuid("account_id").references(() => accounts.id),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  title: text("title"),
+  sourceTag: text("source_tag"),
+  relationshipTier: text("relationship_tier"),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const propertyContacts = pgTable("property_contacts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  propertyId: uuid("property_id")
+    .notNull()
+    .references(() => properties.id, { onDelete: "cascade" }),
+  contactId: uuid("contact_id")
+    .notNull()
+    .references(() => contacts.id, { onDelete: "cascade" }),
+  role: text("role"),
+  decisionInfluence: text("decision_influence"),
+  sourceTag: text("source_tag"),
+  importRef: jsonb("import_ref").$type<Record<string, string>>(),
+  active: boolean("active").notNull().default(true),
+  firstSeenAt: timestamp("first_seen_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  notes: text("notes").notNull().default(""),
+});
+
 export const bids = pgTable("bids", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull(),
+  propertyId: uuid("property_id").references(() => properties.id),
+  primaryContactId: uuid("primary_contact_id").references(() => contacts.id),
   leadId: uuid("lead_id"),
   propertyName: text("property_name").notNull(),
   address: text("address").notNull(),
@@ -119,6 +202,9 @@ export const proposalShares = pgTable("proposal_shares", {
 export const leads = pgTable("leads", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull(),
+  propertyId: uuid("property_id").references(() => properties.id),
+  accountId: uuid("account_id").references(() => accounts.id),
+  primaryContactId: uuid("primary_contact_id").references(() => contacts.id),
   sourceTag: text("source_tag"),
   name: text("name").notNull(),
   email: text("email"),
@@ -143,10 +229,81 @@ export const leads = pgTable("leads", {
   lastContactedAt: timestamp("last_contacted_at", { withTimezone: true }),
   followUpAt: date("follow_up_at"),
   contactAttempts: integer("contact_attempts").notNull().default(0),
+  qualificationStatus: text("qualification_status"),
+  priority: text("priority"),
+  ownerId: uuid("owner_id"),
+  openedAt: timestamp("opened_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  qualificationBrief: text("qualification_brief"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const leadContacts = pgTable("lead_contacts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  leadId: uuid("lead_id")
+    .notNull()
+    .references(() => leads.id, { onDelete: "cascade" }),
+  contactId: uuid("contact_id")
+    .notNull()
+    .references(() => contacts.id, { onDelete: "cascade" }),
+  propertyContactId: uuid("property_contact_id").references(
+    () => propertyContacts.id,
+    { onDelete: "set null" },
+  ),
+  role: text("role").notNull().default("primary"),
+  isPrimary: boolean("is_primary").notNull().default(false),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const activityEvents = pgTable("activity_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  leadId: uuid("lead_id").references(() => leads.id, { onDelete: "cascade" }),
+  contactId: uuid("contact_id").references(() => contacts.id, {
+    onDelete: "set null",
+  }),
+  propertyId: uuid("property_id").references(() => properties.id, {
+    onDelete: "set null",
+  }),
+  accountId: uuid("account_id").references(() => accounts.id, {
+    onDelete: "set null",
+  }),
+  bidId: uuid("bid_id").references(() => bids.id, { onDelete: "set null" }),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull().default(""),
+  occurredAt: timestamp("occurred_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const auditLog = pgTable("audit_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  actorUserId: uuid("actor_user_id"),
+  entityType: text("entity_type").notNull(),
+  entityId: uuid("entity_id").notNull(),
+  action: text("action").notNull(),
+  changedFields: jsonb("changed_fields").$type<string[]>(),
+  previousValues: jsonb("previous_values"),
+  newValues: jsonb("new_values"),
+  source: text("source").notNull().default("app"),
+  createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
