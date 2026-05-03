@@ -401,59 +401,64 @@ export function PropertyLeadsTable({
         pageCount,
       }}
     >
-      <DataTableToolbarSection className="mb-3 flex-wrap justify-between gap-2 p-0">
-        <div className="min-w-0 flex-1">
-          <DataTableSearchFilter<PropertyTableRow>
-            value={query.q}
-            onChange={(q) => pushQuery({ q: q.trim(), page: 1 })}
-            placeholder="Search properties, accounts, contacts..."
-            className="w-full max-w-md"
-          />
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <DataTableFilterMenu<PropertyTableRow>
-            filters={filters}
-            onFiltersChange={(nextFilters) => {
-              pushQuery({
-                status: filterValue(nextFilters, "status"),
-                source: filterValue(nextFilters, "sourceTag"),
-                followUp: filterValue(nextFilters, "followUpAt"),
-                page: 1,
-              });
-            }}
-            autoOptions={false}
-            showCounts={false}
-          />
-          <DataTableSortMenu<PropertyTableRow>
-            onSortingChange={(nextSorting) =>
-              pushQuery({ sort: sortParamFor(nextSorting), page: 1 })
-            }
-          />
-        </div>
-      </DataTableToolbarSection>
-      <DataTable className="rounded-md bg-card" maxHeight="calc(100vh - 15rem)">
-        <DataTableHeader className="bg-muted/40" />
-        <DataTableBody<PropertyTableRow>
-          onRowClick={(group) => {
-            startTransition(() => router.push(group.href, { scroll: false }));
-          }}
+      <div className="overflow-hidden rounded-md border bg-card">
+        <DataTableToolbarSection className="flex-wrap justify-between gap-2 border-b p-0 px-3 py-2">
+          <div className="min-w-0 flex-1">
+            <DataTableSearchFilter<PropertyTableRow>
+              value={query.q}
+              onChange={(q) => pushQuery({ q: q.trim(), page: 1 })}
+              placeholder="Search properties, accounts, contacts..."
+              className="w-full max-w-md [&_input]:border-0 [&_input]:shadow-none [&_input]:focus-visible:ring-0"
+            />
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <DataTableFilterMenu<PropertyTableRow>
+              filters={filters}
+              onFiltersChange={(nextFilters) => {
+                pushQuery({
+                  status: filterValue(nextFilters, "status"),
+                  source: filterValue(nextFilters, "sourceTag"),
+                  followUp: filterValue(nextFilters, "followUpAt"),
+                  page: 1,
+                });
+              }}
+              autoOptions={false}
+              showCounts={false}
+            />
+            <DataTableSortMenu<PropertyTableRow>
+              onSortingChange={(nextSorting) =>
+                pushQuery({ sort: sortParamFor(nextSorting), page: 1 })
+              }
+            />
+          </div>
+        </DataTableToolbarSection>
+        <DataTable
+          className="rounded-none border-0 border-b"
+          maxHeight="calc(100vh - 15rem)"
         >
-          <DataTableEmptyBody className="h-28 text-center text-sm text-muted-foreground">
-            No properties match this view.
-          </DataTableEmptyBody>
-        </DataTableBody>
-      </DataTable>
-      <DataTablePagination<PropertyTableRow>
-        totalCount={total}
-        pageSizeOptions={[25, 50, 100, 250, 500]}
-        defaultPageSize={query.limit}
-        onPageChange={(pageIndex) => pushQuery({ page: pageIndex + 1 })}
-        onNextPage={(pageIndex) => pushQuery({ page: pageIndex + 1 })}
-        onPreviousPage={(pageIndex) => pushQuery({ page: pageIndex + 1 })}
-        onPageSizeChange={(limit, pageIndex) =>
-          pushQuery({ limit, page: pageIndex + 1 })
-        }
-      />
+          <DataTableHeader className="bg-muted/40" />
+          <DataTableBody<PropertyTableRow>
+            onRowClick={(group) => {
+              startTransition(() => router.push(group.href, { scroll: false }));
+            }}
+          >
+            <DataTableEmptyBody className="h-28 text-center text-sm text-muted-foreground">
+              No properties match this view.
+            </DataTableEmptyBody>
+          </DataTableBody>
+        </DataTable>
+        <DataTablePagination<PropertyTableRow>
+          totalCount={total}
+          pageSizeOptions={[25, 50, 100, 250, 500]}
+          defaultPageSize={query.limit}
+          onPageChange={(pageIndex) => pushQuery({ page: pageIndex + 1 })}
+          onNextPage={(pageIndex) => pushQuery({ page: pageIndex + 1 })}
+          onPreviousPage={(pageIndex) => pushQuery({ page: pageIndex + 1 })}
+          onPageSizeChange={(limit, pageIndex) =>
+            pushQuery({ limit, page: pageIndex + 1 })
+          }
+        />
+      </div>
     </DataTableRoot>
   );
 }

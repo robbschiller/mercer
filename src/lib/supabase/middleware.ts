@@ -15,6 +15,7 @@ import { NextResponse, type NextRequest } from "next/server";
  */
 export const AUTH_HEADER_USER_ID = "x-mercer-user-id";
 export const AUTH_HEADER_USER_EMAIL = "x-mercer-user-email";
+export const AUTH_HEADER_USER_NAME = "x-mercer-user-name";
 
 const PUBLIC_ROUTES = [
   "/",
@@ -96,9 +97,18 @@ export async function updateSession(request: NextRequest) {
   const forwardedHeaders = new Headers(request.headers);
   forwardedHeaders.delete(AUTH_HEADER_USER_ID);
   forwardedHeaders.delete(AUTH_HEADER_USER_EMAIL);
+  forwardedHeaders.delete(AUTH_HEADER_USER_NAME);
   if (user) {
     forwardedHeaders.set(AUTH_HEADER_USER_ID, user.id);
     if (user.email) forwardedHeaders.set(AUTH_HEADER_USER_EMAIL, user.email);
+    const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
+    const name =
+      typeof meta.full_name === "string" && meta.full_name.trim()
+        ? meta.full_name.trim()
+        : typeof meta.name === "string" && meta.name.trim()
+          ? meta.name.trim()
+          : "";
+    if (name) forwardedHeaders.set(AUTH_HEADER_USER_NAME, name);
   }
 
   const response = NextResponse.next({

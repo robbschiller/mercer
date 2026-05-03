@@ -66,17 +66,6 @@ export default async function DashboardPage({
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="mb-6 flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-medium tracking-tight">
-            Dashboard
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Snapshot of your lead pipeline and bids.
-          </p>
-        </div>
-      </div>
-
       <Card className="mb-6">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-base flex items-center gap-2">

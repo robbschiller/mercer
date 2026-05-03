@@ -193,7 +193,7 @@ export default async function LeadsPage({
 
   return (
     <div className="flex min-h-full w-full overflow-hidden">
-      <div className="min-w-0 flex-1 overflow-hidden px-3 py-6 lg:px-4 lg:py-8">
+      <div className="min-w-0 flex-1 overflow-hidden p-3 lg:p-4">
         <LeadsToolbar />
 
         {params.imported && (

@@ -40,8 +40,10 @@ import {
   skipOnboarding,
   upsertCompanyProfile,
   setEnrichmentResult,
+  inviteOrgMember,
+  removeOrgMember,
 } from "./store";
-import { getSessionUser } from "./supabase/auth-cache";
+import { getOrgContext } from "./org-context";
 import { enrichCompanyFromWebsite } from "./onboarding/enrich-from-website";
 import { getAppOrigin } from "./env";
 import { parseCsv, autoMapColumns, mapRowsToLeads } from "./leads/csv";
@@ -83,6 +85,9 @@ import {
   submitWebsiteSchema,
   confirmCompanyProfileSchema,
   confirmThemeSchema,
+  updateCompanyProfileSchema,
+  inviteOrgMemberSchema,
+  removeOrgMemberSchema,
 } from "./validations";
 import { calculateBidPricing } from "./pricing";
 import type { ProposalSnapshot } from "./pdf/types";
@@ -847,8 +852,8 @@ export async function submitOnboardingWebsiteAction(formData: FormData) {
   const websiteUrl = result.data.websiteUrl;
   await markOnboardingWebsiteSubmitted(websiteUrl);
 
-  const user = await getSessionUser();
-  if (!user) redirect("/login");
+  const ctx = await getOrgContext();
+  if (!ctx) redirect("/login");
 
   const controller = new AbortController();
   const timer = setTimeout(
@@ -859,14 +864,14 @@ export async function submitOnboardingWebsiteAction(formData: FormData) {
     const extraction = await enrichCompanyFromWebsite(websiteUrl, {
       signal: controller.signal,
     });
-    await setEnrichmentResult(user.id, {
+    await setEnrichmentResult(ctx.ownerUserId, {
       status: "success",
       data: extraction,
       raw: extraction,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    await setEnrichmentResult(user.id, {
+    await setEnrichmentResult(ctx.ownerUserId, {
       status: "failed",
       error: message,
     });
@@ -908,4 +913,65 @@ export async function confirmOnboardingThemeAction(formData: FormData) {
 export async function skipOnboardingAction() {
   await skipOnboarding();
   redirect("/bids");
+}
+
+export async function updateCompanyProfileAction(formData: FormData) {
+  const result = updateCompanyProfileSchema.safeParse(
+    formDataToObject(formData),
+  );
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/settings/company?error=${encodeURIComponent(message)}`);
+  }
+  try {
+    await upsertCompanyProfile(result.data);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to save";
+    redirect(`/settings/company?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath("/settings/company");
+  revalidatePath("/", "layout");
+  redirect("/settings/company?saved=1");
+}
+
+// ── Org members ──
+
+export async function inviteOrgMemberAction(formData: FormData) {
+  const result = inviteOrgMemberSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/settings/members?error=${encodeURIComponent(message)}`);
+  }
+  try {
+    const inserted = await inviteOrgMember(result.data);
+    if (!inserted) {
+      redirect(
+        `/settings/members?error=${encodeURIComponent("This email already has a pending invite or active membership.")}`,
+      );
+    }
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to invite member";
+    redirect(`/settings/members?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath("/settings/members");
+  redirect("/settings/members?invited=1");
+}
+
+export async function removeOrgMemberAction(formData: FormData) {
+  const result = removeOrgMemberSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/settings/members?error=${encodeURIComponent(message)}`);
+  }
+  try {
+    await removeOrgMember(result.data.membershipId);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to remove member";
+    redirect(`/settings/members?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath("/settings/members");
+  redirect("/settings/members");
 }
