@@ -274,6 +274,13 @@ function EditForm({ lead, onDone }: { lead: Lead; onDone: () => void }) {
               defaultValue={lead.propertyName ?? ""}
             />
           </Field>
+          <Field label="Property address" htmlFor="lead-address">
+            <Input
+              id="lead-address"
+              name="resolvedAddress"
+              defaultValue={lead.resolvedAddress ?? ""}
+            />
+          </Field>
         </CardContent>
       </Card>
 

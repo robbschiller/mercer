@@ -3,6 +3,7 @@ import { Fraunces, Geist, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AnalyticsLoader } from "@/components/analytics-loader";
 import { ThemeProvider } from "@/components/theme-provider";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { getAppOrigin } from "@/lib/env";
 
 const geist = Geist({
@@ -74,8 +75,10 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {children}
-          <AnalyticsLoader />
+          <TooltipProvider>
+            {children}
+            <AnalyticsLoader />
+          </TooltipProvider>
         </ThemeProvider>
       </body>
     </html>

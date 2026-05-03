@@ -14,11 +14,13 @@ const NO_ADDRESS_KEY = "__no_address__";
 
 export type PropertyGroup = {
   key: string;
+  accountId?: string | null;
   address: string | null;
   managementCompany: string | null;
   propertyName: string | null;
   contacts: Lead[];
   contactCount?: number;
+  portfolioCount?: number | null;
   earliestFollowUp: string | null;
   mostRecentContact: Date | null;
 };
@@ -150,6 +152,9 @@ function PropertyGroupCard({
                 ? "contact"
                 : "contacts"}
             </Badge>
+            {group.portfolioCount && group.portfolioCount > 1 ? (
+              <Badge variant="secondary">{group.portfolioCount} properties</Badge>
+            ) : null}
             {group.earliestFollowUp && (
               <span
                 className={

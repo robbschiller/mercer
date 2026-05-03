@@ -6,52 +6,20 @@ import {
   getLead,
   getLatestBidForLead,
   getLeadPropertyGroups,
+  getLeadSourceOptions,
   getLeads,
-  type Lead,
   type LeadsFollowUpFilter,
   type LeadsSort,
 } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { LeadsToolbar } from "@/components/leads-toolbar";
 import { LeadDetailBody } from "@/components/lead-detail-body";
 import { LeadDetailAside } from "@/components/lead-detail-aside";
-import { LeadsRow } from "@/components/leads-row";
-import { LeadsByProperty } from "@/components/leads-by-property";
-import { leadFullName } from "@/lib/leads/name";
-import {
-  LEAD_STATUSES,
-  enrichmentLabel,
-  leadStatusLabel,
-  leadStatusVariant,
-  type LeadStatus,
-} from "@/lib/status-meta";
-import {
-  CheckCircle2,
-  CircleSlash,
-  Clock,
-  X,
-  XCircle,
-  type LucideIcon,
-} from "lucide-react";
-
-function enrichmentIcon(
-  status: Lead["enrichmentStatus"],
-): { Icon: LucideIcon; className: string } | null {
-  switch (status) {
-    case "success":
-      return { Icon: CheckCircle2, className: "text-emerald-600 dark:text-emerald-400" };
-    case "failed":
-      return { Icon: XCircle, className: "text-destructive" };
-    case "pending":
-      return { Icon: Clock, className: "text-muted-foreground" };
-    case "skipped":
-      return { Icon: CircleSlash, className: "text-muted-foreground/60" };
-    default:
-      return null;
-  }
-}
+import { PropertyDetailPanel } from "@/components/property-detail-panel";
+import { PropertyLeadsTable } from "@/components/property-leads-table";
+import { LeadsTable } from "@/components/leads-table";
+import { LEAD_STATUSES, type LeadStatus } from "@/lib/status-meta";
 
 type LeadsView = "property" | "contact";
 
@@ -62,6 +30,7 @@ type LeadsQuery = {
   followUp: LeadsFollowUpFilter | null;
   sort: LeadsSort | null;
   limit: number;
+  page: number;
   view: LeadsView;
 };
 
@@ -107,9 +76,18 @@ function parseLimit(raw: string | undefined): number {
   return n;
 }
 
+function parsePage(raw: string | undefined): number {
+  const n = Number.parseInt(raw ?? "", 10);
+  if (!Number.isFinite(n) || n <= 1) return 1;
+  return n;
+}
+
 function buildQueryString(
   query: LeadsQuery,
-  overrides: Partial<LeadsQuery> & { lead?: string | null } = {},
+  overrides: Partial<LeadsQuery> & {
+    lead?: string | null;
+    property?: string | null;
+  } = {},
 ): string {
   const sp = new URLSearchParams();
   const q = overrides.q ?? query.q;
@@ -119,6 +97,7 @@ function buildQueryString(
     "followUp" in overrides ? overrides.followUp : query.followUp;
   const sort = "sort" in overrides ? overrides.sort : query.sort;
   const limit = overrides.limit ?? query.limit;
+  const page = overrides.page ?? query.page;
   const view = overrides.view ?? query.view;
   if (q) sp.set("q", q);
   if (status) sp.set("status", status);
@@ -126,13 +105,20 @@ function buildQueryString(
   if (followUp) sp.set("followUp", followUp);
   if (sort) sp.set("sort", sort);
   if (limit !== LEADS_PAGE_DEFAULT_LIMIT) sp.set("limit", String(limit));
+  if (page > 1) sp.set("page", String(page));
   if (view === "contact") sp.set("view", "contact");
   if (overrides.lead) sp.set("lead", overrides.lead);
+  if (overrides.property) sp.set("property", overrides.property);
   return sp.toString();
 }
 
 function buildLeadHref(id: string, query: LeadsQuery): string {
   const qs = buildQueryString(query, { lead: id });
+  return qs ? `/leads?${qs}` : "/leads";
+}
+
+function buildPropertyHref(key: string, query: LeadsQuery): string {
+  const qs = buildQueryString(query, { property: key });
   return qs ? `/leads?${qs}` : "/leads";
 }
 
@@ -152,7 +138,9 @@ export default async function LeadsPage({
     followUp?: string;
     sort?: string;
     limit?: string;
+    page?: string;
     lead?: string;
+    property?: string;
     view?: string;
     error?: string;
   }>;
@@ -165,9 +153,11 @@ export default async function LeadsPage({
     followUp: parseFollowUp(params.followUp),
     sort: parseSort(params.sort),
     limit: parseLimit(params.limit),
+    page: parsePage(params.page),
     view: parseView(params.view),
   };
   const leadId = params.lead;
+  const propertyKey = params.property;
 
   const listOptions = {
     q: query.q || null,
@@ -176,31 +166,35 @@ export default async function LeadsPage({
     followUp: query.followUp,
     sort: effectiveSort(query),
     limit: query.limit,
+    offset: (query.page - 1) * query.limit,
   };
 
-  const [listResult, activeLead, activeLeadBid] = await Promise.all([
+  const [listResult, activeLead, activeLeadBid, sourceOptions] = await Promise.all([
     query.view === "property"
       ? getLeadPropertyGroups(listOptions)
       : getLeads(listOptions),
     leadId ? getLead(leadId) : Promise.resolve(null),
     leadId ? getLatestBidForLead(leadId) : Promise.resolve(null),
+    getLeadSourceOptions(),
   ]);
 
   const propertyGroups =
     "groups" in listResult ? listResult.groups : null;
   const rows = "rows" in listResult ? listResult.rows : [];
+  const activeProperty = propertyGroups?.find(
+    (group) => group.key === propertyKey,
+  );
   const visible = propertyGroups ? propertyGroups.length : rows.length;
   const { total } = listResult;
-  const hasMore = visible < total;
   const hasFilters = Boolean(
     query.q || query.status || query.source || query.followUp,
   );
   const closeHref = buildCloseHref(query);
 
   return (
-    <div className="flex min-h-full">
-      <div className="min-w-0 flex-1 px-4 py-8">
-        <LeadsToolbar query={query.q} view={query.view} />
+    <div className="flex min-h-full w-full overflow-hidden">
+      <div className="min-w-0 flex-1 overflow-hidden px-3 py-6 lg:px-4 lg:py-8">
+        <LeadsToolbar />
 
         {params.imported && (
           <div className="mb-4 rounded-md border border-emerald-600/30 bg-emerald-600/5 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-400">
@@ -208,51 +202,55 @@ export default async function LeadsPage({
           </div>
         )}
 
-        <LeadsFilterBar
-          query={query}
-          total={total}
-          visible={visible}
-          leadId={leadId}
-        />
-
-        {visible === 0 ? (
+        {visible === 0 && propertyGroups ? (
           <EmptyState query={query} hasFilters={hasFilters} />
         ) : (
           <>
             {propertyGroups ? (
-              <LeadsByProperty
-                groups={propertyGroups}
-                buildLeadHref={(id) => buildLeadHref(id, query)}
-                activeLeadId={leadId}
+              <PropertyLeadsTable
+                groups={propertyGroups.map((group) => ({
+                  ...group,
+                  href: buildPropertyHref(group.key, query),
+                  status: group.contacts[0]?.status ?? null,
+                  sourceTag: group.contacts[0]?.sourceTag ?? null,
+                  followUpAt: group.earliestFollowUp,
+                  lastContactedAt: group.mostRecentContact,
+                  createdAt: group.contacts[0]?.createdAt ?? null,
+                }))}
+                query={query}
+                activePropertyKey={propertyKey}
+                total={total}
+                page={query.page}
+                sourceOptions={sourceOptions}
               />
             ) : (
               <LeadsTable
-                leads={rows}
+                leads={rows.map((row) => ({
+                  ...row,
+                  href: buildLeadHref(row.id, query),
+                }))}
                 query={query}
                 activeLeadId={leadId}
+                total={total}
+                page={query.page}
+                sourceOptions={sourceOptions}
               />
-            )}
-            {hasMore && (
-              <div className="mt-4 flex items-center justify-center">
-                <Button variant="outline" asChild>
-                  <Link
-                    href={`/leads?${buildQueryString(query, {
-                      limit: query.limit + LEADS_PAGE_DEFAULT_LIMIT,
-                      lead: leadId ?? null,
-                    })}`}
-                    scroll={false}
-                  >
-                    Load {Math.min(LEADS_PAGE_DEFAULT_LIMIT, total - visible)}{" "}
-                    more
-                  </Link>
-                </Button>
-              </div>
             )}
           </>
         )}
       </div>
 
-      {activeLead && (
+      {activeProperty && (
+        <LeadDetailAside>
+          <PropertyDetailPanel
+            group={activeProperty}
+            closeHref={closeHref}
+            buildLeadHref={(id) => buildLeadHref(id, query)}
+          />
+        </LeadDetailAside>
+      )}
+
+      {!activeProperty && activeLead && (
         <LeadDetailAside>
           <LeadDetailBody
             lead={activeLead}
@@ -261,132 +259,6 @@ export default async function LeadsPage({
             closeHref={closeHref}
           />
         </LeadDetailAside>
-      )}
-    </div>
-  );
-}
-
-const FOLLOW_UP_CHOICES: {
-  value: LeadsFollowUpFilter | null;
-  label: string;
-}[] = [
-  { value: null, label: "All" },
-  { value: "overdue", label: "Overdue" },
-  { value: "today", label: "Due today" },
-  { value: "this_week", label: "Due this week" },
-  { value: "none", label: "No follow-up" },
-];
-
-const SORT_CHOICES: { value: LeadsSort; label: string }[] = [
-  { value: "recent", label: "Newest" },
-  { value: "follow_up", label: "Follow-up" },
-  { value: "last_contact", label: "Last contact" },
-  { value: "stalest", label: "Stalest" },
-];
-
-function LeadsFilterBar({
-  query,
-  total,
-  visible,
-  leadId,
-}: {
-  query: LeadsQuery;
-  total: number;
-  visible: number;
-  leadId?: string;
-}) {
-  const lead = leadId ?? null;
-  const buildHref = (overrides: Partial<LeadsQuery> & { lead?: string | null }): string => {
-    const qs = buildQueryString(query, { lead, ...overrides });
-    return qs ? `/leads?${qs}` : "/leads";
-  };
-
-  const activeSort = effectiveSort(query);
-  const activeFollowUp = query.followUp ?? null;
-
-  const removableChips: { label: string; clearHref: string }[] = [];
-  if (query.status) {
-    removableChips.push({
-      label: `Status: ${leadStatusLabel(query.status)}`,
-      clearHref: buildHref({ status: null }),
-    });
-  }
-  if (query.source) {
-    removableChips.push({
-      label: `Source: ${query.source}`,
-      clearHref: buildHref({ source: null }),
-    });
-  }
-
-  const showSecondRow = removableChips.length > 0 || total > 0;
-
-  return (
-    <div className="mb-4 space-y-2">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
-        <div className="flex flex-wrap items-center gap-1">
-          <span className="text-muted-foreground">Follow-up:</span>
-          {FOLLOW_UP_CHOICES.map((choice) => {
-            const active = activeFollowUp === choice.value;
-            return (
-              <Link
-                key={choice.label}
-                href={buildHref({ followUp: choice.value })}
-                scroll={false}
-                aria-pressed={active}
-                className={
-                  active
-                    ? "rounded-full bg-foreground px-2.5 py-1 text-background"
-                    : "rounded-full border bg-card px-2.5 py-1 text-muted-foreground hover:bg-muted/40"
-                }
-              >
-                {choice.label}
-              </Link>
-            );
-          })}
-        </div>
-        <div className="ms-auto flex flex-wrap items-center gap-1">
-          <span className="text-muted-foreground">Sort:</span>
-          {SORT_CHOICES.map((choice) => {
-            const active = activeSort === choice.value;
-            return (
-              <Link
-                key={choice.value}
-                href={buildHref({ sort: choice.value })}
-                scroll={false}
-                aria-pressed={active}
-                className={
-                  active
-                    ? "rounded-full bg-foreground px-2.5 py-1 text-background"
-                    : "rounded-full border bg-card px-2.5 py-1 text-muted-foreground hover:bg-muted/40"
-                }
-              >
-                {choice.label}
-              </Link>
-            );
-          })}
-        </div>
-      </div>
-
-      {showSecondRow && (
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          {removableChips.map((chip) => (
-            <Link
-              key={chip.label}
-              href={chip.clearHref}
-              className="inline-flex items-center gap-1 rounded-full border bg-card px-2.5 py-1 hover:bg-muted/40"
-              scroll={false}
-            >
-              {chip.label}
-              <X className="h-3 w-3" aria-hidden />
-              <span className="sr-only">Remove filter</span>
-            </Link>
-          ))}
-          {total > 0 && (
-            <span className="ms-auto tabular-nums">
-              Showing {visible} of {total}
-            </span>
-          )}
-        </div>
       )}
     </div>
   );
@@ -432,125 +304,5 @@ function EmptyState({
         )}
       </CardContent>
     </Card>
-  );
-}
-
-function LeadsTable({
-  leads,
-  query,
-  activeLeadId,
-}: {
-  leads: Lead[];
-  query: LeadsQuery;
-  activeLeadId?: string;
-}) {
-  return (
-    <div className="overflow-hidden rounded-md border bg-card">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-muted-foreground">
-            <tr className="text-left">
-              <Th>Name</Th>
-              <Th>Company</Th>
-              <Th>Property</Th>
-              <Th>Property address</Th>
-              <Th>Email address</Th>
-              <Th>Status</Th>
-              <Th className="w-10 text-center">
-                <span className="sr-only">Enrichment</span>
-              </Th>
-            </tr>
-          </thead>
-          <tbody>
-            {leads.map((lead) => {
-              const enrichment = lead.enrichmentStatus
-                ? enrichmentIcon(lead.enrichmentStatus)
-                : null;
-              const href = buildLeadHref(lead.id, query);
-              const isActive = lead.id === activeLeadId;
-              return (
-                <LeadsRow key={lead.id} href={href} active={isActive}>
-                  <Td>
-                    <Link
-                      href={href}
-                      scroll={false}
-                      className="font-medium text-foreground"
-                    >
-                      {leadFullName(lead)}
-                    </Link>
-                  </Td>
-                  <Td muted>{lead.company || "—"}</Td>
-                  <Td muted>{lead.propertyName || "—"}</Td>
-                  <Td muted>
-                    <span className="block max-w-[24ch] truncate">
-                      {lead.resolvedAddress || "—"}
-                    </span>
-                  </Td>
-                  <Td muted>
-                    <span className="block max-w-[20ch] truncate">
-                      {lead.email || "—"}
-                    </span>
-                  </Td>
-                  <Td>
-                    <Badge variant={leadStatusVariant(lead.status)}>
-                      {leadStatusLabel(lead.status)}
-                    </Badge>
-                  </Td>
-                  <Td className="text-center">
-                    {enrichment && lead.enrichmentStatus ? (
-                      <span
-                        title={enrichmentLabel(lead.enrichmentStatus)}
-                        className="inline-flex items-center justify-center"
-                      >
-                        <enrichment.Icon
-                          className={`h-4 w-4 ${enrichment.className}`}
-                          aria-label={enrichmentLabel(lead.enrichmentStatus)}
-                        />
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground/60">—</span>
-                    )}
-                  </Td>
-                </LeadsRow>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function Th({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <th
-      className={`px-4 py-2.5 font-medium text-xs uppercase tracking-wide text-left ${className ?? ""}`}
-    >
-      {children}
-    </th>
-  );
-}
-
-function Td({
-  children,
-  muted,
-  className,
-}: {
-  children: React.ReactNode;
-  muted?: boolean;
-  className?: string;
-}) {
-  return (
-    <td
-      className={`px-4 py-3 align-middle text-left ${muted ? "text-muted-foreground" : ""} ${className ?? ""}`}
-    >
-      {children}
-    </td>
   );
 }

@@ -34,7 +34,7 @@ export default async function NewLeadPage({
         <CardHeader>
           <CardTitle>New lead</CardTitle>
           <CardDescription>
-            Add a contact you want to follow up with. Only the name is required.
+            Add a property opportunity and the first contact attached to it.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -77,6 +77,15 @@ export default async function NewLeadPage({
                 <Label htmlFor="propertyName">Property name</Label>
                 <Input id="propertyName" name="propertyName" />
               </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="resolvedAddress">Property address</Label>
+              <Input
+                id="resolvedAddress"
+                name="resolvedAddress"
+                placeholder="123 Main St, Atlanta, GA"
+              />
             </div>
 
             <div className="flex flex-col gap-2">
