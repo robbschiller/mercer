@@ -1,7 +1,13 @@
 import Link from "next/link";
-import { Building2, CalendarClock, ExternalLink, Mail, Phone } from "lucide-react";
-import type { LeadPropertyGroup } from "@/lib/store";
-import { leadFullName } from "@/lib/leads/name";
+import {
+  Building2,
+  CalendarClock,
+  ExternalLink,
+  Mail,
+  Phone,
+  User,
+} from "lucide-react";
+import type { PropertyDetail } from "@/lib/store";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,18 +22,27 @@ import {
 } from "@/lib/status-meta";
 
 export function PropertyDetailPanel({
-  group,
+  detail,
   closeHref,
+  buildAccountHref,
+  buildContactHref,
   buildLeadHref,
 }: {
-  group: LeadPropertyGroup;
+  detail: PropertyDetail;
   closeHref: string;
+  buildAccountHref: (id: string) => string;
+  buildContactHref: (id: string) => string;
   buildLeadHref: (id: string) => string;
 }) {
-  const heading = group.propertyName ?? group.address ?? "No property address";
-  const contacts = group.contacts;
-  const primaryLead = contacts[0] ?? null;
-  const statusCounts = countStatuses(contacts);
+  const { property, account, contacts, leads, portfolioCount } = detail;
+  const heading = property.name ?? property.address ?? "Untitled property";
+  const earliestFollowUp = leads.reduce<string | null>((earliest, lead) => {
+    if (!lead.followUpAt) return earliest;
+    if (!earliest || lead.followUpAt < earliest) return lead.followUpAt;
+    return earliest;
+  }, null);
+  const statusCounts = countLeadStatuses(leads);
+  const primaryLead = leads[0] ?? null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -35,19 +50,29 @@ export function PropertyDetailPanel({
         <div className="min-w-0">
           <p className="mb-2 flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
             <Building2 className="h-3.5 w-3.5" />
-            Property opportunity
+            Property
           </p>
-          <h2 className="text-2xl font-medium tracking-tight">{heading}</h2>
-          {group.propertyName && group.address ? (
-            <p className="mt-1 text-sm text-muted-foreground">{group.address}</p>
+          <h2 className="truncate text-2xl font-medium tracking-tight">
+            {heading}
+          </h2>
+          {property.name && property.address ? (
+            <p className="mt-1 truncate text-sm text-muted-foreground">
+              {property.address}
+            </p>
           ) : null}
-          {group.managementCompany ? (
-            <p className="mt-1 text-sm text-muted-foreground">
-              {group.managementCompany}
+          {account ? (
+            <p className="mt-2 text-sm">
+              <Link
+                href={buildAccountHref(account.id)}
+                scroll={false}
+                className="text-muted-foreground hover:text-foreground hover:underline"
+              >
+                {account.name}
+              </Link>
             </p>
           ) : null}
         </div>
-        <Button variant="ghost" size="sm" asChild>
+        <Button variant="ghost" size="sm" className="shrink-0" asChild>
           <Link href={closeHref} scroll={false}>
             Close
           </Link>
@@ -55,81 +80,99 @@ export function PropertyDetailPanel({
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        <Metric label="Contacts" value={String(group.contactCount)} />
+        <Metric label="Contacts" value={String(contacts.length)} />
         <Metric
           label="Portfolio"
-          value={group.portfolioCount ? String(group.portfolioCount) : "-"}
+          value={portfolioCount > 1 ? String(portfolioCount) : "-"}
         />
         <Metric
           label="Follow-up"
-          value={group.earliestFollowUp ? formatDate(group.earliestFollowUp) : "-"}
+          value={earliestFollowUp ? formatDate(earliestFollowUp) : "-"}
         />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Pipeline</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          {statusCounts.map(({ status, count }) => (
-            <Badge key={status} variant={leadStatusVariant(status)}>
-              {count} {leadStatusLabel(status)}
-            </Badge>
-          ))}
-        </CardContent>
-      </Card>
+      {statusCounts.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Pipeline</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            {statusCounts.map(({ status, count }) => (
+              <Badge key={status} variant={leadStatusVariant(status)}>
+                {count} {leadStatusLabel(status)}
+              </Badge>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Contacts at this property</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col divide-y p-0">
-          {contacts.map((lead) => (
-            <div key={lead.id} className="flex flex-col gap-2 px-4 py-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <Link
-                    href={buildLeadHref(lead.id)}
-                    scroll={false}
-                    className="font-medium text-foreground hover:underline"
-                  >
-                    {leadFullName(lead)}
-                  </Link>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                    {lead.email ? (
-                      <span className="inline-flex items-center gap-1">
-                        <Mail className="h-3 w-3" />
-                        {lead.email}
-                      </span>
+          {contacts.length === 0 ? (
+            <p className="px-4 py-3 text-sm text-muted-foreground">
+              No contacts linked to this property yet.
+            </p>
+          ) : (
+            contacts.map(({ contact, role, status, followUpAt, leadId }) => (
+              <div key={contact.id} className="flex flex-col gap-2 px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link
+                      href={buildContactHref(contact.id)}
+                      scroll={false}
+                      className="inline-flex max-w-full items-center gap-1.5 font-medium text-foreground hover:underline"
+                    >
+                      <User className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="truncate">{contact.name}</span>
+                    </Link>
+                    {role ? (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {role}
+                      </p>
                     ) : null}
-                    {lead.phone ? (
-                      <span className="inline-flex items-center gap-1">
-                        <Phone className="h-3 w-3" />
-                        {lead.phone}
-                      </span>
-                    ) : null}
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      {contact.email ? (
+                        <span className="inline-flex min-w-0 items-center gap-1">
+                          <Mail className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{contact.email}</span>
+                        </span>
+                      ) : null}
+                      {contact.phone ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Phone className="h-3 w-3" />
+                          {contact.phone}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
+                  {status ? (
+                    <Badge variant={leadStatusVariant(status)}>
+                      {leadStatusLabel(status)}
+                    </Badge>
+                  ) : null}
                 </div>
-                <Badge variant={leadStatusVariant(lead.status)}>
-                  {leadStatusLabel(lead.status)}
-                </Badge>
+                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <CalendarClock className="h-3 w-3" />
+                    {followUpAt
+                      ? `Follow-up ${formatDate(followUpAt)}`
+                      : "No follow-up"}
+                  </span>
+                  {leadId ? (
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href={buildLeadHref(leadId)} scroll={false}>
+                        Open lead
+                        <ExternalLink className="ml-1 h-3 w-3" />
+                      </Link>
+                    </Button>
+                  ) : null}
+                </div>
               </div>
-              <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span className="inline-flex items-center gap-1">
-                  <CalendarClock className="h-3 w-3" />
-                  {lead.followUpAt
-                    ? `Follow-up ${formatDate(lead.followUpAt)}`
-                    : "No follow-up"}
-                </span>
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href={`/bids/new?leadId=${lead.id}`}>
-                    Bid
-                    <ExternalLink className="ml-1 h-3 w-3" />
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </CardContent>
       </Card>
 
@@ -151,7 +194,7 @@ export function PropertyDetailPanel({
               </Button>
             </>
           ) : (
-            <p>No contacts are linked to this property yet.</p>
+            <p>No leads have come in for this property yet.</p>
           )}
         </CardContent>
       </Card>
@@ -170,9 +213,9 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function countStatuses(contacts: LeadPropertyGroup["contacts"]) {
+function countLeadStatuses(leads: PropertyDetail["leads"]) {
   const counts = new Map<string, number>();
-  for (const lead of contacts) {
+  for (const lead of leads) {
     counts.set(lead.status, (counts.get(lead.status) ?? 0) + 1);
   }
   return Array.from(counts, ([status, count]) => ({ status, count }));

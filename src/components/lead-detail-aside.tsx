@@ -1,11 +1,12 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const STORAGE_KEY = "leads:detail-width";
 const MIN_WIDTH = 320;
-const MAX_WIDTH = 600;
-const DEFAULT_WIDTH = 360;
+const MAX_WIDTH = 520;
+const DEFAULT_WIDTH = 380;
 
 export function LeadDetailAside({ children }: { children: React.ReactNode }) {
   const [width, setWidth] = useState<number>(DEFAULT_WIDTH);
@@ -61,8 +62,12 @@ export function LeadDetailAside({ children }: { children: React.ReactNode }) {
 
   return (
     <aside
-      style={{ width: mounted ? width : DEFAULT_WIDTH }}
-      className="sticky top-0 h-screen shrink-0 self-start overflow-y-auto border-l bg-background"
+      style={
+        {
+          "--detail-panel-width": `${mounted ? width : DEFAULT_WIDTH}px`,
+        } as CSSProperties
+      }
+      className="fixed right-0 top-14 z-40 h-[calc(100svh-3.5rem)] w-[min(calc(100vw-1rem),24rem)] shrink-0 overflow-y-auto border-l bg-background shadow-xl xl:sticky xl:top-0 xl:z-auto xl:w-(--detail-panel-width) xl:self-start xl:shadow-none"
     >
       <div
         role="separator"
@@ -72,7 +77,7 @@ export function LeadDetailAside({ children }: { children: React.ReactNode }) {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        className="group absolute left-0 top-0 z-10 flex h-full w-2 -translate-x-1/2 cursor-col-resize items-center justify-center"
+        className="group absolute left-0 top-0 z-10 hidden h-full w-2 -translate-x-1/2 cursor-col-resize items-center justify-center xl:flex"
       >
         <span className="h-full w-px bg-transparent transition-colors group-hover:bg-border" />
       </div>

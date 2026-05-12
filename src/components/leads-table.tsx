@@ -191,6 +191,7 @@ export function LeadsTable({
   total,
   page,
   sourceOptions,
+  isDetailOpen = false,
 }: {
   leads: LeadTableRow[]
   query: LeadsTableQuery
@@ -198,6 +199,7 @@ export function LeadsTable({
   total: number
   page: number
   sourceOptions: LeadSourceOption[]
+  isDetailOpen?: boolean
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -230,6 +232,7 @@ export function LeadsTable({
     () => [
       {
         accessorKey: "firstName",
+        size: 180,
         enableSorting: false,
         enableColumnFilter: false,
         header: () => <HeaderLabel>Name</HeaderLabel>,
@@ -239,7 +242,7 @@ export function LeadsTable({
             <Link
               href={lead.href}
               scroll={false}
-              className="font-medium text-foreground"
+              className="block truncate font-medium text-foreground"
             >
               {leadFullName(lead)}
             </Link>
@@ -248,6 +251,7 @@ export function LeadsTable({
       },
       {
         accessorKey: "company",
+        size: 180,
         enableSorting: false,
         enableColumnFilter: false,
         header: () => <HeaderLabel>Company</HeaderLabel>,
@@ -255,6 +259,7 @@ export function LeadsTable({
       },
       {
         accessorKey: "propertyName",
+        size: 200,
         enableSorting: false,
         enableColumnFilter: false,
         header: () => <HeaderLabel>Property</HeaderLabel>,
@@ -264,6 +269,7 @@ export function LeadsTable({
       },
       {
         accessorKey: "resolvedAddress",
+        size: 240,
         enableSorting: false,
         enableColumnFilter: false,
         header: () => <HeaderLabel>Property address</HeaderLabel>,
@@ -275,6 +281,7 @@ export function LeadsTable({
       },
       {
         accessorKey: "email",
+        size: 200,
         enableSorting: false,
         enableColumnFilter: false,
         header: () => <HeaderLabel>Email address</HeaderLabel>,
@@ -389,6 +396,9 @@ export function LeadsTable({
         globalFilter: query.q,
         pagination,
         columnVisibility: {
+          resolvedAddress: !isDetailOpen,
+          email: !isDetailOpen,
+          enrichment: !isDetailOpen,
           sourceTag: false,
           followUpAt: false,
           lastContactedAt: false,
@@ -405,15 +415,17 @@ export function LeadsTable({
         pageCount,
       }}
     >
-      <div className="overflow-hidden rounded-md border bg-card">
-        <DataTableToolbarSection className="justify-between border-b p-0 px-3 py-2">
-          <DataTableSearchFilter<LeadTableRow>
-            value={query.q}
-            onChange={(q) => pushQuery({ q: q.trim(), page: 1 })}
-            placeholder="Search leads..."
-            className="min-w-64 max-w-md [&_input]:border-0 [&_input]:shadow-none [&_input]:focus-visible:ring-0"
-          />
-          <div className="flex items-center gap-2">
+      <div className="min-w-0 overflow-hidden rounded-md border bg-card">
+        <DataTableToolbarSection className="flex-wrap justify-between gap-2 border-b p-0 px-3 py-2">
+          <div className="min-w-0 flex-1">
+            <DataTableSearchFilter<LeadTableRow>
+              value={query.q}
+              onChange={(q) => pushQuery({ q: q.trim(), page: 1 })}
+              placeholder="Search leads..."
+              className="w-full max-w-md [&_input]:border-0 [&_input]:shadow-none [&_input]:focus-visible:ring-0"
+            />
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
             <DataTableFilterMenu<LeadTableRow>
               filters={filters}
               onFiltersChange={(nextFilters) => {
@@ -434,7 +446,10 @@ export function LeadsTable({
             />
           </div>
         </DataTableToolbarSection>
-        <DataTable className="rounded-none border-0 border-b">
+        <DataTable
+          className="rounded-none border-0 border-b"
+          tableClassName="table-fixed"
+        >
           <DataTableHeader className="bg-muted/40" />
           <DataTableBody<LeadTableRow>
             onRowClick={(lead) => {
