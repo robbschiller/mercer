@@ -1471,6 +1471,7 @@ export type LeadSourceOption = {
 export type LeadPropertyGroup = {
   key: string;
   accountId: string | null;
+  propertyId: string | null;
   address: string | null;
   managementCompany: string | null;
   propertyName: string | null;
@@ -1653,6 +1654,7 @@ export async function getLeadPropertyGroups(
     .select({
       key: leadPropertyGroupKey.as("key"),
       accountId: sql<string | null>`min(${leads.accountId}::text)`.as("account_id"),
+      propertyId: sql<string | null>`min(${leads.propertyId}::text)`.as("property_id"),
       address: sql<string | null>`min(nullif(btrim(${leads.resolvedAddress}), ''))`.as(
         "address",
       ),
@@ -1769,6 +1771,7 @@ export async function getLeadPropertyGroups(
     groups: groups.map((group) => ({
       key: group.key,
       accountId: group.accountId,
+      propertyId: group.propertyId,
       address: group.address,
       managementCompany: group.managementCompany,
       propertyName: group.propertyName,
@@ -1892,6 +1895,513 @@ export async function getLatestBidForLead(leadId: string) {
     .orderBy(desc(bids.updatedAt))
     .limit(1);
   return rows[0] ?? null;
+}
+
+// ── Entity detail panels (Account / Property / Contact) ────────────────────
+//
+// These power the leads page side-panel views. Each returns the entity plus
+// the immediate graph neighbours needed for cross-linking: an account knows
+// its properties and contacts; a property knows its account, contacts, and
+// inbound leads; a contact knows its account, properties, and leads. Status
+// rollups come from the leads table (the inbound signal), which is what the
+// pipeline view in the panels surfaces.
+
+export type LeadSummary = Pick<
+  Lead,
+  "id" | "name" | "status" | "followUpAt" | "lastContactedAt" | "createdAt"
+>;
+
+export type AccountPropertySummary = {
+  property: Property;
+  contactCount: number;
+  leadCount: number;
+  earliestFollowUp: string | null;
+  pipeline: Array<{ status: LeadStatus; count: number }>;
+};
+
+export type AccountContactSummary = {
+  contact: Contact;
+  propertyCount: number;
+  status: LeadStatus | null;
+  followUpAt: string | null;
+};
+
+export type AccountDetail = {
+  account: Account;
+  properties: AccountPropertySummary[];
+  contacts: AccountContactSummary[];
+  leadCount: number;
+};
+
+export type PropertyContactSummary = {
+  contact: Contact;
+  role: string | null;
+  status: LeadStatus | null;
+  followUpAt: string | null;
+  leadId: string | null;
+};
+
+export type PropertyDetail = {
+  property: Property;
+  account: Account | null;
+  contacts: PropertyContactSummary[];
+  leads: LeadSummary[];
+  portfolioCount: number;
+};
+
+export type ContactPropertySummary = {
+  property: Property;
+  role: string | null;
+  status: LeadStatus | null;
+  followUpAt: string | null;
+};
+
+export type ContactDetail = {
+  contact: Contact;
+  account: Account | null;
+  properties: ContactPropertySummary[];
+  leads: LeadSummary[];
+};
+
+export async function getAccountDetail(
+  id: string,
+): Promise<AccountDetail | null> {
+  const user = await requireUser();
+  const accountRows = await db
+    .select()
+    .from(accounts)
+    .where(and(eq(accounts.id, id), eq(accounts.userId, user.ownerUserId)))
+    .limit(1);
+  const account = accountRows[0];
+  if (!account) return null;
+
+  const propertyRows = await db
+    .select()
+    .from(properties)
+    .where(
+      and(
+        eq(properties.accountId, account.id),
+        eq(properties.userId, user.ownerUserId),
+      ),
+    )
+    .orderBy(asc(properties.name), asc(properties.address));
+
+  const propertyIds = propertyRows.map((p) => p.id);
+
+  const [contactCountsByProperty, leadAggByProperty] = await Promise.all([
+    propertyIds.length
+      ? db
+          .select({
+            propertyId: propertyContacts.propertyId,
+            count: sql<number>`count(distinct ${propertyContacts.contactId})::int`.as(
+              "count",
+            ),
+          })
+          .from(propertyContacts)
+          .where(
+            and(
+              eq(propertyContacts.userId, user.ownerUserId),
+              eq(propertyContacts.active, true),
+              inArray(propertyContacts.propertyId, propertyIds),
+            ),
+          )
+          .groupBy(propertyContacts.propertyId)
+      : Promise.resolve(
+          [] as Array<{ propertyId: string; count: number }>,
+        ),
+    propertyIds.length
+      ? db
+          .select({
+            propertyId: leads.propertyId,
+            status: leads.status,
+            count: sql<number>`count(*)::int`.as("count"),
+            earliestFollowUp: sql<string | null>`min(${leads.followUpAt})::text`.as(
+              "earliest_follow_up",
+            ),
+          })
+          .from(leads)
+          .where(
+            and(
+              eq(leads.userId, user.ownerUserId),
+              inArray(leads.propertyId, propertyIds),
+            ),
+          )
+          .groupBy(leads.propertyId, leads.status)
+      : Promise.resolve(
+          [] as Array<{
+            propertyId: string | null;
+            status: LeadStatus;
+            count: number;
+            earliestFollowUp: string | null;
+          }>,
+        ),
+  ]);
+
+  const contactCountByProperty = new Map(
+    contactCountsByProperty.map(
+      (row) => [row.propertyId, Number(row.count)] as const,
+    ),
+  );
+  const pipelineByProperty = new Map<
+    string,
+    Array<{ status: LeadStatus; count: number }>
+  >();
+  const earliestByProperty = new Map<string, string | null>();
+  const leadCountByProperty = new Map<string, number>();
+  for (const row of leadAggByProperty) {
+    if (!row.propertyId) continue;
+    const list = pipelineByProperty.get(row.propertyId) ?? [];
+    list.push({ status: row.status, count: Number(row.count) });
+    pipelineByProperty.set(row.propertyId, list);
+    leadCountByProperty.set(
+      row.propertyId,
+      (leadCountByProperty.get(row.propertyId) ?? 0) + Number(row.count),
+    );
+    const prevEarliest = earliestByProperty.get(row.propertyId) ?? null;
+    if (
+      row.earliestFollowUp &&
+      (!prevEarliest || row.earliestFollowUp < prevEarliest)
+    ) {
+      earliestByProperty.set(row.propertyId, row.earliestFollowUp);
+    }
+  }
+
+  const contactRows = await db
+    .select({
+      contact: contacts,
+    })
+    .from(contacts)
+    .where(
+      and(
+        eq(contacts.accountId, account.id),
+        eq(contacts.userId, user.ownerUserId),
+      ),
+    )
+    .orderBy(asc(contacts.name));
+
+  const accountContactIds = contactRows.map((row) => row.contact.id);
+
+  const [contactPropertyCountRows, contactLatestLeadRows] = await Promise.all([
+    accountContactIds.length
+      ? db
+          .select({
+            contactId: propertyContacts.contactId,
+            count: sql<number>`count(distinct ${propertyContacts.propertyId})::int`.as(
+              "count",
+            ),
+          })
+          .from(propertyContacts)
+          .where(
+            and(
+              eq(propertyContacts.userId, user.ownerUserId),
+              eq(propertyContacts.active, true),
+              inArray(propertyContacts.contactId, accountContactIds),
+            ),
+          )
+          .groupBy(propertyContacts.contactId)
+      : Promise.resolve(
+          [] as Array<{ contactId: string; count: number }>,
+        ),
+    accountContactIds.length
+      ? db
+          .selectDistinctOn([leads.primaryContactId], {
+            contactId: leads.primaryContactId,
+            status: leads.status,
+            followUpAt: sql<string | null>`${leads.followUpAt}::text`.as(
+              "follow_up_at",
+            ),
+          })
+          .from(leads)
+          .where(
+            and(
+              eq(leads.userId, user.ownerUserId),
+              inArray(leads.primaryContactId, accountContactIds),
+            ),
+          )
+          .orderBy(
+            leads.primaryContactId,
+            sql`${leads.lastContactedAt} desc nulls last`,
+            desc(leads.createdAt),
+          )
+      : Promise.resolve(
+          [] as Array<{
+            contactId: string | null;
+            status: LeadStatus;
+            followUpAt: string | null;
+          }>,
+        ),
+  ]);
+
+  const contactPropertyCount = new Map(
+    contactPropertyCountRows.map(
+      (row) => [row.contactId, Number(row.count)] as const,
+    ),
+  );
+  const contactLatestLead = new Map(
+    contactLatestLeadRows.flatMap((row) =>
+      row.contactId
+        ? ([
+            [
+              row.contactId,
+              { status: row.status, followUpAt: row.followUpAt },
+            ] as const,
+          ] as const)
+        : [],
+    ),
+  );
+
+  const propertySummaries: AccountPropertySummary[] = propertyRows.map((p) => ({
+    property: p,
+    contactCount: contactCountByProperty.get(p.id) ?? 0,
+    leadCount: leadCountByProperty.get(p.id) ?? 0,
+    earliestFollowUp: earliestByProperty.get(p.id) ?? null,
+    pipeline: pipelineByProperty.get(p.id) ?? [],
+  }));
+
+  const contactSummaries: AccountContactSummary[] = contactRows.map(
+    ({ contact }) => {
+      const latest = contactLatestLead.get(contact.id);
+      return {
+        contact,
+        propertyCount: contactPropertyCount.get(contact.id) ?? 0,
+        status: latest?.status ?? null,
+        followUpAt: latest?.followUpAt ?? null,
+      };
+    },
+  );
+
+  const leadCount = Array.from(leadCountByProperty.values()).reduce(
+    (sum, n) => sum + n,
+    0,
+  );
+
+  return {
+    account,
+    properties: propertySummaries,
+    contacts: contactSummaries,
+    leadCount,
+  };
+}
+
+export async function getPropertyDetail(
+  id: string,
+): Promise<PropertyDetail | null> {
+  const user = await requireUser();
+  const propertyRows = await db
+    .select()
+    .from(properties)
+    .where(and(eq(properties.id, id), eq(properties.userId, user.ownerUserId)))
+    .limit(1);
+  const property = propertyRows[0];
+  if (!property) return null;
+
+  const [accountRows, contactRows, leadRows, portfolioCountRows] =
+    await Promise.all([
+      property.accountId
+        ? db
+            .select()
+            .from(accounts)
+            .where(
+              and(
+                eq(accounts.id, property.accountId),
+                eq(accounts.userId, user.ownerUserId),
+              ),
+            )
+            .limit(1)
+        : Promise.resolve([] as Account[]),
+      db
+        .select({
+          contact: contacts,
+          role: propertyContacts.role,
+        })
+        .from(propertyContacts)
+        .innerJoin(contacts, eq(contacts.id, propertyContacts.contactId))
+        .where(
+          and(
+            eq(propertyContacts.propertyId, property.id),
+            eq(propertyContacts.userId, user.ownerUserId),
+            eq(propertyContacts.active, true),
+          ),
+        )
+        .orderBy(asc(contacts.name)),
+      db
+        .select({
+          id: leads.id,
+          name: leads.name,
+          status: leads.status,
+          followUpAt: leads.followUpAt,
+          lastContactedAt: leads.lastContactedAt,
+          createdAt: leads.createdAt,
+          primaryContactId: leads.primaryContactId,
+        })
+        .from(leads)
+        .where(
+          and(
+            eq(leads.userId, user.ownerUserId),
+            eq(leads.propertyId, property.id),
+          ),
+        )
+        .orderBy(desc(leads.createdAt)),
+      property.accountId
+        ? db
+            .select({
+              count: sql<number>`count(*)::int`.as("count"),
+            })
+            .from(properties)
+            .where(
+              and(
+                eq(properties.accountId, property.accountId),
+                eq(properties.userId, user.ownerUserId),
+              ),
+            )
+        : Promise.resolve([{ count: 1 }]),
+    ]);
+
+  const latestLeadByContactId = new Map<
+    string,
+    { status: LeadStatus; followUpAt: string | null; leadId: string }
+  >();
+  for (const lead of leadRows) {
+    if (!lead.primaryContactId) continue;
+    if (latestLeadByContactId.has(lead.primaryContactId)) continue;
+    latestLeadByContactId.set(lead.primaryContactId, {
+      status: lead.status,
+      followUpAt: lead.followUpAt,
+      leadId: lead.id,
+    });
+  }
+
+  const contactSummaries: PropertyContactSummary[] = contactRows.map(
+    ({ contact, role }) => {
+      const latest = latestLeadByContactId.get(contact.id);
+      return {
+        contact,
+        role,
+        status: latest?.status ?? null,
+        followUpAt: latest?.followUpAt ?? null,
+        leadId: latest?.leadId ?? null,
+      };
+    },
+  );
+
+  return {
+    property,
+    account: accountRows[0] ?? null,
+    contacts: contactSummaries,
+    leads: leadRows.map(
+      ({ id, name, status, followUpAt, lastContactedAt, createdAt }) => ({
+        id,
+        name,
+        status,
+        followUpAt,
+        lastContactedAt,
+        createdAt,
+      }),
+    ),
+    portfolioCount: Number(portfolioCountRows[0]?.count ?? 0),
+  };
+}
+
+export async function getContactDetail(
+  id: string,
+): Promise<ContactDetail | null> {
+  const user = await requireUser();
+  const contactRows = await db
+    .select()
+    .from(contacts)
+    .where(and(eq(contacts.id, id), eq(contacts.userId, user.ownerUserId)))
+    .limit(1);
+  const contact = contactRows[0];
+  if (!contact) return null;
+
+  const [accountRows, propertyRows, leadRows] = await Promise.all([
+    contact.accountId
+      ? db
+          .select()
+          .from(accounts)
+          .where(
+            and(
+              eq(accounts.id, contact.accountId),
+              eq(accounts.userId, user.ownerUserId),
+            ),
+          )
+          .limit(1)
+      : Promise.resolve([] as Account[]),
+    db
+      .select({
+        property: properties,
+        role: propertyContacts.role,
+      })
+      .from(propertyContacts)
+      .innerJoin(properties, eq(properties.id, propertyContacts.propertyId))
+      .where(
+        and(
+          eq(propertyContacts.contactId, contact.id),
+          eq(propertyContacts.userId, user.ownerUserId),
+          eq(propertyContacts.active, true),
+        ),
+      )
+      .orderBy(asc(properties.name), asc(properties.address)),
+    db
+      .select({
+        id: leads.id,
+        name: leads.name,
+        status: leads.status,
+        followUpAt: leads.followUpAt,
+        lastContactedAt: leads.lastContactedAt,
+        createdAt: leads.createdAt,
+        propertyId: leads.propertyId,
+      })
+      .from(leads)
+      .where(
+        and(
+          eq(leads.userId, user.ownerUserId),
+          eq(leads.primaryContactId, contact.id),
+        ),
+      )
+      .orderBy(desc(leads.createdAt)),
+  ]);
+
+  const latestLeadByPropertyId = new Map<
+    string,
+    { status: LeadStatus; followUpAt: string | null }
+  >();
+  for (const lead of leadRows) {
+    if (!lead.propertyId) continue;
+    if (latestLeadByPropertyId.has(lead.propertyId)) continue;
+    latestLeadByPropertyId.set(lead.propertyId, {
+      status: lead.status,
+      followUpAt: lead.followUpAt,
+    });
+  }
+
+  const propertySummaries: ContactPropertySummary[] = propertyRows.map(
+    ({ property, role }) => {
+      const latest = latestLeadByPropertyId.get(property.id);
+      return {
+        property,
+        role,
+        status: latest?.status ?? null,
+        followUpAt: latest?.followUpAt ?? null,
+      };
+    },
+  );
+
+  return {
+    contact,
+    account: accountRows[0] ?? null,
+    properties: propertySummaries,
+    leads: leadRows.map(
+      ({ id, name, status, followUpAt, lastContactedAt, createdAt }) => ({
+        id,
+        name,
+        status,
+        followUpAt,
+        lastContactedAt,
+        createdAt,
+      }),
+    ),
+  };
 }
 
 export type LeadImportRow = {

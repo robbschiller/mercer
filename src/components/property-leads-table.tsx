@@ -55,6 +55,8 @@ type PropertyTableQuery = {
 
 type PropertyTableRow = LeadPropertyGroup & {
   href: string;
+  accountHref: string | null;
+  contactHrefs: Record<string, string>;
   status: string | null;
   sourceTag: string | null;
   followUpAt: string | null;
@@ -138,7 +140,7 @@ function filterValue(
 
 function buildQueryString(
   query: PropertyTableQuery,
-  overrides: Partial<PropertyTableQuery> & { property?: string | null },
+  overrides: Partial<PropertyTableQuery>,
 ) {
   const next = { ...query, ...overrides };
   const sp = new URLSearchParams();
@@ -150,7 +152,6 @@ function buildQueryString(
   if (next.limit !== 100) sp.set("limit", String(next.limit));
   if (next.page > 1) sp.set("page", String(next.page));
   if (next.view === "contact") sp.set("view", "contact");
-  if (overrides.property) sp.set("property", overrides.property);
   return sp.toString();
 }
 
@@ -165,17 +166,19 @@ function HeaderLabel({ children }: { children: React.ReactNode }) {
 export function PropertyLeadsTable({
   groups,
   query,
-  activePropertyKey,
+  activePropertyId,
   total,
   page,
   sourceOptions,
+  isDetailOpen = false,
 }: {
   groups: PropertyTableRow[];
   query: PropertyTableQuery;
-  activePropertyKey?: string;
+  activePropertyId?: string | null;
   total: number;
   page: number;
   sourceOptions: LeadSourceOption[];
+  isDetailOpen?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -208,6 +211,7 @@ export function PropertyLeadsTable({
     () => [
       {
         accessorKey: "propertyName",
+        size: 280,
         enableSorting: false,
         enableColumnFilter: false,
         header: () => <HeaderLabel>Property</HeaderLabel>,
@@ -216,15 +220,22 @@ export function PropertyLeadsTable({
           const heading =
             group.propertyName ?? group.address ?? "No property address";
           return (
-            <div className="flex min-w-0 max-w-[22rem] flex-col gap-1 py-1">
-              <Link
-                href={group.href}
-                scroll={false}
-                className="inline-flex min-w-0 items-center gap-2 font-medium text-foreground hover:underline"
-              >
-                <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="truncate">{heading}</span>
-              </Link>
+            <div className="flex min-w-0 flex-col gap-1 py-1">
+              {group.href ? (
+                <Link
+                  href={group.href}
+                  scroll={false}
+                  className="inline-flex min-w-0 items-center gap-2 font-medium text-foreground hover:underline"
+                >
+                  <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate">{heading}</span>
+                </Link>
+              ) : (
+                <span className="inline-flex min-w-0 items-center gap-2 font-medium text-foreground">
+                  <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate">{heading}</span>
+                </span>
+              )}
               <span className="inline-flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
                 <MapPin className="h-3 w-3 shrink-0" />
                 <span className="truncate">
@@ -239,35 +250,75 @@ export function PropertyLeadsTable({
       },
       {
         accessorKey: "managementCompany",
+        size: 160,
         enableSorting: false,
         enableColumnFilter: false,
         header: () => <HeaderLabel>Account</HeaderLabel>,
-        cell: ({ row }) => (
-          <span className="block max-w-[20ch] truncate text-muted-foreground">
-            {row.original.managementCompany || "-"}
-          </span>
-        ),
+        cell: ({ row }) => {
+          const { managementCompany, accountHref } = row.original;
+          if (!managementCompany) {
+            return <span className="text-muted-foreground">-</span>;
+          }
+          if (accountHref) {
+            return (
+              <Link
+                href={accountHref}
+                scroll={false}
+                className="block truncate text-muted-foreground hover:text-foreground hover:underline"
+              >
+                {managementCompany}
+              </Link>
+            );
+          }
+          return (
+            <span className="block truncate text-muted-foreground">
+              {managementCompany}
+            </span>
+          );
+        },
       },
       {
         id: "contacts",
+        size: 240,
         enableSorting: false,
         enableColumnFilter: false,
         header: () => <HeaderLabel>Contacts</HeaderLabel>,
         cell: ({ row }) => {
           const contacts = row.original.contacts.slice(0, 3);
           const extra = row.original.contactCount - contacts.length;
+          const contactHrefs = row.original.contactHrefs;
           return (
-            <div className="flex max-w-[20rem] flex-wrap items-center gap-1.5">
-              {contacts.map((lead) => (
-                <span
-                  key={lead.id}
-                  className="inline-flex max-w-[13rem] items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs"
-                  title={lead.email ?? lead.phone ?? undefined}
-                >
-                  <Users className="h-3 w-3 text-muted-foreground" />
-                  <span className="truncate">{leadFullName(lead)}</span>
-                </span>
-              ))}
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              {contacts.map((lead) => {
+                const contactId = lead.primaryContactId;
+                const href = contactId ? contactHrefs[contactId] : null;
+                const chipClass =
+                  "inline-flex max-w-[13rem] items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs";
+                if (href) {
+                  return (
+                    <Link
+                      key={lead.id}
+                      href={href}
+                      scroll={false}
+                      title={lead.email ?? lead.phone ?? undefined}
+                      className={`${chipClass} hover:border-foreground/40 hover:bg-muted`}
+                    >
+                      <Users className="h-3 w-3 text-muted-foreground" />
+                      <span className="truncate">{leadFullName(lead)}</span>
+                    </Link>
+                  );
+                }
+                return (
+                  <span
+                    key={lead.id}
+                    className={chipClass}
+                    title={lead.email ?? lead.phone ?? undefined}
+                  >
+                    <Users className="h-3 w-3 text-muted-foreground" />
+                    <span className="truncate">{leadFullName(lead)}</span>
+                  </span>
+                );
+              })}
               {extra > 0 ? (
                 <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
                   +{extra}
@@ -279,6 +330,7 @@ export function PropertyLeadsTable({
       },
       {
         id: "pipeline",
+        size: 180,
         enableSorting: false,
         enableColumnFilter: false,
         header: () => <HeaderLabel>Pipeline</HeaderLabel>,
@@ -294,6 +346,7 @@ export function PropertyLeadsTable({
       },
       {
         accessorKey: "portfolioCount",
+        size: 112,
         enableSorting: false,
         enableColumnFilter: false,
         header: () => <HeaderLabel>Portfolio</HeaderLabel>,
@@ -307,6 +360,7 @@ export function PropertyLeadsTable({
       },
       {
         accessorKey: "followUpAt",
+        size: 128,
         enableColumnFilter: true,
         enableSorting: true,
         header: "Follow-up",
@@ -375,7 +429,7 @@ export function PropertyLeadsTable({
     <DataTableRoot
       data={groups}
       columns={columns}
-      getRowId={(group) => group.key}
+      getRowId={(group) => group.propertyId ?? group.key}
       state={{
         sorting,
         columnFilters: filters.map((filter) => ({
@@ -385,12 +439,15 @@ export function PropertyLeadsTable({
         globalFilter: query.q,
         pagination,
         columnVisibility: {
+          contacts: !isDetailOpen,
+          pipeline: !isDetailOpen,
+          portfolioCount: !isDetailOpen,
           status: false,
           sourceTag: false,
           lastContactedAt: false,
           createdAt: false,
         },
-        rowSelection: activePropertyKey ? { [activePropertyKey]: true } : {},
+        rowSelection: activePropertyId ? { [activePropertyId]: true } : {},
       }}
       config={{
         enableFilters: true,
@@ -401,7 +458,7 @@ export function PropertyLeadsTable({
         pageCount,
       }}
     >
-      <div className="overflow-hidden rounded-md border bg-card">
+      <div className="min-w-0 overflow-hidden rounded-md border bg-card">
         <DataTableToolbarSection className="flex-wrap justify-between gap-2 border-b p-0 px-3 py-2">
           <div className="min-w-0 flex-1">
             <DataTableSearchFilter<PropertyTableRow>
@@ -434,11 +491,13 @@ export function PropertyLeadsTable({
         </DataTableToolbarSection>
         <DataTable
           className="rounded-none border-0 border-b"
+          tableClassName="table-fixed"
           maxHeight="calc(100vh - 15rem)"
         >
           <DataTableHeader className="bg-muted/40" />
           <DataTableBody<PropertyTableRow>
             onRowClick={(group) => {
+              if (!group.href) return;
               startTransition(() => router.push(group.href, { scroll: false }));
             }}
           >

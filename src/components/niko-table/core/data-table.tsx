@@ -60,6 +60,10 @@ export interface DataTableContainerProps {
    */
   className?: string
   /**
+   * Additional CSS classes for the underlying table element.
+   */
+  tableClassName?: string
+  /**
    * Sets the height of the table container.
    * When provided, enables vertical scrolling and allows DataTableBody/DataTableVirtualizedBody
    * to use onScroll, onScrolledTop, and onScrolledBottom callbacks.
@@ -109,6 +113,7 @@ export interface DataTableContainerProps {
 export function DataTable({
   children,
   className,
+  tableClassName,
   height,
   maxHeight,
 }: DataTableContainerProps) {
@@ -143,7 +148,7 @@ export function DataTable({
         maxHeight: finalMaxHeight,
       }}
     >
-      <TableComponent>{children}</TableComponent>
+      <TableComponent className={tableClassName}>{children}</TableComponent>
     </div>
   )
 }
