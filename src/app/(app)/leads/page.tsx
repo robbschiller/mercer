@@ -148,21 +148,22 @@ export default async function LeadsPage({
   );
 
   return (
-    <div className="relative flex min-h-0 w-full flex-1 overflow-hidden">
-      <div className="min-w-0 flex-1 overflow-hidden p-3 lg:p-4">
-        <LeadsToolbar />
+    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+      <LeadsToolbar />
 
-        {params.imported && (
-          <div className="mb-4 rounded-md border border-emerald-600/30 bg-emerald-600/5 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-400">
-            Imported {params.imported} lead{params.imported === "1" ? "" : "s"}.
-          </div>
-        )}
+      {params.imported && (
+        <div className="border-b border-emerald-600/30 bg-emerald-600/5 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-400">
+          Imported {params.imported} lead{params.imported === "1" ? "" : "s"}.
+        </div>
+      )}
 
-        {visible === 0 && propertyGroups ? (
+      {visible === 0 && propertyGroups ? (
+        <div className="p-3 lg:p-4">
           <EmptyState query={query} hasFilters={hasFilters} />
-        ) : propertyGroups ? (
-          <PropertyLeadsTable
-            groups={propertyGroups.map((group) => {
+        </div>
+      ) : propertyGroups ? (
+        <PropertyLeadsTable
+          groups={propertyGroups.map((group) => {
               const contactHrefs: Record<string, string> = {};
               for (const lead of group.contacts) {
                 if (
