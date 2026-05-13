@@ -22,6 +22,7 @@ import {
   createProposalShare,
   createLead,
   createLeadsBatch,
+  searchAccounts,
   updateLead,
   updateLeadStatus,
   logLeadContact,
@@ -541,6 +542,12 @@ export async function declineProposalShareAction(formData: FormData) {
 }
 
 // ── Leads ──
+
+export async function searchAccountsAction(
+  q: string,
+): Promise<{ id: string; name: string }[]> {
+  return searchAccounts(q);
+}
 
 export async function createLeadAction(formData: FormData) {
   const result = createLeadSchema.safeParse(formDataToObject(formData));

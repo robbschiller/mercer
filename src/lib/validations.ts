@@ -32,7 +32,7 @@ const formPlaceId = z.preprocess((val: unknown) => {
 const formOptionalUuid = z.preprocess((val: unknown) => {
   if (val === "" || val === undefined || val === null) return null;
   return String(val);
-}, z.union([z.string().uuid("Invalid lead ID"), z.null()]));
+}, z.union([z.string().uuid("Invalid ID"), z.null()]));
 
 export const createBidSchema = z.object({
   propertyName: z.string().min(1, "Property name is required"),
@@ -207,6 +207,7 @@ export const createLeadSchema = z.object({
   email: optionalEmail,
   phone: optionalText,
   company: optionalText,
+  accountId: formOptionalUuid,
   propertyName: optionalText,
   resolvedAddress: optionalText,
   notes: z

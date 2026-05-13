@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { BidSummary } from "@/components/bid-summary";
 import { BidDetailSections } from "@/components/bid-detail-sections";
+import { BreadcrumbLabel } from "@/components/breadcrumb-label";
 import { DeleteBidButton } from "@/components/delete-bid-button";
 import { OsmFootprintsSection } from "@/components/osm-footprints-section";
 import { OsmFootprintsSkeleton } from "@/components/page-loading";
@@ -61,8 +62,11 @@ export default async function BidPage({
     })),
   });
 
+  const bidLabel = bid.propertyName || bid.clientName || "Untitled bid";
+
   return (
     <div className="container mx-auto max-w-2xl px-4 py-8 flex flex-col gap-6">
+      <BreadcrumbLabel segment={id} label={bidLabel} />
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" asChild>
           <Link href="/bids">&larr; Bids</Link>
