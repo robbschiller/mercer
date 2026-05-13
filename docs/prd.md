@@ -2,7 +2,7 @@
 
 **Status:** Draft
 **Audience:** Robbie + Timmy
-**Last updated:** May 2026
+**Last updated:** 2026-05-13
 
 ---
 
@@ -627,7 +627,9 @@ As of this PRD, the following is live at mercer-bids.vercel.app:
 - Bid status tracking (draft / sent / won / lost) with automatic updates on proposal response
 - OSM building footprints on bid detail (hidden pending accuracy resolution)
 - Lead import (CSV) with column auto-mapping, source tags, enrichment status, lead detail
-- Property-first Niko leads table (default) with embedded contacts, account/company, pipeline mix, portfolio count, follow-up rollup, Niko search/filter/sort/pagination, and a resizable property detail side panel. Contact-row table remains available via `view=contact`.
+- Property-first Niko leads table (default) with embedded contacts, account/company, pipeline mix, portfolio count, follow-up rollup, and Niko search/filter/sort/pagination. Contact-row table remains available via `view=contact`.
+- Routed detail pages for properties, accounts, and contacts (`/leads/properties/[id]`, `/leads/accounts/[id]`, `/leads/contacts/[id]`) with cross-links between accounts ↔ properties ↔ contacts ↔ leads, replacing the in-table side panel.
+- Account autocomplete on `/leads/new` that suggests existing accounts so manually-added leads attach to the existing account graph instead of minting near-duplicates.
 - Normalized lead-domain model (`accounts`, `properties`, `contacts`, relationship tables, `activity_events`, `audit_log`) with compatibility fields on legacy leads during migration
 - Per-lead outreach state: `last_contacted_at`, `follow_up_at`, `contact_attempts`, with log-contact and follow-up controls in the lead detail aside and overdue rollups on property rows
 - Lead-to-bid conversion with pre-filled bid creation
@@ -635,6 +637,7 @@ As of this PRD, the following is live at mercer-bids.vercel.app:
 - Dashboard at `/dashboard` with lead and bid summary counts
 - Onboarding wizard at `/onboarding` with website capture, Anthropic Haiku profile extraction when configured, confirm/edit step, theme confirmation, and skip path
 - Project layer with `/projects`, `/projects/[id]`, automatic project creation on proposal acceptance, project status state machine, public project updates, and `/p/[slug]` status-page pivot post-acceptance
+- Multi-user organizations via `org_memberships`: per-user `owner`/`admin`/`member` roles, email-keyed invites auto-accepted on first sign-in, `/settings/members` to manage the team, `/settings/company` for the company profile pulled from onboarding, and `getOrgContext()` so all tenant-scoped queries route through the org owner's id with no data migration on existing `user_id` columns
 
 **What's not built:** none of the AI-native operations described in §5. The current app is a Phase 0 proof of the data model and the non-AI surfaces. The product described in this PRD starts from here.
 

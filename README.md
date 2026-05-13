@@ -12,7 +12,7 @@ The deployed product today (Phase 0) is the non-AI substrate of that workflow: l
 | ----------- | ------- | ------------- |
 | `(marketing)` | Public landing page; redirects to `/dashboard` if signed in | `/` |
 | `(auth)` | Branded sign-in / sign-up shell that mirrors the marketing surface, with the Mercer wordmark linking back to `/` | `/login`, `/signup` |
-| `(app)` | Authenticated app behind a sidebar shell | `/dashboard`, `/leads`, `/leads/[id]`, `/leads/import`, `/leads/new`, `/bids`, `/bids/[id]`, `/bids/new`, `/projects`, `/projects/[id]`, `/settings` |
+| `(app)` | Authenticated app behind a sidebar shell | `/dashboard`, `/leads`, `/leads/[id]`, `/leads/accounts/[id]`, `/leads/properties/[id]`, `/leads/contacts/[id]`, `/leads/import`, `/leads/new`, `/bids`, `/bids/[id]`, `/bids/new`, `/projects`, `/projects/[id]`, `/settings`, `/settings/company`, `/settings/members` |
 | `(onboarding)` | Post-signup branding wizard with website enrichment and theme confirmation | `/onboarding` |
 | Public sharing | No-auth proposal/status page | `/p/[slug]` (proposal pre-acceptance, project status page post-acceptance) |
 | Auth callback | Supabase OAuth redirect handler | `/auth/callback` |
@@ -24,7 +24,8 @@ The deployed product today (Phase 0) is the non-AI substrate of that workflow: l
 - CSV import with auto-mapping, source tags, and a clean sample fixture for demos.
 - **Property-first Niko table (default).** Trade-show CSV rows are property-level (one attendee with five communities shows up five times with five addresses), so `/leads` shows one row per property with embedded contact chips, account/company, pipeline mix, portfolio count, and follow-up. Niko owns search, filter, sort, and pagination; the legacy contact-row table remains available via `view=contact`.
 - **Normalized lead domain model.** Imports and manual lead creation normalize into durable `accounts`, `properties`, `contacts`, `property_contacts`, `leads`, and `lead_contacts`, while compatibility fields remain on `leads` during the transition. `activity_events` stores the readable sales timeline and `audit_log` stores structured change history.
-- **Property detail side panel.** Clicking a property opens a resizable sidebar with property/account context, contacts at that property, status breakdown, next action, and bid handoff.
+- **Dedicated detail pages per entity.** Property, account, and contact rows link to their own routes (`/leads/properties/[id]`, `/leads/accounts/[id]`, `/leads/contacts/[id]`) that render full detail panels with cross-links between accounts ↔ properties ↔ contacts ↔ leads, instead of an in-table side panel.
+- **Account autocomplete on new-lead entry.** `/leads/new` resolves the company field against existing accounts (suggest-as-you-type) so manually-added leads attach to the existing account graph rather than minting a near-duplicate.
 - **Per-lead outreach state.** `last_contacted_at`, `follow_up_at`, and `contact_attempts` columns drive an Outreach card on the lead detail (one-click "log contact attempt", follow-up date input with overdue indicator). The property table rolls up earliest follow-up across contacts.
 - Lead enrichment via Google Places: the CSV property address is treated as authoritative; Places fills in lat/lng and Place ID, and only resolves a fresh address when the row is `company`-only. Satellite imagery is generated at the bid layer.
 - Lead detail with manual override, status workflow (`new` / `quoted` / `won` / `lost`), and a one-click "Create bid from lead" handoff.
@@ -55,6 +56,11 @@ The deployed product today (Phase 0) is the non-AI substrate of that workflow: l
 - Funnel and source filters drilling down into `/leads?status=…&source=…`.
 - Open vs won pipeline dollars derived from latest proposal totals per bid.
 - Project rollup card (active, overdue, per-status counts) linking into `/projects?status=…`.
+
+### Settings and multi-user orgs
+- `/settings` — pricing defaults (coverage, $/gal, labor rate, margin) that prefill new bids.
+- `/settings/company` — company profile pulled from the onboarding website-enrichment step; editable, will power themed bid surfaces once Phase G slice 3 lands.
+- `/settings/members` — invite teammates by email; pending invites resolve the next time the invitee signs in with that email. One owner per org, plus `admin` and `member` roles. Tenant scoping is `ownerUserId` throughout: existing `user_id` columns semantically hold the org owner's id, and `requireUser()` routes through `getOrgContext()` so members share the owner's bids/leads/projects.
 
 ### Brand and theming
 - New users pass through a 3-step onboarding wizard that captures a website, uses Anthropic Haiku to extract company profile/brand hints when configured, and confirms the bid theme. Users can skip the wizard.
@@ -94,10 +100,10 @@ src/
 │   ├── (auth)/                  # /login, /signup with branded shell + wordmark home link
 │   ├── (app)/                   # Authenticated app behind sidebar
 │   │   ├── dashboard/
-│   │   ├── leads/               # list, [id], import, new
+│   │   ├── leads/               # list, [id], accounts/[id], properties/[id], contacts/[id], import, new
 │   │   ├── bids/                # list, [id], new (wizard)
 │   │   ├── projects/            # list, [id]
-│   │   └── settings/
+│   │   └── settings/            # pricing defaults, company/, members/
 │   ├── (onboarding)/            # /onboarding website/profile/theme wizard
 │   ├── p/[slug]/                # Public proposal → project status page
 │   ├── api/maps/satellite/      # Server-side Maps Static proxy
@@ -111,10 +117,12 @@ src/
 │   ├── new-bid-wizard.tsx       # Address → confirm → details flow
 │   ├── bid-*.tsx, building-*.tsx, surface-*.tsx, pricing-*.tsx, line-item-*.tsx
 │   ├── property-leads-table.tsx # Property-first Niko table (default /leads view)
-│   ├── property-detail-panel.tsx# Property sidebar panel with embedded contacts
+│   ├── property-detail-panel.tsx, account-detail-panel.tsx, contact-detail-panel.tsx # Full-page detail panels (routed) for properties/accounts/contacts
+│   ├── account-autocomplete.tsx # Suggest-existing-accounts on /leads/new
 │   ├── leads-table.tsx          # Legacy contact-row Niko table (?view=contact)
 │   ├── leads-toolbar.tsx        # Leads title + import/new actions
-│   ├── lead-detail-body.tsx, lead-detail-aside.tsx, leads-row.tsx, leads-by-property.tsx
+│   ├── lead-detail-body.tsx, leads-row.tsx, leads-by-property.tsx
+│   ├── breadcrumb-label.tsx     # Client-side label swap for `[id]` segments in the app breadcrumb
 │   ├── proposal-list.tsx        # Generate + share + history
 │   ├── public-proposal-response.tsx # Accept/decline form on /p/[slug]
 │   ├── osm-footprints-section.tsx
@@ -137,7 +145,7 @@ src/
 │   └── supabase/                # Client/server helpers + auth cache
 ├── proxy.ts                     # Next.js proxy (replaces middleware.ts)
 drizzle/
-└── manual/                      # Hand-written additive SQL migrations (001 → 013)
+└── manual/                      # Hand-written additive SQL migrations (001 → 014)
 docs/
 ├── prd.md                       # Product requirements: vision, personas, scope, milestones, AI principles
 ├── plan.md                      # Live execution tracker (shipped / open / paused / decisions)
@@ -189,7 +197,7 @@ We rely on hand-written additive SQL migrations in [`drizzle/manual/`](drizzle/m
 bun run db:apply-manual
 ```
 
-This creates the normalized lead-domain tables (`accounts`, `properties`, `contacts`, `property_contacts`, `leads`, `lead_contacts`, `activity_events`, `audit_log`), bid/proposal/project tables, onboarding/company profile tables, and supporting indexes.
+This creates the normalized lead-domain tables (`accounts`, `properties`, `contacts`, `property_contacts`, `leads`, `lead_contacts`, `activity_events`, `audit_log`), bid/proposal/project tables, onboarding/company profile tables, the `org_memberships` table for multi-user orgs, and supporting indexes.
 
 `drizzle-kit push` is also available (`bun run db:push`) but **prefer the manual migrations** — push is known to crash against Supabase introspection on some schemas, and we use additive SQL as the source of truth per [`AGENTS.md`](AGENTS.md) → "Database Change Rules."
 

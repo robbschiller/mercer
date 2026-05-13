@@ -4,6 +4,218 @@ Running log of in-flight work on the lead-to-close MVP (docs/plan.md). Chronolog
 
 ---
 
+## 2026-05-12 — Routed entity detail pages + signout fix
+
+**Goal:** The property / account / contact context that had been living in an in-table resizable side panel on `/leads` needed to graduate into routed pages, both so the URLs are shareable and so the Niko table can take the full viewport width. Cross-links between accounts ↔ properties ↔ contacts ↔ leads were also overdue. Same session swept up the broken signout button.
+
+### Why now
+
+Two pressures converged. First, the property side panel was already crowding the table on a laptop screen; widening it pushed Niko's sort/filter chips into a scroll. Second, the lead-domain redesign on 2026-05-03 created durable `accounts` / `properties` / `contacts` records but only the property side panel got an interactive surface — accounts and contacts had no read view at all, which made it impossible to answer "what else does Greystar manage" without dropping into the database. The right shape for both was routed pages with their own URLs, with the list reverting to a clean table.
+
+### Shipped
+
+#### Detail pages for property, account, contact
+
+Three new routes, each backed by a new store getter and a full-page panel component:
+
+- `/leads/properties/[id]` → `getPropertyDetail(id)` → `PropertyDetailPanel`. Property/account context, contacts at that property, status breakdown, pipeline mix, follow-up rollup, bid handoff. ([src/app/(app)/leads/properties/[id]/page.tsx](../src/app/\(app\)/leads/properties/%5Bid%5D/page.tsx), [src/components/property-detail-panel.tsx](../src/components/property-detail-panel.tsx))
+- `/leads/accounts/[id]` → `getAccountDetail(id)` → `AccountDetailPanel`. Account header, properties at the account, contacts at the account, aggregate pipeline counts, earliest follow-up across the portfolio. ([src/app/(app)/leads/accounts/[id]/page.tsx](../src/app/\(app\)/leads/accounts/%5Bid%5D/page.tsx), [src/components/account-detail-panel.tsx](../src/components/account-detail-panel.tsx))
+- `/leads/contacts/[id]` → `getContactDetail(id)` → `ContactDetailPanel`. Contact header, account link, properties this contact is on, leads, last-contacted and follow-up rollups. ([src/app/(app)/leads/contacts/[id]/page.tsx](../src/app/\(app\)/leads/contacts/%5Bid%5D/page.tsx), [src/components/contact-detail-panel.tsx](../src/components/contact-detail-panel.tsx))
+
+Each panel accepts the cross-link builders (`buildPropertyHref` / `buildAccountHref` / `buildContactHref` / `buildLeadHref`) so navigation can travel any direction through the graph. Index routes `/leads/properties`, `/leads/accounts`, `/leads/contacts` redirect to the appropriate `/leads?view=…`.
+
+The three new `get*Detail` store helpers each return a typed payload (`AccountDetail`, `PropertyDetail`, `ContactDetail`) with everything the panel needs in one round-trip — no waterfall reads from the page component. Ownership is enforced through `requireUser()` and a `userId` predicate on the root entity.
+
+#### Lead detail consolidation
+
+`lead-detail-aside.tsx` was deleted. Its outreach card (`logLeadContact`, `setLeadFollowUp`) moved into `lead-detail-body.tsx` so the whole lead detail page renders out of a single component. The lead breadcrumb gets the lead's full name via `leadFullName(lead)` and `<BreadcrumbLabel>` rather than the bare uuid. ([src/components/breadcrumb-label.tsx](../src/components/breadcrumb-label.tsx))
+
+#### Leads list reverts to a full-bleed table
+
+With the side panel gone, `/leads/page.tsx` was simplified: no more split layout, no more "what's selected" state in the URL, just the Niko table. The page container switched to `h-[calc(100svh-3.5rem)] min-h-0 w-full flex-col overflow-hidden` so the table sticks the toolbar at the top, the rows scroll, and pagination sits at the bottom — Niko's full feature set is visible at typical laptop widths. Property rows and contact chips in `PropertyLeadsTable` and `LeadsTable` navigate via Next `<Link>` to the routed detail pages.
+
+#### AccountAutocomplete on /leads/new
+
+Manual single-lead entry was the last place where a typo in the company field minted a duplicate `accounts` row instead of attaching to an existing one. New `<AccountAutocomplete>` ([src/components/account-autocomplete.tsx](../src/components/account-autocomplete.tsx)) suggests existing accounts as you type by calling a `searchAccountsAction` server action against the org-scoped accounts table. Picking a suggestion fills the field with the canonical account name; typing through it lets you create a new account anyway.
+
+#### Signout fix
+
+`nav-user.tsx` was calling Supabase's client-side `signOut()` but not invalidating the server session. The first click logged out the client; the next protected request still had a server-side cookie and re-hydrated the session, so the user appeared logged back in. Fix: route signout through a server action that clears the cookie before redirecting. ([src/components/nav-user.tsx](../src/components/nav-user.tsx))
+
+### Found while shipping
+
+- `/leads/[id]/page.tsx` now has duplicated layout chrome (container + breadcrumb) with the three new detail pages. Acceptable: each page is a thin wrapper around its panel, and the panels are not interchangeable.
+- The bid detail page also wants a breadcrumb label swap (currently shows the uuid). One-line wiring of `<BreadcrumbLabel>` against the bid's `propertyName`. Not done in this branch; tracked as polish.
+
+### Verification
+
+- `bun run lint` — clean.
+- `bunx tsc --noEmit` — clean.
+- Manual run against the seeded BAAA dataset: clicking a property card lands on `/leads/properties/…` with cross-links into the account and each contact; clicking a contact chip lands on `/leads/contacts/…` with cross-links back to the property and account; clicking an account lands on the account detail with portfolio breakdown. Niko table fills the viewport at 1440px and 1024px widths. Signout actually signs out on the first click.
+
+### Docs synced
+
+- `docs/plan.md` — PRD-alignment §5.1 row mentions routed detail pages and account autocomplete; new Shipped entry "Lead entity detail pages (2026-05-12)"; snapshot paragraph updated.
+- `docs/prd.md` — §8 *What's Built Today* picks up the routed detail pages, account autocomplete, and removes the "resizable side panel" language from the property bullet.
+- `README.md` — surfaces table picks up the new routes; repo layout calls out the new components.
+
+---
+
+## 2026-05-03 — Lead-domain model redesign + multi-user organizations
+
+**Goal:** Two structural changes that had been deferred while the 2026-04-26 property-grouping pass settled. First, replace the flat `leads` table with a normalized lead-domain model so accounts, properties, and contacts are first-class durable records instead of strings on a sales opportunity. Second, lift the implicit "one user = one tenant" assumption into a real `org_memberships` table so teammates can share a workspace without duplicating data. Same branch also rebuilt the leads list on the Niko table component library (committed the day before but landed end-to-end this session).
+
+### Why both at once
+
+The two looked independent on paper but were entangled in the codebase. The lead-domain redesign touches every place that reads `lead.company` or `lead.propertyName`, and the org-membership work touches every place that reads `user.id` for tenant scoping. Splitting them would have meant two rounds of "audit every store call" — better to absorb the audit once. Both changes are also additive: nothing was deleted from the existing schema, so the migration is non-destructive and the legacy flat fields on `leads` keep working as compatibility columns during the UI cutover.
+
+### Shipped
+
+#### Normalized lead domain (drizzle/manual/013_lead_domain_model.sql, src/db/schema.ts, docs/lead-data-model.md)
+
+New tables:
+
+- `accounts` — management company / property group. Carries `name`, `website`, `notes`, source tag.
+- `properties` — the multifamily property. Carries `account_id`, `name`, `address`, `latitude`, `longitude`, `google_place_id`, `satellite_image_url`, source tag, raw source.
+- `contacts` — durable person record. Carries `account_id`, `name`, `email`, `phone`, `title`, relationship tier.
+- `property_contacts` — many-to-many between `properties` and `contacts` with `role`, `decision_influence`, `import_ref`, `active`, `first_seen_at`, `last_seen_at`.
+- `lead_contacts` — many-to-many between `leads` and `contacts` with `role` and `is_primary`.
+- `activity_events` — readable timeline keyed on lead / contact / property / account / bid with `type`, `title`, `body`, `occurred_at`, `metadata` jsonb.
+- `audit_log` — structured change history with `actor_user_id`, `entity_type`, `entity_id`, `action`, `changed_fields`, `previous_values`, `new_values`, `source`.
+
+Leads gained `property_id`, `account_id`, `primary_contact_id` while the flat `name` / `email` / `phone` / `company` / `property_name` / `resolved_address` columns remain as compatibility fields during the screen-by-screen migration. Bids similarly gained `property_id` and `primary_contact_id` while retaining `lead_id`.
+
+CSV import and the manual `/leads/new` action now normalize every row through the new graph:
+
+1. Find-or-create the `account` (matched on `name + user_id`).
+2. Find-or-create the `property` (matched on `account_id + lower(address)` when there's an address, falling back to `account_id + lower(name)`).
+3. Find-or-create the `contact` (matched on `account_id + lower(email)` when there's an email, falling back to `account_id + lower(name) + lower(phone)`).
+4. Link the contact to the property via `property_contacts` with an `import_ref` so a re-import of the same row doesn't double-link.
+5. Create the lead with `property_id` / `account_id` / `primary_contact_id` and link contact(s) via `lead_contacts`.
+6. Write a `activity_events` row for "Imported from CSV" / "Lead created" and a `audit_log` row with the raw payload.
+
+The compatibility flat fields on `leads` are still populated so the existing list views keep working during the transition.
+
+#### Multi-user organizations (drizzle/manual/014_org_memberships.sql, src/lib/org-context.ts)
+
+New `org_memberships` table with `owner_user_id`, `user_id` (nullable until the invitee signs up), `email`, `role` (`owner` / `admin` / `member`), `status` (`invited` / `active`), and partial unique indexes:
+
+- `org_memberships_user_active_idx` on `user_id WHERE user_id IS NOT NULL AND status = 'active'` — one active membership per user.
+- `org_memberships_owner_email_pending_idx` on `owner_user_id, lower(email) WHERE status = 'invited'` — case-insensitive dedupe of pending invites per org.
+
+New `getOrgContext()` resolver:
+
+1. If the session user has an active membership row, return the linked org and the membership role.
+2. If there's a pending invite by email, accept it (set `user_id` and `status = 'active'`) and return the now-linked org.
+3. Otherwise the user is the solo owner of their own org (`ownerUserId = userId`, `role = 'owner'`); no row is written for solo owners.
+
+`store.ts → requireUser()` now returns this `OrgContext { userId, ownerUserId, email, name, role }`. Every tenant-scoped query was rewritten to predicate on `user.ownerUserId` instead of `user.id`. The existing schema didn't change: `user_id` columns semantically hold the org owner's id, so no data migration was needed for solo accounts.
+
+#### Settings split (src/app/(app)/settings/*)
+
+`/settings` kept pricing defaults. New `/settings/company` carries the company profile pulled from the onboarding website-enrichment step (powered by `getCompanyProfile(ctx.ownerUserId)`), and new `/settings/members` lists members, lets owners/admins invite by email and remove pending or active members. New `SettingsNav` ([src/app/(app)/settings/settings-nav.tsx](../src/app/\(app\)/settings/settings-nav.tsx)) drives the in-section nav. New store helpers: `listOrgMembers`, `inviteOrgMember`, `removeOrgMember`. New server actions: `inviteOrgMemberAction`, `removeOrgMemberAction`.
+
+#### Bids list and leads list on Niko (src/components/bids-table.tsx, src/components/leads-table.tsx)
+
+The leads contact-row table was rebuilt on the Niko table primitives the day before (`6bcae7e` and `6a7b211`); this session also moved the bids list onto Niko (`bids-table.tsx`) so both lists share the same Niko search/filter/sort/pagination behavior. `view-mode-toggle.tsx` and `view-mode.ts` were retired — view switching is now a Niko-aware control in `leads-toolbar.tsx`.
+
+#### Sidebar + app chrome
+
+`app-sidebar.tsx`, `app-breadcrumb.tsx`, `nav-user.tsx`, `team-switcher.tsx` got a refresh to surface the org name / role in the sidebar and to give the breadcrumb client-side label support for `[id]` segments. `app-breadcrumb.tsx` is new; `breadcrumb.tsx` / `avatar.tsx` primitives are new. `(app)/layout.tsx` now resolves the org context once and threads it down.
+
+### Found while shipping
+
+- The flat `leads.company` / `leads.property_name` / `leads.resolved_address` columns are still being written to as compatibility fields. Cutting them out will be a future pass once every read site has moved to the normalized graph. Captured implicitly in the plan as "compatibility fields remain on leads during the transition."
+- `property_contacts` uniqueness is loose: there is no DB-level unique constraint on `(property_id, contact_id)`. The find-or-create path in the import runner is the only guard. Acceptable for now since imports are the only writer, but worth a unique partial index once contacts get edited from the UI.
+
+### Verification
+
+- `bun run lint` — clean.
+- `bunx tsc --noEmit` — clean.
+- Manual: re-imported the BAAA CSV against the migrated DB; row counts on `accounts` / `properties` / `contacts` / `property_contacts` match expected portfolio shape; a re-import of the same CSV does not duplicate rows; manual `/leads/new` attaches to an existing account when the company string matches.
+- Multi-user manual: invited a second email at `/settings/members`, signed up with that email in an incognito window, landed in the inviter's org with `member` role; `/leads` shows the inviter's properties; pending-invite removal cancels the row.
+
+### Docs synced
+
+- `docs/lead-data-model.md` — new document explaining the normalized model, ID-resolution rules, and the compatibility-field strategy.
+- `docs/prd.md` — §6 data model table updated with `accounts` / `properties` / `contacts` / `property_contacts` / `lead_contacts` / `activity_events` / `audit_log`; §6.1 lead fields rewritten around the property-level opportunity framing; §8 picks up the normalized model and the property-first table.
+- `docs/plan.md` — new Shipped entries for the lead domain redesign; PRD-alignment row §5.1 picks up the normalized graph.
+
+---
+
+## 2026-05-02 — Onboarding wizard + Anthropic Haiku website enrichment (Phase G slices 1-2)
+
+**Goal:** Ship the onboarding wizard scaffolding and the AI-powered website enrichment that the plan's Phase G has been carrying for a while. New users land in a 3-step wizard at `/onboarding?step=website|confirm|theme`, the first step calls Anthropic Haiku to extract a company profile from the contractor's homepage, and the second pre-fills with the result so the user only edits what's wrong.
+
+### Why now
+
+Two motivating observations. First, the silent post-signup redirect was leaving new accounts with no profile information at all, which made themed proposals impossible and gave the dashboard a confusing first-run experience. Second, the contractor's website is a rich enough source that pulling brand color, logo, address, and phone with one Haiku call gets us 80% of the way there without asking the user to type anything. Two slices, shipped in one branch: scaffolding first (so the wizard can stand on its own with manual entry), Haiku call second (so it gracefully degrades to manual).
+
+### Shipped
+
+#### Slice 1 — wizard scaffolding (drizzle/manual/012_company_profiles.sql, src/app/(onboarding)/onboarding/page.tsx)
+
+Two new additive tables:
+
+- `company_profiles` — keyed on `user_id` (mirrors the `userDefaults` pattern). Carries the brand: `name`, `address`, `phone`, `email`, `logo_url`, `primary_color`, `enrichment_status`, `enrichment_source_url`, `enrichment_error`, timestamps.
+- `onboardings` — keyed on `user_id`. Carries per-step timestamps (`website_submitted_at`, `profile_confirmed_at`, `theme_confirmed_at`, `skipped_at`, `completed_at`) so the gate can tell where in the funnel each account is.
+
+The wizard itself is a single route at `/onboarding` that reads `step=website|confirm|theme` from the URL. Each step submits to a server action that advances the onboarding state and revalidates:
+
+- `submitOnboardingWebsiteAction` — accepts a website URL, runs the Haiku enrichment (slice 2), persists to `company_profiles`, stamps `website_submitted_at`, redirects to `?step=confirm`.
+- `confirmOnboardingProfileAction` — accepts the edited company profile fields, persists, stamps `profile_confirmed_at`, redirects to `?step=theme`.
+- `confirmOnboardingThemeAction` — accepts the confirmed theme, stamps `theme_confirmed_at` and `completed_at`, redirects to `/bids`.
+- `skipOnboardingAction` — stamps `skipped_at` and `completed_at` so the gate releases.
+
+New store helpers in `src/lib/store.ts`: `getOnboardingState`, `markOnboardingWebsiteSubmitted`, `markOnboardingProfileConfirmed`, `markOnboardingComplete`, `skipOnboarding`, `getCompanyProfile`, `upsertCompanyProfile`.
+
+The gate lives in `(app)/layout.tsx`: if the session user has no `onboardings` row, the layout redirects to `/onboarding`. The wizard route has the mirror-image guard: a user with a `completed_at` who visits `/onboarding` bounces to `/bids`. `proxy.ts` matcher gets `/onboarding/:path*` so the middleware refreshes the session cookie during the wizard. New `(onboarding)` route group has its own minimal `layout.tsx` (no sidebar, brand chrome) and a `step-indicator.tsx` component for the 1/3 → 2/3 → 3/3 visual.
+
+#### Slice 2 — Anthropic Haiku enrichment (src/lib/onboarding/enrich-from-website.ts)
+
+New module `enrich-from-website.ts` that takes a website URL and returns a `EnrichedCompanyProfile` (or throws). The flow:
+
+1. Normalize the URL (add `https://` if missing).
+2. Fetch the homepage with a 5-second timeout, a 500KB cap on the response body, and a realistic user agent.
+3. Strip HTML noise: `<script>`, `<style>`, `<svg>`, `<noscript>`, HTML comments.
+4. Call Anthropic Haiku 4.5 via `messages.parse` with `zodOutputFormat` against a strict Zod schema (company name, address, phone, email, logo URL, primary hex color). System prompt cached with `cache_control: { type: "ephemeral" }`.
+5. Resolve the logo URL into an absolute URL against the homepage origin (so relative `/logo.png` references work downstream).
+6. Return the parsed result.
+
+The action wraps the call in a 15-second `AbortController` hard timeout. Initial plan budgeted 8 seconds but `certapro.com` round-trip ran 5-8s in practice and the timeout fired too often. On any failure path (no API key, fetch error, parse error, timeout, model refusal) the wizard still advances to step 2 with `enrichment_status='failed'` and a banner *"We couldn't read X automatically"* so the user just fills the form by hand. New store helper `setEnrichmentResult` writes either the structured data + `enrichment_status='success'` or the error message + `enrichment_status='failed'` in one update.
+
+New required env: `ANTHROPIC_API_KEY` (added to `.env.local.example`). Module `@anthropic-ai/sdk` added to `package.json`.
+
+### What's not in this branch
+
+Deliberately deferred to Phase G slice 3 so this stays a clean two-slice ship:
+
+- Logo upload + `brand-assets` Supabase Storage bucket.
+- Brand fields on `ProposalSnapshot.brand` and snapshotting at proposal-generate time.
+- Themed PDF render (`src/lib/pdf/proposal-template.tsx`) and themed `/p/[slug]` post-acceptance.
+- `/settings` branding card with "Refresh from website" action.
+- Dismissible "Add your branding" banner on `/dashboard` for users who signed up before the wizard existed.
+
+### Found while shipping
+
+- The 8-second initial timeout was wrong. Real-world fetch + Haiku round-trip on `certapro.com` was 5-8s and frequently spilled. Bumped to 15s and added a structured banner for the timeout path so the wizard never hangs.
+- Haiku does fine extracting company name / phone / address from clean homepage HTML but is iffy on logos when the page uses a lazy-loaded `<img>` with a placeholder. The absolute-URL resolver helps, but a `<picture>`-aware path is on the wishlist.
+
+### Verification
+
+- `bun run lint` — clean.
+- `bunx tsc --noEmit` — clean.
+- Manual against `certapro.com`: extracted name "CertaPro Painters", phone "(800) 689-7271", absolute logo URL, brand color `#fdb913`. Color flowed through to the step-3 picker.
+- Failed path verified two ways: no `ANTHROPIC_API_KEY` set, and a made-up URL. Both showed the *"We couldn't read X automatically"* banner on step 2 and let the user complete the wizard manually.
+- End-to-end signup: signup → wizard step 1 → 2 → 3 → `/bids`; skip path also releases the gate; an already-completed user visiting `/onboarding` bounces to `/bids`.
+
+### Docs synced
+
+- `docs/plan.md` — Phase G slice 1 + slice 2 marked shipped with full details; `Open now` Phase G entry reduced to slice 3 remaining work.
+- `.env.local.example` — `ANTHROPIC_API_KEY` row.
+
+---
+
 ## 2026-04-26 — Leads outreach state + property-grouped list view
 
 **Goal:** Pick the two highest-leverage non-AI improvements to the leads feature now that the BAAA 2026 list (1,224 rows) is in the system, and ship them on a `leads` branch. The demo proved the import path; the daily-use shape is what was missing. Two improvements landed: (1) the leads list is now property-first instead of contact-first, and (2) outreach state (last contacted, follow-up date, attempt count) is tracked per lead.
