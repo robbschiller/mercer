@@ -423,6 +423,7 @@ export function PropertyLeadsTable({
 
   return (
     <DataTableRoot
+      className="flex min-h-0 flex-1 flex-col space-y-0"
       data={groups}
       columns={columns}
       getRowId={(group) => group.propertyId ?? group.key}
@@ -454,7 +455,7 @@ export function PropertyLeadsTable({
         pageCount,
       }}
     >
-      <div className="min-w-0 overflow-hidden rounded-md border bg-card">
+      <div className="flex min-h-0 flex-1 flex-col">
         <DataTableToolbarSection className="flex-wrap justify-between gap-2 border-b p-0 px-3 py-2">
           <div className="min-w-0 flex-1">
             <DataTableSearchFilter<PropertyTableRow>
@@ -486,9 +487,8 @@ export function PropertyLeadsTable({
           </div>
         </DataTableToolbarSection>
         <DataTable
-          className="rounded-none border-0 border-b"
+          className="min-h-0 flex-1 rounded-none border-0"
           tableClassName="table-fixed"
-          maxHeight="calc(100vh - 15rem)"
         >
           <DataTableHeader className="bg-muted/40" />
           <DataTableBody<PropertyTableRow>
@@ -502,17 +502,19 @@ export function PropertyLeadsTable({
             </DataTableEmptyBody>
           </DataTableBody>
         </DataTable>
-        <DataTablePagination<PropertyTableRow>
-          totalCount={total}
-          pageSizeOptions={[25, 50, 100, 250, 500]}
-          defaultPageSize={query.limit}
-          onPageChange={(pageIndex) => pushQuery({ page: pageIndex + 1 })}
-          onNextPage={(pageIndex) => pushQuery({ page: pageIndex + 1 })}
-          onPreviousPage={(pageIndex) => pushQuery({ page: pageIndex + 1 })}
-          onPageSizeChange={(limit, pageIndex) =>
-            pushQuery({ limit, page: pageIndex + 1 })
-          }
-        />
+        <div className="border-t bg-background">
+          <DataTablePagination<PropertyTableRow>
+            totalCount={total}
+            pageSizeOptions={[25, 50, 100, 250, 500]}
+            defaultPageSize={query.limit}
+            onPageChange={(pageIndex) => pushQuery({ page: pageIndex + 1 })}
+            onNextPage={(pageIndex) => pushQuery({ page: pageIndex + 1 })}
+            onPreviousPage={(pageIndex) => pushQuery({ page: pageIndex + 1 })}
+            onPageSizeChange={(limit, pageIndex) =>
+              pushQuery({ limit, page: pageIndex + 1 })
+            }
+          />
+        </div>
       </div>
     </DataTableRoot>
   );

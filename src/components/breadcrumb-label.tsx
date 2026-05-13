@@ -2,23 +2,23 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
   type ReactNode,
 } from "react";
 
 type LabelMap = Record<string, string>;
-type Ctx = {
-  labels: LabelMap;
-  set: (segment: string, label: string | null) => void;
-};
+type SetLabel = (segment: string, label: string | null) => void;
 
-const BreadcrumbCtx = createContext<Ctx | null>(null);
+const LabelsCtx = createContext<LabelMap>({});
+const SetLabelCtx = createContext<SetLabel>(() => {});
 
 export function BreadcrumbLabelProvider({ children }: { children: ReactNode }) {
   const [labels, setLabels] = useState<LabelMap>({});
-  const set = (segment: string, label: string | null) => {
+  const set = useCallback<SetLabel>((segment, label) => {
     setLabels((prev) => {
       if (label === null) {
         if (!(segment in prev)) return prev;
@@ -29,16 +29,17 @@ export function BreadcrumbLabelProvider({ children }: { children: ReactNode }) {
       if (prev[segment] === label) return prev;
       return { ...prev, [segment]: label };
     });
-  };
+  }, []);
+  const labelsValue = useMemo(() => labels, [labels]);
   return (
-    <BreadcrumbCtx.Provider value={{ labels, set }}>
-      {children}
-    </BreadcrumbCtx.Provider>
+    <SetLabelCtx.Provider value={set}>
+      <LabelsCtx.Provider value={labelsValue}>{children}</LabelsCtx.Provider>
+    </SetLabelCtx.Provider>
   );
 }
 
 export function useBreadcrumbLabels(): LabelMap {
-  return useContext(BreadcrumbCtx)?.labels ?? {};
+  return useContext(LabelsCtx);
 }
 
 export function BreadcrumbLabel({
@@ -48,11 +49,10 @@ export function BreadcrumbLabel({
   segment: string;
   label: string;
 }) {
-  const ctx = useContext(BreadcrumbCtx);
+  const set = useContext(SetLabelCtx);
   useEffect(() => {
-    if (!ctx) return;
-    ctx.set(segment, label);
-    return () => ctx.set(segment, null);
-  }, [ctx, segment, label]);
+    set(segment, label);
+    return () => set(segment, null);
+  }, [set, segment, label]);
   return null;
 }

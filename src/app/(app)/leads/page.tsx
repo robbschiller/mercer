@@ -148,7 +148,7 @@ export default async function LeadsPage({
   );
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+    <div className="flex h-[calc(100svh-3.5rem)] min-h-0 w-full flex-col overflow-hidden">
       <LeadsToolbar />
 
       {params.imported && (
@@ -164,51 +164,50 @@ export default async function LeadsPage({
       ) : propertyGroups ? (
         <PropertyLeadsTable
           groups={propertyGroups.map((group) => {
-              const contactHrefs: Record<string, string> = {};
-              for (const lead of group.contacts) {
-                if (
-                  lead.primaryContactId &&
-                  !contactHrefs[lead.primaryContactId]
-                ) {
-                  contactHrefs[lead.primaryContactId] = buildContactHref(
-                    lead.primaryContactId,
-                  );
-                }
+            const contactHrefs: Record<string, string> = {};
+            for (const lead of group.contacts) {
+              if (
+                lead.primaryContactId &&
+                !contactHrefs[lead.primaryContactId]
+              ) {
+                contactHrefs[lead.primaryContactId] = buildContactHref(
+                  lead.primaryContactId,
+                );
               }
-              return {
-                ...group,
-                href: group.propertyId
-                  ? buildPropertyHref(group.propertyId)
-                  : "",
-                accountHref: group.accountId
-                  ? buildAccountHref(group.accountId)
-                  : null,
-                contactHrefs,
-                status: group.contacts[0]?.status ?? null,
-                sourceTag: group.contacts[0]?.sourceTag ?? null,
-                followUpAt: group.earliestFollowUp,
-                lastContactedAt: group.mostRecentContact,
-                createdAt: group.contacts[0]?.createdAt ?? null,
-              };
-            })}
-            query={query}
-            total={total}
-            page={query.page}
-            sourceOptions={sourceOptions}
-          />
-        ) : (
-          <LeadsTable
-            leads={rows.map((row) => ({
-              ...row,
-              href: buildLeadHref(row.id),
-            }))}
-            query={query}
-            total={total}
-            page={query.page}
-            sourceOptions={sourceOptions}
-          />
-        )}
-      </div>
+            }
+            return {
+              ...group,
+              href: group.propertyId
+                ? buildPropertyHref(group.propertyId)
+                : "",
+              accountHref: group.accountId
+                ? buildAccountHref(group.accountId)
+                : null,
+              contactHrefs,
+              status: group.contacts[0]?.status ?? null,
+              sourceTag: group.contacts[0]?.sourceTag ?? null,
+              followUpAt: group.earliestFollowUp,
+              lastContactedAt: group.mostRecentContact,
+              createdAt: group.contacts[0]?.createdAt ?? null,
+            };
+          })}
+          query={query}
+          total={total}
+          page={query.page}
+          sourceOptions={sourceOptions}
+        />
+      ) : (
+        <LeadsTable
+          leads={rows.map((row) => ({
+            ...row,
+            href: buildLeadHref(row.id),
+          }))}
+          query={query}
+          total={total}
+          page={query.page}
+          sourceOptions={sourceOptions}
+        />
+      )}
     </div>
   );
 }
