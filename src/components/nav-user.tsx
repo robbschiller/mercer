@@ -1,5 +1,6 @@
 "use client";
 
+import { useTransition } from "react";
 import { ChevronsUpDown, LogOut, Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 
@@ -36,6 +37,7 @@ export function NavUser({
 }) {
   const { isMobile } = useSidebar();
   const { theme, setTheme } = useTheme();
+  const [, startTransition] = useTransition();
   const display = name || email || "Account";
   const initials = (name || email || "?")
     .split(/\s+|@/)
@@ -112,14 +114,17 @@ export function NavUser({
               </DropdownMenuSubContent>
             </DropdownMenuSub>
             <DropdownMenuSeparator />
-            <form action={signOutAction}>
-              <DropdownMenuItem asChild>
-                <button type="submit" className="w-full">
-                  <LogOut />
-                  Sign out
-                </button>
-              </DropdownMenuItem>
-            </form>
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                startTransition(() => {
+                  void signOutAction();
+                });
+              }}
+            >
+              <LogOut />
+              Sign out
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
