@@ -187,19 +187,15 @@ function MutedCell({ children }: { children: React.ReactNode }) {
 export function LeadsTable({
   leads,
   query,
-  activeLeadId,
   total,
   page,
   sourceOptions,
-  isDetailOpen = false,
 }: {
   leads: LeadTableRow[]
   query: LeadsTableQuery
-  activeLeadId?: string
   total: number
   page: number
   sourceOptions: LeadSourceOption[]
-  isDetailOpen?: boolean
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -396,15 +392,15 @@ export function LeadsTable({
         globalFilter: query.q,
         pagination,
         columnVisibility: {
-          resolvedAddress: !isDetailOpen,
-          email: !isDetailOpen,
-          enrichment: !isDetailOpen,
+          resolvedAddress: true,
+          email: true,
+          enrichment: true,
           sourceTag: false,
           followUpAt: false,
           lastContactedAt: false,
           createdAt: false,
         },
-        rowSelection: activeLeadId ? { [activeLeadId]: true } : {},
+        rowSelection: {},
       }}
       config={{
         enableFilters: true,

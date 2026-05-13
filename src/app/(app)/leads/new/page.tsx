@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createLeadAction } from "@/lib/actions";
+import { AccountAutocomplete } from "@/components/account-autocomplete";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -71,7 +72,7 @@ export default async function NewLeadPage({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="company">Company</Label>
-                <Input id="company" name="company" />
+                <AccountAutocomplete id="company" />
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="propertyName">Property name</Label>

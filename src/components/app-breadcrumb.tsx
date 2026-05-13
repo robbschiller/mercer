@@ -11,6 +11,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { useBreadcrumbLabels } from "@/components/breadcrumb-label";
 
 const SECTION_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
@@ -30,8 +31,11 @@ function labelFor(segment: string) {
   );
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function AppBreadcrumb() {
   const pathname = usePathname();
+  const overrides = useBreadcrumbLabels();
   const segments = pathname.split("/").filter(Boolean);
   if (segments.length === 0) return null;
 
@@ -41,7 +45,8 @@ export function AppBreadcrumb() {
         {segments.map((seg, i) => {
           const href = "/" + segments.slice(0, i + 1).join("/");
           const isLast = i === segments.length - 1;
-          const label = labelFor(seg);
+          const label =
+            overrides[seg] ?? (UUID_RE.test(seg) ? "…" : labelFor(seg));
           return (
             <Fragment key={href}>
               {i > 0 && (

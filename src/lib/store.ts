@@ -1802,14 +1802,30 @@ export async function createLead(
         | "resolvedAddress"
         | "notes"
       >
-    >
+    > & { accountId?: string | null }
 ) {
   const user = await requireUser();
-  const account = await findOrCreateAccount({
-    userId: user.ownerUserId,
-    name: data.company,
-    sourceTag: data.sourceTag ?? null,
-  });
+  let account: Account | null = null;
+  if (data.accountId) {
+    const existing = await db
+      .select()
+      .from(accounts)
+      .where(
+        and(
+          eq(accounts.id, data.accountId),
+          eq(accounts.userId, user.ownerUserId),
+        ),
+      )
+      .limit(1);
+    account = existing[0] ?? null;
+  }
+  if (!account) {
+    account = await findOrCreateAccount({
+      userId: user.ownerUserId,
+      name: data.company,
+      sourceTag: data.sourceTag ?? null,
+    });
+  }
   const property = await findOrCreateProperty({
     userId: user.ownerUserId,
     accountId: account?.id ?? null,
@@ -2489,6 +2505,24 @@ async function createActivityEvent(input: {
     metadata: input.metadata ?? null,
     occurredAt: input.occurredAt ?? new Date(),
   });
+}
+
+export async function searchAccounts(q: string, limit = 8): Promise<Pick<Account, "id" | "name">[]> {
+  const user = await requireUser();
+  const term = cleanText(q);
+  if (!term) return [];
+  const rows = await db
+    .select({ id: accounts.id, name: accounts.name })
+    .from(accounts)
+    .where(
+      and(
+        eq(accounts.userId, user.ownerUserId),
+        ilike(accounts.name, `%${term}%`),
+      ),
+    )
+    .orderBy(asc(accounts.name))
+    .limit(limit);
+  return rows;
 }
 
 async function findOrCreateAccount(input: {

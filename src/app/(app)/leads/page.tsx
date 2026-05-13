@@ -3,37 +3,20 @@ import {
   LEADS_FOLLOW_UP_FILTERS,
   LEADS_PAGE_DEFAULT_LIMIT,
   LEADS_SORTS,
-  getAccountDetail,
-  getContactDetail,
-  getLead,
-  getLatestBidForLead,
   getLeadPropertyGroups,
   getLeadSourceOptions,
   getLeads,
-  getPropertyDetail,
   type LeadsFollowUpFilter,
   type LeadsSort,
 } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { LeadsToolbar } from "@/components/leads-toolbar";
-import { LeadDetailBody } from "@/components/lead-detail-body";
-import { LeadDetailAside } from "@/components/lead-detail-aside";
-import { AccountDetailPanel } from "@/components/account-detail-panel";
-import { ContactDetailPanel } from "@/components/contact-detail-panel";
-import { PropertyDetailPanel } from "@/components/property-detail-panel";
 import { PropertyLeadsTable } from "@/components/property-leads-table";
 import { LeadsTable } from "@/components/leads-table";
 import { LEAD_STATUSES, type LeadStatus } from "@/lib/status-meta";
 
 type LeadsView = "property" | "contact";
-
-type EntityRefs = {
-  lead?: string | null;
-  property?: string | null;
-  account?: string | null;
-  contact?: string | null;
-};
 
 type LeadsQuery = {
   q: string;
@@ -94,59 +77,20 @@ function parsePage(raw: string | undefined): number {
   return n;
 }
 
-function buildQueryString(
-  query: LeadsQuery,
-  overrides: Partial<LeadsQuery> & EntityRefs = {},
-): string {
-  const sp = new URLSearchParams();
-  const q = overrides.q ?? query.q;
-  const status = "status" in overrides ? overrides.status : query.status;
-  const source = "source" in overrides ? overrides.source : query.source;
-  const followUp =
-    "followUp" in overrides ? overrides.followUp : query.followUp;
-  const sort = "sort" in overrides ? overrides.sort : query.sort;
-  const limit = overrides.limit ?? query.limit;
-  const page = overrides.page ?? query.page;
-  const view = overrides.view ?? query.view;
-  if (q) sp.set("q", q);
-  if (status) sp.set("status", status);
-  if (source) sp.set("source", source);
-  if (followUp) sp.set("followUp", followUp);
-  if (sort) sp.set("sort", sort);
-  if (limit !== LEADS_PAGE_DEFAULT_LIMIT) sp.set("limit", String(limit));
-  if (page > 1) sp.set("page", String(page));
-  if (view === "contact") sp.set("view", "contact");
-  if (overrides.lead) sp.set("lead", overrides.lead);
-  if (overrides.property) sp.set("property", overrides.property);
-  if (overrides.account) sp.set("account", overrides.account);
-  if (overrides.contact) sp.set("contact", overrides.contact);
-  return sp.toString();
+function buildLeadHref(id: string): string {
+  return `/leads/${id}`;
 }
 
-function withRef(query: LeadsQuery, ref: EntityRefs): string {
-  const qs = buildQueryString(query, ref);
-  return qs ? `/leads?${qs}` : "/leads";
+function buildPropertyHref(id: string): string {
+  return `/leads/properties/${id}`;
 }
 
-function buildLeadHref(id: string, query: LeadsQuery): string {
-  return withRef(query, { lead: id });
+function buildAccountHref(id: string): string {
+  return `/leads/accounts/${id}`;
 }
 
-function buildPropertyHref(id: string, query: LeadsQuery): string {
-  return withRef(query, { property: id });
-}
-
-function buildAccountHref(id: string, query: LeadsQuery): string {
-  return withRef(query, { account: id });
-}
-
-function buildContactHref(id: string, query: LeadsQuery): string {
-  return withRef(query, { contact: id });
-}
-
-function buildCloseHref(query: LeadsQuery): string {
-  const qs = buildQueryString(query);
-  return qs ? `/leads?${qs}` : "/leads";
+function buildContactHref(id: string): string {
+  return `/leads/contacts/${id}`;
 }
 
 export default async function LeadsPage({
@@ -161,10 +105,6 @@ export default async function LeadsPage({
     sort?: string;
     limit?: string;
     page?: string;
-    lead?: string;
-    property?: string;
-    account?: string;
-    contact?: string;
     view?: string;
     error?: string;
   }>;
@@ -180,23 +120,6 @@ export default async function LeadsPage({
     page: parsePage(params.page),
     view: parseView(params.view),
   };
-  const leadId = params.lead;
-  const propertyId = params.property;
-  const accountId = params.account;
-  const contactId = params.contact;
-  // Mutex precedence: contact > account > property > lead. Mirrors the
-  // panel render order below so the URL can hold leftover params from a
-  // previous drilldown without confusing what's on screen.
-  const activeKind: "contact" | "account" | "property" | "lead" | null =
-    contactId
-      ? "contact"
-      : accountId
-        ? "account"
-        : propertyId
-          ? "property"
-          : leadId
-            ? "lead"
-            : null;
 
   const listOptions = {
     q: query.q || null,
@@ -208,31 +131,10 @@ export default async function LeadsPage({
     offset: (query.page - 1) * query.limit,
   };
 
-  const [
-    listResult,
-    activeLead,
-    activeLeadBid,
-    activeProperty,
-    activeAccount,
-    activeContact,
-    sourceOptions,
-  ] = await Promise.all([
+  const [listResult, sourceOptions] = await Promise.all([
     query.view === "property"
       ? getLeadPropertyGroups(listOptions)
       : getLeads(listOptions),
-    activeKind === "lead" && leadId ? getLead(leadId) : Promise.resolve(null),
-    activeKind === "lead" && leadId
-      ? getLatestBidForLead(leadId)
-      : Promise.resolve(null),
-    activeKind === "property" && propertyId
-      ? getPropertyDetail(propertyId)
-      : Promise.resolve(null),
-    activeKind === "account" && accountId
-      ? getAccountDetail(accountId)
-      : Promise.resolve(null),
-    activeKind === "contact" && contactId
-      ? getContactDetail(contactId)
-      : Promise.resolve(null),
     getLeadSourceOptions(),
   ]);
 
@@ -244,9 +146,6 @@ export default async function LeadsPage({
   const hasFilters = Boolean(
     query.q || query.status || query.source || query.followUp,
   );
-  const closeHref = buildCloseHref(query);
-
-  const isDetailOpen = activeKind !== null;
 
   return (
     <div className="relative flex min-h-0 w-full flex-1 overflow-hidden">
@@ -261,111 +160,54 @@ export default async function LeadsPage({
 
         {visible === 0 && propertyGroups ? (
           <EmptyState query={query} hasFilters={hasFilters} />
-        ) : (
-          <>
-            {propertyGroups ? (
-              <PropertyLeadsTable
-                groups={propertyGroups.map((group) => {
-                  const contactHrefs: Record<string, string> = {};
-                  for (const lead of group.contacts) {
-                    if (
-                      lead.primaryContactId &&
-                      !contactHrefs[lead.primaryContactId]
-                    ) {
-                      contactHrefs[lead.primaryContactId] = buildContactHref(
-                        lead.primaryContactId,
-                        query,
-                      );
-                    }
-                  }
-                  return {
-                    ...group,
-                    href: group.propertyId
-                      ? buildPropertyHref(group.propertyId, query)
-                      : "",
-                    accountHref: group.accountId
-                      ? buildAccountHref(group.accountId, query)
-                      : null,
-                    contactHrefs,
-                    status: group.contacts[0]?.status ?? null,
-                    sourceTag: group.contacts[0]?.sourceTag ?? null,
-                    followUpAt: group.earliestFollowUp,
-                    lastContactedAt: group.mostRecentContact,
-                    createdAt: group.contacts[0]?.createdAt ?? null,
-                  };
-                })}
-                query={query}
-                activePropertyId={
-                  activeKind === "property" ? propertyId ?? null : null
+        ) : propertyGroups ? (
+          <PropertyLeadsTable
+            groups={propertyGroups.map((group) => {
+              const contactHrefs: Record<string, string> = {};
+              for (const lead of group.contacts) {
+                if (
+                  lead.primaryContactId &&
+                  !contactHrefs[lead.primaryContactId]
+                ) {
+                  contactHrefs[lead.primaryContactId] = buildContactHref(
+                    lead.primaryContactId,
+                  );
                 }
-                total={total}
-                page={query.page}
-                sourceOptions={sourceOptions}
-                isDetailOpen={isDetailOpen}
-              />
-            ) : (
-              <LeadsTable
-                leads={rows.map((row) => ({
-                  ...row,
-                  href: buildLeadHref(row.id, query),
-                }))}
-                query={query}
-                activeLeadId={leadId}
-                total={total}
-                page={query.page}
-                sourceOptions={sourceOptions}
-                isDetailOpen={isDetailOpen}
-              />
-            )}
-          </>
+              }
+              return {
+                ...group,
+                href: group.propertyId
+                  ? buildPropertyHref(group.propertyId)
+                  : "",
+                accountHref: group.accountId
+                  ? buildAccountHref(group.accountId)
+                  : null,
+                contactHrefs,
+                status: group.contacts[0]?.status ?? null,
+                sourceTag: group.contacts[0]?.sourceTag ?? null,
+                followUpAt: group.earliestFollowUp,
+                lastContactedAt: group.mostRecentContact,
+                createdAt: group.contacts[0]?.createdAt ?? null,
+              };
+            })}
+            query={query}
+            total={total}
+            page={query.page}
+            sourceOptions={sourceOptions}
+          />
+        ) : (
+          <LeadsTable
+            leads={rows.map((row) => ({
+              ...row,
+              href: buildLeadHref(row.id),
+            }))}
+            query={query}
+            total={total}
+            page={query.page}
+            sourceOptions={sourceOptions}
+          />
         )}
       </div>
-
-      {activeKind === "contact" && activeContact && (
-        <LeadDetailAside>
-          <ContactDetailPanel
-            detail={activeContact}
-            closeHref={closeHref}
-            buildAccountHref={(id) => buildAccountHref(id, query)}
-            buildPropertyHref={(id) => buildPropertyHref(id, query)}
-            buildLeadHref={(id) => buildLeadHref(id, query)}
-          />
-        </LeadDetailAside>
-      )}
-
-      {activeKind === "account" && activeAccount && (
-        <LeadDetailAside>
-          <AccountDetailPanel
-            detail={activeAccount}
-            closeHref={closeHref}
-            buildPropertyHref={(id) => buildPropertyHref(id, query)}
-            buildContactHref={(id) => buildContactHref(id, query)}
-          />
-        </LeadDetailAside>
-      )}
-
-      {activeKind === "property" && activeProperty && (
-        <LeadDetailAside>
-          <PropertyDetailPanel
-            detail={activeProperty}
-            closeHref={closeHref}
-            buildAccountHref={(id) => buildAccountHref(id, query)}
-            buildContactHref={(id) => buildContactHref(id, query)}
-            buildLeadHref={(id) => buildLeadHref(id, query)}
-          />
-        </LeadDetailAside>
-      )}
-
-      {activeKind === "lead" && activeLead && (
-        <LeadDetailAside>
-          <LeadDetailBody
-            lead={activeLead}
-            linkedBid={activeLeadBid}
-            error={params.error}
-            closeHref={closeHref}
-          />
-        </LeadDetailAside>
-      )}
     </div>
   );
 }

@@ -166,19 +166,15 @@ function HeaderLabel({ children }: { children: React.ReactNode }) {
 export function PropertyLeadsTable({
   groups,
   query,
-  activePropertyId,
   total,
   page,
   sourceOptions,
-  isDetailOpen = false,
 }: {
   groups: PropertyTableRow[];
   query: PropertyTableQuery;
-  activePropertyId?: string | null;
   total: number;
   page: number;
   sourceOptions: LeadSourceOption[];
-  isDetailOpen?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -439,15 +435,15 @@ export function PropertyLeadsTable({
         globalFilter: query.q,
         pagination,
         columnVisibility: {
-          contacts: !isDetailOpen,
-          pipeline: !isDetailOpen,
-          portfolioCount: !isDetailOpen,
+          contacts: true,
+          pipeline: true,
+          portfolioCount: true,
           status: false,
           sourceTag: false,
           lastContactedAt: false,
           createdAt: false,
         },
-        rowSelection: activePropertyId ? { [activePropertyId]: true } : {},
+        rowSelection: {},
       }}
       config={{
         enableFilters: true,
