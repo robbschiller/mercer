@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useMemo, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useDebounce } from "@/components/niko-table/hooks/use-debounce";
 import type {
   ColumnSort,
   PaginationState,
@@ -180,6 +181,10 @@ export function PropertyLeadsTable({
   const pathname = usePathname();
   const [, startTransition] = useTransition();
 
+  const [localQ, setLocalQ] = useState(query.q);
+  const debouncedQ = useDebounce(localQ, 300);
+  const lastSyncedQRef = useRef(query.q);
+
   const sorting = useMemo(() => sortingStateFor(query.sort), [query.sort]);
   const filters = useMemo(
     () =>
@@ -202,6 +207,20 @@ export function PropertyLeadsTable({
     const qs = buildQueryString(query, overrides);
     startTransition(() => router.push(qs ? `${pathname}?${qs}` : pathname));
   };
+
+  useEffect(() => {
+    if (query.q === lastSyncedQRef.current) return;
+    lastSyncedQRef.current = query.q;
+    setLocalQ(query.q);
+  }, [query.q]);
+
+  useEffect(() => {
+    const trimmed = debouncedQ.trim();
+    if (trimmed === query.q) return;
+    lastSyncedQRef.current = trimmed;
+    pushQuery({ q: trimmed, page: 1 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedQ]);
 
   const columns = useMemo<DataTableColumnDef<PropertyTableRow>[]>(
     () => [
@@ -459,8 +478,8 @@ export function PropertyLeadsTable({
         <DataTableToolbarSection className="flex-wrap justify-between gap-2 border-b p-0 px-3 py-2">
           <div className="min-w-0 flex-1">
             <DataTableSearchFilter<PropertyTableRow>
-              value={query.q}
-              onChange={(q) => pushQuery({ q: q.trim(), page: 1 })}
+              value={localQ}
+              onChange={setLocalQ}
               placeholder="Search properties, accounts, contacts..."
               className="w-full max-w-md [&_input]:border-0 [&_input]:shadow-none [&_input]:focus-visible:ring-0"
             />
