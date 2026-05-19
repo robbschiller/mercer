@@ -40,6 +40,18 @@ function getOverpassUrl(): string {
   );
 }
 
+/**
+ * Overpass (overpass-api.de) rejects requests without an identifying User-Agent
+ * with HTTP 406. Node's default fetch UA gets blocked; sending an app-specific
+ * one keeps the public endpoint reachable.
+ */
+function getOverpassUserAgent(): string {
+  return (
+    process.env.OVERPASS_USER_AGENT?.trim() ||
+    "Mercer/1.0 (+https://usemercer.com)"
+  );
+}
+
 function buildQuery(lat: number, lng: number, radiusM: number): string {
   /* Server-side max time (seconds). Public instances can be slow on first hit. */
   return `
@@ -107,6 +119,8 @@ export async function fetchOverpassBuildings(
           method: "POST",
           headers: {
             "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+            "User-Agent": getOverpassUserAgent(),
+            Accept: "application/json",
           },
           body: `data=${encodeURIComponent(query)}`,
           signal: controller.signal,
@@ -139,7 +153,9 @@ export async function fetchOverpassBuildings(
       const hint =
         res.status === 504
           ? " The public map server timed out — try again, or set OVERPASS_API_URL to another Overpass instance."
-          : "";
+          : res.status === 406
+            ? " OpenStreetMap rejected the request (likely User-Agent block). Set OVERPASS_USER_AGENT to an app-specific identifier."
+            : "";
 
       return {
         status: "error",
