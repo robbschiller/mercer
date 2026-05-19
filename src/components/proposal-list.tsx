@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { FileText, Download, Loader2, Link2 } from "lucide-react";
+import { Check, Copy, FileText, Download, Loader2, Link2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { createProposalShareAction, generateProposalAction } from "@/lib/actions";
@@ -25,6 +25,65 @@ export function ProposalList({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [shareUrls, setShareUrls] = useState<Record<string, string>>({});
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  function markCopied(proposalId: string) {
+    setCopiedId(proposalId);
+    setNotice("Share link copied to clipboard.");
+    setTimeout(() => {
+      setCopiedId((current) => (current === proposalId ? null : current));
+    }, 2000);
+  }
+
+  function legacyCopy(text: string) {
+    if (typeof document === "undefined") return false;
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "0";
+    ta.style.left = "0";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    const prevSelection = document.getSelection();
+    const prevRange =
+      prevSelection && prevSelection.rangeCount > 0
+        ? prevSelection.getRangeAt(0)
+        : null;
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    let ok = false;
+    try {
+      ok = document.execCommand("copy");
+    } catch (err) {
+      console.warn("execCommand copy failed", err);
+      ok = false;
+    }
+    document.body.removeChild(ta);
+    if (prevRange && prevSelection) {
+      prevSelection.removeAllRanges();
+      prevSelection.addRange(prevRange);
+    }
+    return ok;
+  }
+
+  async function copyToClipboard(text: string, proposalId: string) {
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        markCopied(proposalId);
+        return true;
+      } catch (err) {
+        console.warn("navigator.clipboard.writeText failed, trying fallback", err);
+      }
+    }
+    if (legacyCopy(text)) {
+      markCopied(proposalId);
+      return true;
+    }
+    setNotice("Could not copy automatically. Select the URL and press Cmd+C / Ctrl+C.");
+    return false;
+  }
 
   function handleGenerate() {
     setError(null);
@@ -44,31 +103,22 @@ export function ProposalList({
   function handleShare(proposalId: string, existingShareId?: string) {
     setError(null);
     setNotice(null);
-    startTransition(async () => {
-      if (existingShareId) {
-        const existingUrl = `${siteUrl}/p/${existingShareId}`;
-        setShareUrls((prev) => ({ ...prev, [proposalId]: existingUrl }));
-        if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(existingUrl);
-          setNotice("Share link copied to clipboard.");
-        } else {
-          setNotice("Share link ready to copy.");
-        }
-        return;
-      }
+    if (existingShareId) {
+      const existingUrl = `${siteUrl}/p/${existingShareId}`;
+      setShareUrls((prev) => ({ ...prev, [proposalId]: existingUrl }));
+      void copyToClipboard(existingUrl, proposalId);
+      return;
+    }
 
+    startTransition(async () => {
       const result = await createProposalShareAction({ proposalId });
       if (result.error || !result.shareUrl) {
         setError(result.error ?? "Could not create share link");
         return;
       }
-      setShareUrls((prev) => ({ ...prev, [proposalId]: result.shareUrl! }));
-      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(result.shareUrl);
-        setNotice("Share link copied to clipboard.");
-      } else {
-        setNotice("Share link ready to copy.");
-      }
+      const shareUrl = result.shareUrl;
+      setShareUrls((prev) => ({ ...prev, [proposalId]: shareUrl }));
+      await copyToClipboard(shareUrl, proposalId);
       router.refresh();
     });
   }
@@ -159,10 +209,39 @@ export function ProposalList({
 
                 {(shareUrls[proposal.id] || existingShare) && (
                   <div className="space-y-0.5">
-                    <p className="truncate text-xs text-muted-foreground">
-                      Share URL:{" "}
-                      {shareUrls[proposal.id] ?? `${siteUrl}/p/${existingShare?.share.id}`}
-                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        Share URL:
+                      </span>
+                      <input
+                        readOnly
+                        value={
+                          shareUrls[proposal.id] ??
+                          `${siteUrl}/p/${existingShare?.share.id}`
+                        }
+                        onFocus={(e) => e.currentTarget.select()}
+                        onClick={(e) => e.currentTarget.select()}
+                        className="min-w-0 flex-1 truncate bg-transparent text-xs text-muted-foreground outline-none"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-1.5"
+                        onClick={() =>
+                          copyToClipboard(
+                            shareUrls[proposal.id] ??
+                              `${siteUrl}/p/${existingShare?.share.id}`,
+                            proposal.id
+                          )
+                        }
+                      >
+                        {copiedId === proposal.id ? (
+                          <Check className="h-3 w-3" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                      </Button>
+                    </div>
                     {shareStatus && (
                       <p className="text-xs text-muted-foreground">
                         Status: {shareStatus}
