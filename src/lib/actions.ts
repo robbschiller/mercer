@@ -56,6 +56,8 @@ import { createClient } from "./supabase/server";
 import {
   signInSchema,
   signUpSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
   updateBidSchema,
   deleteBidSchema,
   createBuildingSchema,
@@ -142,6 +144,57 @@ export async function signOutAction() {
   const supabase = await createClient();
   await supabase.auth.signOut();
   redirect("/");
+}
+
+export async function requestPasswordResetAction(formData: FormData) {
+  const result = forgotPasswordSchema.safeParse(formDataToObject(formData));
+
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/forgot-password?error=${encodeURIComponent(message)}`);
+  }
+
+  const supabase = await createClient();
+  const origin = getAppOrigin();
+  // The email link lands on the existing auth callback, which exchanges the
+  // recovery code for a session and forwards to /reset-password.
+  await supabase.auth.resetPasswordForEmail(result.data.email, {
+    redirectTo: `${origin}/auth/callback?next=/reset-password`,
+  });
+
+  // Always confirm the same way whether or not the email has an account, so
+  // this endpoint can't be used to probe which emails are registered.
+  redirect("/forgot-password?sent=1");
+}
+
+export async function updatePasswordAction(formData: FormData) {
+  const result = resetPasswordSchema.safeParse(formDataToObject(formData));
+
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/reset-password?error=${encodeURIComponent(message)}`);
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    redirect(
+      `/reset-password?error=${encodeURIComponent(
+        "Your reset link is invalid or has expired. Request a new one.",
+      )}`,
+    );
+  }
+
+  const { error } = await supabase.auth.updateUser({
+    password: result.data.password,
+  });
+  if (error) {
+    redirect(`/reset-password?error=${encodeURIComponent(error.message)}`);
+  }
+
+  redirect("/dashboard");
 }
 
 // ── Bids ──
