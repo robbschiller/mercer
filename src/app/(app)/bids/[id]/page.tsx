@@ -40,6 +40,7 @@ export default async function BidPage({
     buildings,
     surfacesByBuilding,
     lineItems,
+    accessItems,
     totalSqft,
     proposals,
     proposalShares,
@@ -59,6 +60,10 @@ export default async function BidPage({
     lineItems: lineItems.map((li) => ({
       name: li.name,
       amount: Number(li.amount),
+    })),
+    accessItems: accessItems.map((a) => ({
+      name: a.method ?? a.type,
+      amount: Number(a.amount),
     })),
   });
 
@@ -129,6 +134,7 @@ export default async function BidPage({
         buildings={buildings}
         surfacesByBuilding={surfacesByBuilding}
         lineItems={lineItems}
+        accessItems={accessItems}
         totalSqft={totalSqft}
         proposals={proposals}
         proposalShares={proposalShares}

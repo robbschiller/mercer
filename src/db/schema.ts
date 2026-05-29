@@ -16,6 +16,10 @@ import {
   ENRICHMENT_STATUSES,
   PROJECT_STATUSES,
   PROJECT_UPDATE_AUTHOR_TYPES,
+  ACCOUNT_TYPES,
+  PROPERTY_PARTY_ROLES,
+  BUILDING_ARCHETYPES,
+  ACCESS_TYPES,
 } from "@/lib/status-meta";
 
 export const accounts = pgTable("accounts", {
@@ -23,6 +27,10 @@ export const accounts = pgTable("accounts", {
   userId: uuid("user_id").notNull(),
   name: text("name").notNull(),
   website: text("website"),
+  /** Owner vs. management company vs. other — drives NTO routing. */
+  type: text("type", { enum: ACCOUNT_TYPES })
+    .notNull()
+    .default("management_company"),
   sourceTag: text("source_tag"),
   status: text("status").notNull().default("active"),
   notes: text("notes").notNull().default(""),
@@ -37,7 +45,18 @@ export const accounts = pgTable("accounts", {
 export const properties = pgTable("properties", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull(),
+  /**
+   * Legacy single account link, retained as a compatibility field. New code
+   * reads `managementAccountId` / `ownerAccountId`; this still holds the
+   * management company for rows created before the property-rooted re-model.
+   */
   accountId: uuid("account_id").references(() => accounts.id),
+  /** The management company for this property (legally distinct from owner). */
+  managementAccountId: uuid("management_account_id").references(
+    () => accounts.id,
+  ),
+  /** The legal owner — the lienable party Notice to Owner must reach. */
+  ownerAccountId: uuid("owner_account_id").references(() => accounts.id),
   name: text("name"),
   address: text("address"),
   latitude: doublePrecision("latitude"),
@@ -99,6 +118,40 @@ export const propertyContacts = pgTable("property_contacts", {
   notes: text("notes").notNull().default(""),
 });
 
+/**
+ * Parties tied to a property for legal/billing purposes. Captures who owns
+ * it, who manages it, and which contact maps to which — the data Notice to
+ * Owner generation depends on. `isNtoRecipient` marks the party NTO must be
+ * served to (the owner; serving the manager forfeits lien rights). When the
+ * legal owner has no account/contact record yet, the free-text
+ * `legalOwnerName` / `legalOwnerAddress` capture it. See docs/plan.md →
+ * "Property-rooted re-model" and docs/build-plans/property_rooted_remodel.plan.md.
+ */
+export const propertyParties = pgTable("property_parties", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  propertyId: uuid("property_id")
+    .notNull()
+    .references(() => properties.id, { onDelete: "cascade" }),
+  accountId: uuid("account_id").references(() => accounts.id, {
+    onDelete: "set null",
+  }),
+  contactId: uuid("contact_id").references(() => contacts.id, {
+    onDelete: "set null",
+  }),
+  role: text("role", { enum: PROPERTY_PARTY_ROLES }).notNull(),
+  isNtoRecipient: boolean("is_nto_recipient").notNull().default(false),
+  legalOwnerName: text("legal_owner_name"),
+  legalOwnerAddress: text("legal_owner_address"),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const bids = pgTable("bids", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull(),
@@ -112,6 +165,8 @@ export const bids = pgTable("bids", {
   googlePlaceId: text("google_place_id"),
   satelliteImageUrl: text("satellite_image_url"),
   clientName: text("client_name").notNull(),
+  /** Human label for the scoped opportunity, e.g. "Blue section". */
+  label: text("label"),
   notes: text("notes").notNull().default(""),
   status: text("status", { enum: BID_STATUSES })
     .notNull()
@@ -120,6 +175,19 @@ export const bids = pgTable("bids", {
   pricePerGallon: numeric("price_per_gallon"),
   laborRatePerUnit: numeric("labor_rate_per_unit"),
   marginPercent: numeric("margin_percent").default("0"),
+  /* ── Delivery phase (the project) — null until won. Folds in what used to
+        live on the separate `projects` table; see 018_project_spine.sql. ── */
+  deliveryStatus: text("delivery_status", { enum: PROJECT_STATUSES }),
+  targetStartDate: date("target_start_date"),
+  targetEndDate: date("target_end_date"),
+  actualStartDate: timestamp("actual_start_date", { withTimezone: true }),
+  actualEndDate: timestamp("actual_end_date", { withTimezone: true }),
+  assignedSub: text("assigned_sub"),
+  crewLeadName: text("crew_lead_name"),
+  acceptedByName: text("accepted_by_name"),
+  acceptedByTitle: text("accepted_by_title"),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  deliveryNotes: text("delivery_notes").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -135,6 +203,8 @@ export const buildings = pgTable("buildings", {
     .references(() => bids.id, { onDelete: "cascade" }),
   label: text("label").notNull(),
   count: integer("count").notNull().default(1),
+  /** Drives access scaling (mid_rise/high_rise need swing stage/lifts). */
+  archetype: text("archetype", { enum: BUILDING_ARCHETYPES }),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -165,6 +235,34 @@ export const lineItems = pgTable("line_items", {
     .references(() => bids.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   amount: numeric("amount").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Access items: the scope dimension for how crews reach the surfaces (lifts,
+ * scaffold, swing stage, safety). Sibling to buildings/surfaces — cost scales
+ * by height/archetype, not square footage. `amount` is the explicit cost for
+ * this phase; `rateDerived` reserves the future path where the deterministic
+ * engine computes it from rate_config.access_rates. `bidId` re-parents to the
+ * project spine in Phase 3 of the property-rooted re-model.
+ */
+export const accessItems = pgTable("access_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  bidId: uuid("bid_id")
+    .notNull()
+    .references(() => bids.id, { onDelete: "cascade" }),
+  buildingId: uuid("building_id").references(() => buildings.id, {
+    onDelete: "set null",
+  }),
+  type: text("type", { enum: ACCESS_TYPES }).notNull(),
+  method: text("method"),
+  quantity: numeric("quantity"),
+  durationDays: integer("duration_days"),
+  amount: numeric("amount").notNull().default("0"),
+  rateDerived: boolean("rate_derived").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -309,38 +407,12 @@ export const auditLog = pgTable("audit_log", {
 });
 
 /**
- * Projects: created automatically when a proposal_share is accepted.
- * One project per bid (UNIQUE bid_id supports ON CONFLICT DO NOTHING
- * idempotency on accept). Owns post-acceptance delivery metadata; the bid
- * stays the immutable contract artifact. See PRD §5.5 / §6.3.
+ * Projects are no longer a separate table. The bid row IS the project after
+ * the property-rooted re-model (Phase 3): delivery state lives on `bids`
+ * (delivery_status, target/actual dates, assigned_sub, crew_lead_name,
+ * accepted_*, delivery_notes). Dropped in 020_drop_projects.sql. The app-level
+ * project shape is `ProjectView` in src/lib/store.ts.
  */
-export const projects = pgTable("projects", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  bidId: uuid("bid_id")
-    .notNull()
-    .unique()
-    .references(() => bids.id, { onDelete: "cascade" }),
-  userId: uuid("user_id").notNull(),
-  status: text("status", { enum: PROJECT_STATUSES })
-    .notNull()
-    .default("not_started"),
-  targetStartDate: date("target_start_date"),
-  targetEndDate: date("target_end_date"),
-  actualStartDate: timestamp("actual_start_date", { withTimezone: true }),
-  actualEndDate: timestamp("actual_end_date", { withTimezone: true }),
-  assignedSub: text("assigned_sub"),
-  crewLeadName: text("crew_lead_name"),
-  acceptedByName: text("accepted_by_name"),
-  acceptedByTitle: text("accepted_by_title"),
-  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
-  notes: text("notes").notNull().default(""),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
 
 /**
  * Project updates: append-only feed of progress notes against a project.
@@ -351,9 +423,10 @@ export const projects = pgTable("projects", {
  */
 export const projectUpdates = pgTable("project_updates", {
   id: uuid("id").primaryKey().defaultRandom(),
-  projectId: uuid("project_id")
+  /** Bid-spine parent (the project = the bid row). */
+  bidId: uuid("bid_id")
     .notNull()
-    .references(() => projects.id, { onDelete: "cascade" }),
+    .references(() => bids.id, { onDelete: "cascade" }),
   authorType: text("author_type", { enum: PROJECT_UPDATE_AUTHOR_TYPES })
     .notNull()
     .default("human"),
@@ -374,6 +447,28 @@ export const userDefaults = pgTable("user_defaults", {
   pricePerGallon: numeric("price_per_gallon"),
   laborRatePerUnit: numeric("labor_rate_per_unit"),
   marginPercent: numeric("margin_percent"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Org-level rate config the deterministic pricing engine reads — the stored
+ * source of truth for rates so the model never invents them (the receiving
+ * end of the prompt-bidding boundary). Scalar paint rates mirror
+ * user_defaults; `accessRates` holds per-archetype access pricing, e.g.
+ * { swing_stage: { high_rise: 80000 }, lift: { mid_rise: 4500 } }. Keyed by
+ * the org owner's user id, mirroring user_defaults.
+ */
+export const rateConfig = pgTable("rate_config", {
+  userId: uuid("user_id").primaryKey(),
+  coverageSqftPerGallon: numeric("coverage_sqft_per_gallon"),
+  pricePerGallon: numeric("price_per_gallon"),
+  laborRatePerUnit: numeric("labor_rate_per_unit"),
+  marginPercent: numeric("margin_percent"),
+  accessRates: jsonb("access_rates").$type<
+    Record<string, Record<string, number>>
+  >(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

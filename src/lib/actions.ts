@@ -16,6 +16,9 @@ import {
   createLineItem,
   updateLineItem,
   deleteLineItem,
+  createAccessItem,
+  updateAccessItem,
+  deleteAccessItem,
   upsertUserDefaults,
   getBidPageData,
   createProposal,
@@ -27,6 +30,7 @@ import {
   updateLeadStatus,
   logLeadContact,
   setLeadFollowUp,
+  setPropertyOwnership,
   getLead,
   acceptProposalShare,
   declineProposalShare,
@@ -70,6 +74,9 @@ import {
   createLineItemSchema,
   updateLineItemSchema,
   deleteLineItemSchema,
+  createAccessItemSchema,
+  updateAccessItemSchema,
+  deleteAccessItemSchema,
   updateUserDefaultsSchema,
   generateProposalSchema,
   createProposalShareSchema,
@@ -82,6 +89,7 @@ import {
   enrichLeadActionSchema,
   logLeadContactSchema,
   setLeadFollowUpSchema,
+  setPropertyOwnershipSchema,
   updateProjectStatusSchema,
   updateProjectDetailsSchema,
   createProjectUpdateSchema,
@@ -400,6 +408,58 @@ export async function deleteLineItemAction(data: {
   return { error: null };
 }
 
+// ── Access Items ──
+
+export async function createAccessItemAction(data: {
+  bidId: string;
+  type: string;
+  method?: string | null;
+  quantity?: string | number | null;
+  durationDays?: string | number | null;
+  amount: string | number;
+}) {
+  const result = createAccessItemSchema.safeParse(data);
+  if (!result.success) {
+    return { error: result.error.issues[0]?.message ?? "Invalid input" };
+  }
+  const { bidId, ...itemData } = result.data;
+  await createAccessItem(bidId, itemData);
+  revalidatePath(`/bids/${bidId}`);
+  return { error: null };
+}
+
+export async function updateAccessItemAction(data: {
+  id: string;
+  bidId: string;
+  type: string;
+  method?: string | null;
+  quantity?: string | number | null;
+  durationDays?: string | number | null;
+  amount: string | number;
+}) {
+  const result = updateAccessItemSchema.safeParse(data);
+  if (!result.success) {
+    return { error: result.error.issues[0]?.message ?? "Invalid input" };
+  }
+  const { id, bidId, ...itemData } = result.data;
+  await updateAccessItem(id, itemData);
+  revalidatePath(`/bids/${bidId}`);
+  return { error: null };
+}
+
+export async function deleteAccessItemAction(data: {
+  id: string;
+  bidId: string;
+}) {
+  const result = deleteAccessItemSchema.safeParse(data);
+  if (!result.success) {
+    return { error: result.error.issues[0]?.message ?? "Invalid input" };
+  }
+  await deleteAccessItem(result.data.id);
+  revalidatePath(`/bids/${result.data.bidId}`);
+  return { error: null };
+}
+
 // ── User Defaults ──
 
 export async function updateUserDefaultsAction(data: {
@@ -432,7 +492,16 @@ export async function generateProposalAction(data: { bidId: string }) {
     return { error: "Bid not found", pdfUrl: null };
   }
 
-  const { bid, buildings, surfacesByBuilding, lineItems, totalSqft } = pageData;
+  const { bid, buildings, surfacesByBuilding, lineItems, accessItems, totalSqft } =
+    pageData;
+
+  // Access items fold into the proposal's line items so the customer-facing
+  // total reconciles with the bid total. A dedicated access section in the
+  // snapshot/PDF is Phase 4 of the property-rooted re-model.
+  const accessAsLineItems = accessItems.map((a) => ({
+    name: a.method ? `Access — ${a.method}` : `Access — ${a.type}`,
+    amount: Number(a.amount),
+  }));
 
   const pricing = calculateBidPricing({
     totalSqft,
@@ -448,6 +517,7 @@ export async function generateProposalAction(data: { bidId: string }) {
       name: li.name,
       amount: Number(li.amount),
     })),
+    accessItems: accessAsLineItems,
   });
 
   if (!pricing.complete || pricing.grandTotal == null) {
@@ -469,10 +539,13 @@ export async function generateProposalAction(data: { bidId: string }) {
         totalSqft: Number(s.totalSqft ?? 0),
       })),
     })),
-    lineItems: lineItems.map((li) => ({
-      name: li.name,
-      amount: Number(li.amount),
-    })),
+    lineItems: [
+      ...lineItems.map((li) => ({
+        name: li.name,
+        amount: Number(li.amount),
+      })),
+      ...accessAsLineItems,
+    ],
     totalSqft,
     grandTotal: pricing.grandTotal,
     generatedAt: new Date().toISOString(),
@@ -559,6 +632,10 @@ export async function acceptProposalShareAction(formData: FormData) {
     revalidatePath(`/bids/${bidId}`);
     revalidatePath("/bids");
     revalidatePath("/dashboard");
+    // Accept moves the bid into delivery (the bid row is the project), so the
+    // projects list + detail must refresh too.
+    revalidatePath("/projects");
+    revalidatePath(`/projects/${bidId}`);
     if (leadId) {
       revalidatePath(`/leads/${leadId}`);
       revalidatePath("/leads");
@@ -583,6 +660,7 @@ export async function declineProposalShareAction(formData: FormData) {
     revalidatePath(`/bids/${bidId}`);
     revalidatePath("/bids");
     revalidatePath("/dashboard");
+    revalidatePath("/projects");
     if (leadId) {
       revalidatePath(`/leads/${leadId}`);
       revalidatePath("/leads");
@@ -771,6 +849,37 @@ export async function setLeadFollowUpAction(formData: FormData) {
   }
   revalidatePath("/leads");
   revalidatePath(`/leads/${result.data.id}`);
+}
+
+export async function setPropertyOwnershipAction(formData: FormData) {
+  const result = setPropertyOwnershipSchema.safeParse(
+    formDataToObject(formData),
+  );
+  if (!result.success) {
+    const id = (formData.get("propertyId") as string) || "";
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(
+      `/leads/properties/${id}?error=${encodeURIComponent(message)}`,
+    );
+  }
+  const { propertyId, legalOwnerName, legalOwnerAddress, ntoContactId } =
+    result.data;
+  try {
+    await setPropertyOwnership({
+      propertyId,
+      legalOwnerName,
+      legalOwnerAddress,
+      ntoContactId,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to save ownership";
+    redirect(
+      `/leads/properties/${propertyId}?error=${encodeURIComponent(message)}`,
+    );
+  }
+  revalidatePath(`/leads/properties/${propertyId}`);
+  redirect(`/leads/properties/${propertyId}?saved=1`);
 }
 
 export async function enrichLeadAction(formData: FormData) {

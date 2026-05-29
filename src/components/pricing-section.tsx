@@ -6,10 +6,12 @@ export function PricingSection({
   bid,
   lineItems: items,
   totalSqft,
+  accessTotal,
 }: {
   bid: Bid;
   lineItems: LineItem[];
   totalSqft: number;
+  accessTotal: number;
 }) {
   const lineItemsTotal = items.reduce(
     (sum, li) => sum + Number(li.amount),
@@ -28,6 +30,7 @@ export function PricingSection({
           marginPercent: bid.marginPercent,
         }}
         lineItemsTotal={lineItemsTotal}
+        accessTotal={accessTotal}
       />
 
       <div className="border-t pt-4">

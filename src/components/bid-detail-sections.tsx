@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Building2, DollarSign, FileText } from "lucide-react";
+import { Building2, DollarSign, FileText, ArrowUpDown } from "lucide-react";
 import { CollapsibleSection } from "@/components/collapsible-section";
 import { BuildingList } from "@/components/building-list";
+import { AccessItemsSection } from "@/components/access-items-section";
 import { PricingSection } from "@/components/pricing-section";
 import { ProposalList } from "@/components/proposal-list";
 import { formatCurrency } from "@/lib/pricing";
@@ -11,19 +12,21 @@ import type {
   Bid,
   Surface,
   LineItem,
+  AccessItem,
   Proposal,
   BuildingWithSqft,
   ProposalShare,
 } from "@/lib/store";
 import type { PricingResult } from "@/lib/pricing";
 
-type Section = "buildings" | "pricing" | "proposals";
+type Section = "buildings" | "access" | "pricing" | "proposals";
 
 interface BidDetailSectionsProps {
   bid: Bid;
   buildings: BuildingWithSqft[];
   surfacesByBuilding: Record<string, Surface[]>;
   lineItems: LineItem[];
+  accessItems: AccessItem[];
   totalSqft: number;
   proposals: Proposal[];
   proposalShares: { proposalId: string; share: ProposalShare }[];
@@ -36,6 +39,7 @@ export function BidDetailSections({
   buildings,
   surfacesByBuilding,
   lineItems,
+  accessItems,
   totalSqft,
   proposals,
   proposalShares,
@@ -72,6 +76,16 @@ export function BidDetailSections({
     0
   );
 
+  const accessTotal = accessItems.reduce(
+    (sum, a) => sum + Number(a.amount),
+    0
+  );
+
+  const accessSummary =
+    accessItems.length === 0
+      ? "No access items added"
+      : `${accessItems.length} item${accessItems.length !== 1 ? "s" : ""} · ${formatCurrency(accessTotal)}`;
+
   const buildingSummary =
     buildings.length === 0
       ? "No buildings added yet"
@@ -104,6 +118,17 @@ export function BidDetailSections({
       </CollapsibleSection>
 
       <CollapsibleSection
+        icon={ArrowUpDown}
+        title="Access"
+        description="Lifts, scaffold, swing stage, and safety to reach the work."
+        summary={accessSummary}
+        open={open.has("access")}
+        onToggle={() => toggle("access")}
+      >
+        <AccessItemsSection bidId={bid.id} items={accessItems} />
+      </CollapsibleSection>
+
+      <CollapsibleSection
         icon={DollarSign}
         title="Pricing"
         description="Set rates and margins to calculate your bid price."
@@ -115,6 +140,7 @@ export function BidDetailSections({
           bid={bid}
           lineItems={lineItems}
           totalSqft={totalSqft}
+          accessTotal={accessTotal}
         />
       </CollapsibleSection>
 

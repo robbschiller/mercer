@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/submit-button";
+import { BreadcrumbLabel } from "@/components/breadcrumb-label";
 import {
   bidStatusLabel,
   bidStatusVariant,
@@ -95,6 +96,7 @@ export default async function ProjectPage({
 
   return (
     <div className="container mx-auto max-w-3xl px-4 py-8 flex flex-col gap-6">
+      <BreadcrumbLabel segment={id} label={bid.propertyName} />
       <div>
         <Button variant="ghost" size="sm" asChild>
           <Link href={`/bids/${bid.id}`}>&larr; Back to bid</Link>

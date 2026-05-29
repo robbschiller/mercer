@@ -22,6 +22,7 @@ interface PricingFormProps {
     marginPercent: string | null;
   };
   lineItemsTotal: number;
+  accessTotal: number;
 }
 
 export function PricingForm({
@@ -29,6 +30,7 @@ export function PricingForm({
   totalSqft,
   initialValues,
   lineItemsTotal,
+  accessTotal,
 }: PricingFormProps) {
   const [coverage, setCoverage] = useState(
     initialValues.coverageSqftPerGallon ?? ""
@@ -52,6 +54,7 @@ export function PricingForm({
     laborRatePerUnit: laborRate ? Number(laborRate) : null,
     marginPercent: margin ? Number(margin) : null,
     lineItems: [{ name: "total", amount: lineItemsTotal }],
+    accessItems: [{ name: "access", amount: accessTotal }],
   });
 
   const save = useCallback(() => {
@@ -171,6 +174,14 @@ export function PricingForm({
                 <span className="text-muted-foreground">Line items</span>
                 <span className="tabular-nums">
                   {formatCurrency(calc.lineItemsTotal)}
+                </span>
+              </div>
+            )}
+            {calc.accessTotal > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Access</span>
+                <span className="tabular-nums">
+                  {formatCurrency(calc.accessTotal)}
                 </span>
               </div>
             )}
