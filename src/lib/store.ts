@@ -4,18 +4,20 @@ import {
   buildings,
   surfaces,
   lineItems,
+  accessItems,
   userDefaults,
+  rateConfig,
   proposals,
   proposalShares,
   accounts,
   properties,
   contacts,
   propertyContacts,
+  propertyParties,
   leads,
   leadContacts,
   activityEvents,
   auditLog,
-  projects,
   projectUpdates,
   companyProfiles,
   onboardings,
@@ -36,23 +38,26 @@ import {
 import { getOrgContext } from "@/lib/org-context";
 import { computeTotalSqft } from "@/lib/dimensions";
 import { buildSatelliteProxyPath } from "@/lib/maps/satellite-path";
+import type { AccountType } from "@/lib/status-meta";
 
 export type Bid = typeof bids.$inferSelect;
 export type Building = typeof buildings.$inferSelect;
 export type Surface = typeof surfaces.$inferSelect;
 export type LineItem = typeof lineItems.$inferSelect;
+export type AccessItem = typeof accessItems.$inferSelect;
 export type UserDefault = typeof userDefaults.$inferSelect;
+export type RateConfig = typeof rateConfig.$inferSelect;
 export type Proposal = typeof proposals.$inferSelect;
 export type ProposalShare = typeof proposalShares.$inferSelect;
 export type Account = typeof accounts.$inferSelect;
 export type Property = typeof properties.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
 export type PropertyContact = typeof propertyContacts.$inferSelect;
+export type PropertyParty = typeof propertyParties.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
 export type LeadContact = typeof leadContacts.$inferSelect;
 export type ActivityEvent = typeof activityEvents.$inferSelect;
 export type AuditLog = typeof auditLog.$inferSelect;
-export type Project = typeof projects.$inferSelect;
 export type ProjectUpdate = typeof projectUpdates.$inferSelect;
 export type CompanyProfile = typeof companyProfiles.$inferSelect;
 export type Onboarding = typeof onboardings.$inferSelect;
@@ -381,6 +386,7 @@ export async function getBidPageData(bidId: string) {
     buildingRows,
     surfaceRows,
     lineItemRows,
+    accessItemRows,
     sqftRows,
     proposalRows,
     proposalShareRows,
@@ -409,6 +415,11 @@ export async function getBidPageData(bidId: string) {
         .from(lineItems)
         .where(eq(lineItems.bidId, bidId))
         .orderBy(asc(lineItems.sortOrder), asc(lineItems.createdAt)),
+      db
+        .select()
+        .from(accessItems)
+        .where(eq(accessItems.bidId, bidId))
+        .orderBy(asc(accessItems.sortOrder), asc(accessItems.createdAt)),
       db
         .select({
           total: sql<number>`coalesce(sum(${surfaces.totalSqft}::numeric * ${buildings.count}), 0)`,
@@ -448,6 +459,7 @@ export async function getBidPageData(bidId: string) {
     buildings: buildingsWithSqft,
     surfacesByBuilding,
     lineItems: lineItemRows,
+    accessItems: accessItemRows,
     totalSqft: Number(sqftRows[0]?.total ?? 0),
     proposals: proposalRows,
     proposalShares: proposalShareRows,
@@ -480,7 +492,7 @@ export async function createBuilding(
 
 export async function updateBuilding(
   id: string,
-  data: Partial<Pick<Building, "label" | "count">>
+  data: Partial<Pick<Building, "label" | "count" | "archetype">>
 ) {
   const { bidId } = await requireBuildingOwnership(id);
   const rows = await db
@@ -725,6 +737,110 @@ export async function deleteLineItem(id: string) {
   return true;
 }
 
+// ── Access Items ──
+
+type AccessItemInput = {
+  type: AccessItem["type"];
+  method?: string | null;
+  quantity?: string | null;
+  durationDays?: number | null;
+  amount?: string;
+};
+
+export async function getAccessItemsForBid(bidId: string) {
+  await requireBidOwnership(bidId);
+  return db
+    .select()
+    .from(accessItems)
+    .where(eq(accessItems.bidId, bidId))
+    .orderBy(asc(accessItems.sortOrder), asc(accessItems.createdAt));
+}
+
+export async function createAccessItem(bidId: string, data: AccessItemInput) {
+  await requireBidOwnership(bidId);
+
+  const maxOrder = await db
+    .select({ max: sql<number>`coalesce(max(${accessItems.sortOrder}), -1)` })
+    .from(accessItems)
+    .where(eq(accessItems.bidId, bidId));
+
+  const rows = await db
+    .insert(accessItems)
+    .values({
+      bidId,
+      type: data.type,
+      method: data.method ?? null,
+      quantity: data.quantity ?? null,
+      durationDays: data.durationDays ?? null,
+      amount: data.amount ?? "0",
+      sortOrder: (maxOrder[0]?.max ?? -1) + 1,
+    })
+    .returning();
+
+  await db
+    .update(bids)
+    .set({ updatedAt: new Date() })
+    .where(eq(bids.id, bidId));
+
+  return rows[0];
+}
+
+export async function updateAccessItem(
+  id: string,
+  data: Partial<AccessItemInput>,
+) {
+  const user = await requireUser();
+  const existing = await db
+    .select({ bidId: accessItems.bidId })
+    .from(accessItems)
+    .innerJoin(bids, eq(accessItems.bidId, bids.id))
+    .where(and(eq(accessItems.id, id), eq(bids.userId, user.ownerUserId)))
+    .limit(1);
+
+  if (!existing[0]) throw new Error("Access item not found");
+
+  const patch: Partial<typeof accessItems.$inferInsert> = {};
+  if (data.type !== undefined) patch.type = data.type;
+  if (data.method !== undefined) patch.method = data.method;
+  if (data.quantity !== undefined) patch.quantity = data.quantity;
+  if (data.durationDays !== undefined) patch.durationDays = data.durationDays;
+  if (data.amount !== undefined) patch.amount = data.amount;
+
+  const rows = await db
+    .update(accessItems)
+    .set(patch)
+    .where(eq(accessItems.id, id))
+    .returning();
+
+  await db
+    .update(bids)
+    .set({ updatedAt: new Date() })
+    .where(eq(bids.id, existing[0].bidId));
+
+  return rows[0] ?? null;
+}
+
+export async function deleteAccessItem(id: string) {
+  const user = await requireUser();
+  const existing = await db
+    .select({ bidId: accessItems.bidId })
+    .from(accessItems)
+    .innerJoin(bids, eq(accessItems.bidId, bids.id))
+    .where(and(eq(accessItems.id, id), eq(bids.userId, user.ownerUserId)))
+    .limit(1);
+
+  if (!existing[0]) throw new Error("Access item not found");
+
+  await db.delete(accessItems).where(eq(accessItems.id, id));
+
+  await db
+    .update(bids)
+    .set({ updatedAt: new Date() })
+    .where(eq(bids.id, existing[0].bidId));
+
+  return true;
+}
+
 // ── User Defaults ──
 
 export async function getUserDefaults() {
@@ -759,6 +875,63 @@ export async function upsertUserDefaults(
     })
     .returning();
 
+  return rows[0];
+}
+
+// ── Rate Config ──
+
+/**
+ * Org-level rate config the deterministic pricing engine reads. Falls back to
+ * user_defaults during the transition so rates resolve even before the org
+ * has its own rate_config row.
+ */
+export async function getRateConfig(): Promise<RateConfig | null> {
+  const user = await requireUser();
+  const rows = await db
+    .select()
+    .from(rateConfig)
+    .where(eq(rateConfig.userId, user.ownerUserId))
+    .limit(1);
+  if (rows[0]) return rows[0];
+
+  const defaults = await db
+    .select()
+    .from(userDefaults)
+    .where(eq(userDefaults.userId, user.ownerUserId))
+    .limit(1);
+  if (!defaults[0]) return null;
+  return {
+    userId: defaults[0].userId,
+    coverageSqftPerGallon: defaults[0].coverageSqftPerGallon,
+    pricePerGallon: defaults[0].pricePerGallon,
+    laborRatePerUnit: defaults[0].laborRatePerUnit,
+    marginPercent: defaults[0].marginPercent,
+    accessRates: null,
+    updatedAt: defaults[0].updatedAt,
+  };
+}
+
+export async function upsertRateConfig(
+  data: Partial<
+    Pick<
+      RateConfig,
+      | "coverageSqftPerGallon"
+      | "pricePerGallon"
+      | "laborRatePerUnit"
+      | "marginPercent"
+      | "accessRates"
+    >
+  >,
+) {
+  const user = await requireUser();
+  const rows = await db
+    .insert(rateConfig)
+    .values({ userId: user.ownerUserId, ...data, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: rateConfig.userId,
+      set: { ...data, updatedAt: new Date() },
+    })
+    .returning();
   return rows[0];
 }
 
@@ -842,6 +1015,7 @@ async function respondToProposalShare(
         leadId: bids.leadId,
         propertyId: bids.propertyId,
         primaryContactId: bids.primaryContactId,
+        deliveryStatus: bids.deliveryStatus,
       })
       .from(proposalShares)
       .innerJoin(proposals, eq(proposalShares.proposalId, proposals.id))
@@ -861,9 +1035,25 @@ async function respondToProposalShare(
       .where(eq(proposalShares.id, slug))
       .returning();
 
+    // The bid row IS the project (property-rooted re-model, Phase 3). On
+    // accept we enter the delivery phase on the same row instead of creating
+    // a separate projects record. delivery_status is set only if not already
+    // present, so a re-accept under any race never clobbers in-flight
+    // delivery state (replaces the old ON CONFLICT DO NOTHING idempotency).
     await tx
       .update(bids)
-      .set({ status: outcome, updatedAt: now })
+      .set(
+        outcome === "won"
+          ? {
+              status: outcome,
+              updatedAt: now,
+              deliveryStatus: existing.deliveryStatus ?? "not_started",
+              acceptedByName: updatedShare.acceptedByName,
+              acceptedByTitle: updatedShare.acceptedByTitle,
+              acceptedAt: updatedShare.acceptedAt,
+            }
+          : { status: outcome, updatedAt: now },
+      )
       .where(eq(bids.id, existing.bidId));
     await tx.insert(auditLog).values({
       userId: existing.bidUserId,
@@ -908,33 +1098,8 @@ async function respondToProposalShare(
       });
     }
 
-    let projectId: string | null = null;
-    if (outcome === "won") {
-      // Atomic create-on-accept. UNIQUE bid_id + ON CONFLICT DO NOTHING
-      // makes this idempotent under any race (e.g. share toggled and
-      // re-accepted). See PRD §5.5.
-      const inserted = await tx
-        .insert(projects)
-        .values({
-          bidId: existing.bidId,
-          userId: existing.bidUserId,
-          acceptedByName: updatedShare.acceptedByName,
-          acceptedByTitle: updatedShare.acceptedByTitle,
-          acceptedAt: updatedShare.acceptedAt,
-        })
-        .onConflictDoNothing({ target: projects.bidId })
-        .returning({ id: projects.id });
-      if (inserted[0]) {
-        projectId = inserted[0].id;
-      } else {
-        const existingProject = await tx
-          .select({ id: projects.id })
-          .from(projects)
-          .where(eq(projects.bidId, existing.bidId))
-          .limit(1);
-        projectId = existingProject[0]?.id ?? null;
-      }
-    }
+    // The project's identity is the bid id (the bid row is the project).
+    const projectId: string | null = outcome === "won" ? existing.bidId : null;
 
     return {
       share: updatedShare,
@@ -966,20 +1131,69 @@ export async function declineProposalShare(
   });
 }
 
+/**
+ * The project as seen by the app — a view over the bid spine (the bid row IS
+ * the project after the property-rooted re-model). `id` and `bidId` are the
+ * same value. `status` is the delivery phase (non-null; only present once the
+ * opportunity is won). `notes` maps to the bid's delivery_notes.
+ */
+export type ProjectView = {
+  id: string;
+  bidId: string;
+  userId: string;
+  status: ProjectStatus;
+  targetStartDate: string | null;
+  targetEndDate: string | null;
+  actualStartDate: Date | null;
+  actualEndDate: Date | null;
+  assignedSub: string | null;
+  crewLeadName: string | null;
+  acceptedByName: string | null;
+  acceptedByTitle: string | null;
+  acceptedAt: Date | null;
+  notes: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/** Map a bid row to a ProjectView; null until the bid is won (delivery phase). */
+function bidToProjectView(b: Bid): ProjectView | null {
+  if (!b.deliveryStatus) return null;
+  return {
+    id: b.id,
+    bidId: b.id,
+    userId: b.userId,
+    status: b.deliveryStatus,
+    targetStartDate: b.targetStartDate,
+    targetEndDate: b.targetEndDate,
+    actualStartDate: b.actualStartDate,
+    actualEndDate: b.actualEndDate,
+    assignedSub: b.assignedSub,
+    crewLeadName: b.crewLeadName,
+    acceptedByName: b.acceptedByName,
+    acceptedByTitle: b.acceptedByTitle,
+    acceptedAt: b.acceptedAt,
+    notes: b.deliveryNotes,
+    createdAt: b.createdAt,
+    updatedAt: b.updatedAt,
+  };
+}
+
 export async function getProjectByBidId(
   bidId: string
-): Promise<Project | null> {
+): Promise<ProjectView | null> {
   const user = await requireUser();
   const rows = await db
     .select()
-    .from(projects)
-    .where(and(eq(projects.bidId, bidId), eq(projects.userId, user.ownerUserId)))
+    .from(bids)
+    .where(and(eq(bids.id, bidId), eq(bids.userId, user.ownerUserId)))
     .limit(1);
-  return rows[0] ?? null;
+  if (!rows[0]) return null;
+  return bidToProjectView(rows[0]);
 }
 
 export type ProjectWithBid = {
-  project: Project;
+  project: ProjectView;
   bid: Pick<
     Bid,
     | "id"
@@ -1001,33 +1215,43 @@ export async function getProjects(
   options: GetProjectsOptions = {},
 ): Promise<ProjectWithBid[]> {
   const user = await requireUser();
-  const conditions: SQL[] = [eq(projects.userId, user.ownerUserId)];
-  if (options.status) conditions.push(eq(projects.status, options.status));
+  const conditions: SQL[] = [
+    eq(bids.userId, user.ownerUserId),
+    sql`${bids.deliveryStatus} is not null`,
+  ];
+  if (options.status)
+    conditions.push(eq(bids.deliveryStatus, options.status));
 
-  const query = db
-    .select({
-      project: projects,
-      bid: {
-        id: bids.id,
-        propertyName: bids.propertyName,
-        address: bids.address,
-        clientName: bids.clientName,
-        leadId: bids.leadId,
-        status: bids.status,
-      },
-    })
-    .from(projects)
-    .innerJoin(bids, eq(bids.id, projects.bidId))
+  const baseQuery = db
+    .select()
+    .from(bids)
     .where(and(...conditions)!)
-    .orderBy(desc(projects.updatedAt), desc(projects.id));
+    .orderBy(desc(bids.updatedAt), desc(bids.id));
 
-  if (options.limit != null || options.offset != null) {
-    return query
-      .limit(Math.max(1, options.limit ?? 100))
-      .offset(Math.max(0, options.offset ?? 0));
-  }
+  const rows =
+    options.limit != null || options.offset != null
+      ? await baseQuery
+          .limit(Math.max(1, options.limit ?? 100))
+          .offset(Math.max(0, options.offset ?? 0))
+      : await baseQuery;
 
-  return query;
+  return rows.flatMap((b) => {
+    const project = bidToProjectView(b);
+    if (!project) return [];
+    return [
+      {
+        project,
+        bid: {
+          id: b.id,
+          propertyName: b.propertyName,
+          address: b.address,
+          clientName: b.clientName,
+          leadId: b.leadId,
+          status: b.status,
+        },
+      },
+    ];
+  });
 }
 
 export async function getProjectListData(options: {
@@ -1043,22 +1267,25 @@ export async function getProjectListData(options: {
 export async function getProject(id: string): Promise<ProjectWithBid | null> {
   const user = await requireUser();
   const rows = await db
-    .select({
-      project: projects,
-      bid: {
-        id: bids.id,
-        propertyName: bids.propertyName,
-        address: bids.address,
-        clientName: bids.clientName,
-        leadId: bids.leadId,
-        status: bids.status,
-      },
-    })
-    .from(projects)
-    .innerJoin(bids, eq(bids.id, projects.bidId))
-    .where(and(eq(projects.id, id), eq(projects.userId, user.ownerUserId)))
+    .select()
+    .from(bids)
+    .where(and(eq(bids.id, id), eq(bids.userId, user.ownerUserId)))
     .limit(1);
-  return rows[0] ?? null;
+  const b = rows[0];
+  if (!b) return null;
+  const project = bidToProjectView(b);
+  if (!project) return null;
+  return {
+    project,
+    bid: {
+      id: b.id,
+      propertyName: b.propertyName,
+      address: b.address,
+      clientName: b.clientName,
+      leadId: b.leadId,
+      status: b.status,
+    },
+  };
 }
 
 /**
@@ -1093,27 +1320,27 @@ export function allowedProjectStatusTransitions(
 export async function updateProjectStatus(
   id: string,
   next: ProjectStatus
-): Promise<Project | null> {
+): Promise<ProjectView | null> {
   const user = await requireUser();
   const existing = await db
     .select()
-    .from(projects)
-    .where(and(eq(projects.id, id), eq(projects.userId, user.ownerUserId)))
+    .from(bids)
+    .where(and(eq(bids.id, id), eq(bids.userId, user.ownerUserId)))
     .limit(1);
   const current = existing[0];
-  if (!current) return null;
+  if (!current || !current.deliveryStatus) return null;
 
-  if (current.status === next) return current;
-  const allowed = allowedProjectStatusTransitions(current.status);
+  if (current.deliveryStatus === next) return bidToProjectView(current);
+  const allowed = allowedProjectStatusTransitions(current.deliveryStatus);
   if (!allowed.includes(next)) {
     throw new Error(
-      `Invalid status transition: ${current.status} → ${next}`
+      `Invalid status transition: ${current.deliveryStatus} → ${next}`
     );
   }
 
   const now = new Date();
-  const patch: Partial<typeof projects.$inferInsert> = {
-    status: next,
+  const patch: Partial<typeof bids.$inferInsert> = {
+    deliveryStatus: next,
     updatedAt: now,
   };
   // Auto-stamp actual_start_date the first time we enter in_progress.
@@ -1126,16 +1353,16 @@ export async function updateProjectStatus(
   }
   // Reopen from complete clears actual_end_date so the next complete
   // re-stamps it; actual_start_date is preserved through the reopen.
-  if (current.status === "complete" && next !== "complete") {
+  if (current.deliveryStatus === "complete" && next !== "complete") {
     patch.actualEndDate = null;
   }
 
   const rows = await db
-    .update(projects)
+    .update(bids)
     .set(patch)
-    .where(and(eq(projects.id, id), eq(projects.userId, user.ownerUserId)))
+    .where(and(eq(bids.id, id), eq(bids.userId, user.ownerUserId)))
     .returning();
-  return rows[0] ?? null;
+  return rows[0] ? bidToProjectView(rows[0]) : null;
 }
 
 export async function updateProjectDetails(
@@ -1147,21 +1374,21 @@ export async function updateProjectDetails(
     crewLeadName: string | null;
     notes: string;
   }
-): Promise<Project | null> {
+): Promise<ProjectView | null> {
   const user = await requireUser();
   const rows = await db
-    .update(projects)
+    .update(bids)
     .set({
       targetStartDate: data.targetStartDate,
       targetEndDate: data.targetEndDate,
       assignedSub: data.assignedSub,
       crewLeadName: data.crewLeadName,
-      notes: data.notes,
+      deliveryNotes: data.notes,
       updatedAt: new Date(),
     })
-    .where(and(eq(projects.id, id), eq(projects.userId, user.ownerUserId)))
+    .where(and(eq(bids.id, id), eq(bids.userId, user.ownerUserId)))
     .returning();
-  return rows[0] ?? null;
+  return rows[0] ? bidToProjectView(rows[0]) : null;
 }
 
 /**
@@ -1170,44 +1397,47 @@ export async function updateProjectDetails(
  * (typically via getProject()).
  */
 export async function getProjectUpdates(
-  projectId: string
+  bidId: string
 ): Promise<ProjectUpdate[]> {
   return db
     .select()
     .from(projectUpdates)
-    .where(eq(projectUpdates.projectId, projectId))
+    .where(eq(projectUpdates.bidId, bidId))
     .orderBy(desc(projectUpdates.createdAt));
 }
 
 export async function createProjectUpdate(
-  projectId: string,
+  bidId: string,
   data: { body: string; visibleOnPublicUrl: boolean }
 ): Promise<ProjectUpdate> {
   const user = await requireUser();
-  // Ownership check: only the project owner can append updates.
+  // Ownership check: only the bid (project) owner can append updates, and
+  // only once it's in the delivery phase.
   const owned = await db
-    .select({ id: projects.id })
-    .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.userId, user.ownerUserId)))
+    .select({ id: bids.id, deliveryStatus: bids.deliveryStatus })
+    .from(bids)
+    .where(and(eq(bids.id, bidId), eq(bids.userId, user.ownerUserId)))
     .limit(1);
-  if (!owned[0]) throw new Error("Project not found");
+  if (!owned[0] || !owned[0].deliveryStatus) {
+    throw new Error("Project not found");
+  }
 
   const authorName = user.email ?? "Unknown";
   const rows = await db
     .insert(projectUpdates)
     .values({
-      projectId,
+      bidId,
       authorType: "human",
       authorName,
       body: data.body,
       visibleOnPublicUrl: data.visibleOnPublicUrl,
     })
     .returning();
-  // Touch the parent project so list-view ordering reflects activity.
+  // Touch the parent so list-view ordering reflects activity.
   await db
-    .update(projects)
+    .update(bids)
     .set({ updatedAt: new Date() })
-    .where(eq(projects.id, projectId));
+    .where(eq(bids.id, bidId));
   return rows[0]!;
 }
 
@@ -1251,23 +1481,23 @@ export async function getPublicProjectByBidId(
 ): Promise<PublicProjectView | null> {
   const projectRows = await db
     .select({
-      id: projects.id,
-      status: projects.status,
-      targetStartDate: projects.targetStartDate,
-      targetEndDate: projects.targetEndDate,
-      actualStartDate: projects.actualStartDate,
-      actualEndDate: projects.actualEndDate,
-      assignedSub: projects.assignedSub,
-      crewLeadName: projects.crewLeadName,
-      acceptedByName: projects.acceptedByName,
-      acceptedByTitle: projects.acceptedByTitle,
-      acceptedAt: projects.acceptedAt,
+      id: bids.id,
+      status: bids.deliveryStatus,
+      targetStartDate: bids.targetStartDate,
+      targetEndDate: bids.targetEndDate,
+      actualStartDate: bids.actualStartDate,
+      actualEndDate: bids.actualEndDate,
+      assignedSub: bids.assignedSub,
+      crewLeadName: bids.crewLeadName,
+      acceptedByName: bids.acceptedByName,
+      acceptedByTitle: bids.acceptedByTitle,
+      acceptedAt: bids.acceptedAt,
     })
-    .from(projects)
-    .where(eq(projects.bidId, bidId))
+    .from(bids)
+    .where(eq(bids.id, bidId))
     .limit(1);
   const project = projectRows[0];
-  if (!project) return null;
+  if (!project || !project.status) return null;
 
   const updates = await db
     .select({
@@ -1279,7 +1509,7 @@ export async function getPublicProjectByBidId(
     .from(projectUpdates)
     .where(
       and(
-        eq(projectUpdates.projectId, project.id),
+        eq(projectUpdates.bidId, project.id),
         eq(projectUpdates.visibleOnPublicUrl, true)
       )
     )
@@ -1304,7 +1534,10 @@ export async function getPublicProjectByBidId(
 
 export type BidStatus = (typeof bids.$inferSelect)["status"];
 export type LeadStatus = (typeof leads.$inferSelect)["status"];
-export type ProjectStatus = (typeof projects.$inferSelect)["status"];
+/** Delivery phase — lives on the bid spine now (bids.delivery_status). */
+export type ProjectStatus = NonNullable<
+  (typeof bids.$inferSelect)["deliveryStatus"]
+>;
 
 export type BidStatusCounts = {
   total: number;
@@ -1361,13 +1594,18 @@ export async function getProjectStatusCounts(): Promise<ProjectStatusCounts> {
   // overdue rows in the same row (active + target_end_date < today).
   const rows = await db
     .select({
-      status: projects.status,
+      status: bids.deliveryStatus,
       count: sql<number>`count(*)::int`,
-      overdue: sql<number>`count(*) filter (where ${projects.targetEndDate} is not null and ${projects.targetEndDate} < current_date and ${projects.status} <> 'complete')::int`,
+      overdue: sql<number>`count(*) filter (where ${bids.targetEndDate} is not null and ${bids.targetEndDate} < current_date and ${bids.deliveryStatus} <> 'complete')::int`,
     })
-    .from(projects)
-    .where(eq(projects.userId, user.ownerUserId))
-    .groupBy(projects.status);
+    .from(bids)
+    .where(
+      and(
+        eq(bids.userId, user.ownerUserId),
+        sql`${bids.deliveryStatus} is not null`,
+      ),
+    )
+    .groupBy(bids.deliveryStatus);
 
   const counts: ProjectStatusCounts = {
     total: 0,
@@ -1380,6 +1618,7 @@ export async function getProjectStatusCounts(): Promise<ProjectStatusCounts> {
     overdue: 0,
   };
   for (const row of rows) {
+    if (!row.status) continue;
     const n = Number(row.count);
     if (row.status in counts) {
       counts[row.status as ProjectStatus] = n;
@@ -1959,7 +2198,16 @@ export type PropertyContactSummary = {
 
 export type PropertyDetail = {
   property: Property;
+  /** Legacy single account (management company), kept for existing consumers. */
   account: Account | null;
+  /** The management company (managementAccountId, falling back to accountId). */
+  managementAccount: Account | null;
+  /** The legal owner account, when the owner is a known account. */
+  ownerAccount: Account | null;
+  /** The owner party row (carries free-text legal owner + NTO contact link). */
+  ownerParty: PropertyParty | null;
+  /** Whichever party is flagged as the Notice-to-Owner recipient. */
+  ntoParty: PropertyParty | null;
   contacts: PropertyContactSummary[];
   leads: LeadSummary[];
   portfolioCount: number;
@@ -2211,19 +2459,28 @@ export async function getPropertyDetail(
   const property = propertyRows[0];
   if (!property) return null;
 
-  const [accountRows, contactRows, leadRows, portfolioCountRows] =
+  const referencedAccountIds = Array.from(
+    new Set(
+      [
+        property.accountId,
+        property.managementAccountId,
+        property.ownerAccountId,
+      ].filter((value): value is string => Boolean(value)),
+    ),
+  );
+
+  const [accountRows, contactRows, leadRows, portfolioCountRows, partyRows] =
     await Promise.all([
-      property.accountId
+      referencedAccountIds.length
         ? db
             .select()
             .from(accounts)
             .where(
               and(
-                eq(accounts.id, property.accountId),
+                inArray(accounts.id, referencedAccountIds),
                 eq(accounts.userId, user.ownerUserId),
               ),
             )
-            .limit(1)
         : Promise.resolve([] as Account[]),
       db
         .select({
@@ -2271,7 +2528,27 @@ export async function getPropertyDetail(
               ),
             )
         : Promise.resolve([{ count: 1 }]),
+      db
+        .select()
+        .from(propertyParties)
+        .where(
+          and(
+            eq(propertyParties.propertyId, property.id),
+            eq(propertyParties.userId, user.ownerUserId),
+          ),
+        ),
     ]);
+
+  const accountById = new Map(accountRows.map((a) => [a.id, a] as const));
+  const managementAccount =
+    accountById.get(
+      property.managementAccountId ?? property.accountId ?? "",
+    ) ?? null;
+  const ownerAccount = property.ownerAccountId
+    ? (accountById.get(property.ownerAccountId) ?? null)
+    : null;
+  const ownerParty = partyRows.find((p) => p.role === "owner") ?? null;
+  const ntoParty = partyRows.find((p) => p.isNtoRecipient) ?? null;
 
   const latestLeadByContactId = new Map<
     string,
@@ -2302,7 +2579,14 @@ export async function getPropertyDetail(
 
   return {
     property,
-    account: accountRows[0] ?? null,
+    account:
+      (property.accountId ? accountById.get(property.accountId) : null) ??
+      managementAccount ??
+      null,
+    managementAccount,
+    ownerAccount,
+    ownerParty,
+    ntoParty,
     contacts: contactSummaries,
     leads: leadRows.map(
       ({ id, name, status, followUpAt, lastContactedAt, createdAt }) => ({
@@ -2316,6 +2600,123 @@ export async function getPropertyDetail(
     ),
     portfolioCount: Number(portfolioCountRows[0]?.count ?? 0),
   };
+}
+
+/**
+ * Set a property's legal owner and Notice-to-Owner recipient. The owner is
+ * stored as a single `owner` property_party (also flagged as the NTO
+ * recipient — NTO must reach the owner, not the manager, to preserve lien
+ * rights). `ntoContactId`, when given, must be a contact already linked to
+ * the property; it records which person at the owner the notice is addressed
+ * to. Scoped + ownership-guarded by the org owner.
+ */
+export async function setPropertyOwnership(input: {
+  propertyId: string;
+  legalOwnerName: string | null;
+  legalOwnerAddress: string | null;
+  ntoContactId: string | null;
+}): Promise<void> {
+  const user = await requireUser();
+
+  const propRows = await db
+    .select({ id: properties.id })
+    .from(properties)
+    .where(
+      and(
+        eq(properties.id, input.propertyId),
+        eq(properties.userId, user.ownerUserId),
+      ),
+    )
+    .limit(1);
+  if (!propRows[0]) throw new Error("Property not found");
+
+  const legalOwnerName = cleanText(input.legalOwnerName) ?? null;
+  const legalOwnerAddress = cleanText(input.legalOwnerAddress) ?? null;
+
+  // The NTO contact must already be linked to this property.
+  let ntoContactId: string | null = null;
+  if (input.ntoContactId) {
+    const linked = await db
+      .select({ id: propertyContacts.id })
+      .from(propertyContacts)
+      .where(
+        and(
+          eq(propertyContacts.userId, user.ownerUserId),
+          eq(propertyContacts.propertyId, input.propertyId),
+          eq(propertyContacts.contactId, input.ntoContactId),
+        ),
+      )
+      .limit(1);
+    if (linked[0]) ntoContactId = input.ntoContactId;
+  }
+
+  // Only one NTO recipient per property (enforced by a partial unique index);
+  // clear any existing flag before re-asserting it on the owner row.
+  await db
+    .update(propertyParties)
+    .set({ isNtoRecipient: false, updatedAt: new Date() })
+    .where(
+      and(
+        eq(propertyParties.userId, user.ownerUserId),
+        eq(propertyParties.propertyId, input.propertyId),
+        eq(propertyParties.isNtoRecipient, true),
+      ),
+    );
+
+  const existing = await db
+    .select()
+    .from(propertyParties)
+    .where(
+      and(
+        eq(propertyParties.userId, user.ownerUserId),
+        eq(propertyParties.propertyId, input.propertyId),
+        eq(propertyParties.role, "owner"),
+      ),
+    )
+    .limit(1);
+
+  if (existing[0]) {
+    await db
+      .update(propertyParties)
+      .set({
+        legalOwnerName,
+        legalOwnerAddress,
+        contactId: ntoContactId,
+        isNtoRecipient: true,
+        updatedAt: new Date(),
+      })
+      .where(eq(propertyParties.id, existing[0].id));
+    await writeAuditLog({
+      userId: user.ownerUserId,
+      actorUserId: user.userId,
+      entityType: "property_party",
+      entityId: existing[0].id,
+      action: "update",
+      previousValues: existing[0],
+      newValues: { legalOwnerName, legalOwnerAddress, contactId: ntoContactId },
+    });
+  } else {
+    const inserted = await db
+      .insert(propertyParties)
+      .values({
+        userId: user.ownerUserId,
+        propertyId: input.propertyId,
+        role: "owner",
+        isNtoRecipient: true,
+        legalOwnerName,
+        legalOwnerAddress,
+        contactId: ntoContactId,
+      })
+      .returning();
+    await writeAuditLog({
+      userId: user.ownerUserId,
+      actorUserId: user.userId,
+      entityType: "property_party",
+      entityId: inserted[0].id,
+      action: "create",
+      newValues: inserted[0],
+    });
+  }
 }
 
 export async function getContactDetail(
@@ -2529,6 +2930,8 @@ async function findOrCreateAccount(input: {
   userId: string;
   name: string | null | undefined;
   sourceTag?: string | null;
+  /** Defaults to management_company — BAAA imports are management companies. */
+  type?: AccountType;
 }): Promise<Account | null> {
   const name = cleanText(input.name);
   if (!name) return null;
@@ -2552,6 +2955,7 @@ async function findOrCreateAccount(input: {
       userId: input.userId,
       name,
       sourceTag: input.sourceTag ?? null,
+      ...(input.type ? { type: input.type } : {}),
     })
     .returning();
   await writeAuditLog({
@@ -2631,6 +3035,8 @@ async function findOrCreateContact(input: {
 async function findOrCreateProperty(input: {
   userId: string;
   accountId?: string | null;
+  managementAccountId?: string | null;
+  ownerAccountId?: string | null;
   name?: string | null;
   address?: string | null;
   latitude?: number | null;
@@ -2659,6 +3065,12 @@ async function findOrCreateProperty(input: {
   if (existing[0]) {
     const patch = compactObject({
       accountId: existing[0].accountId ?? input.accountId ?? null,
+      managementAccountId:
+        existing[0].managementAccountId ??
+        input.managementAccountId ??
+        input.accountId ??
+        null,
+      ownerAccountId: existing[0].ownerAccountId ?? input.ownerAccountId ?? null,
       name: existing[0].name ?? name,
       address: existing[0].address ?? address,
       latitude: existing[0].latitude ?? input.latitude ?? null,
@@ -2686,6 +3098,9 @@ async function findOrCreateProperty(input: {
     .values({
       userId: input.userId,
       accountId: input.accountId ?? null,
+      managementAccountId:
+        input.managementAccountId ?? input.accountId ?? null,
+      ownerAccountId: input.ownerAccountId ?? null,
       name,
       address,
       latitude: input.latitude ?? null,

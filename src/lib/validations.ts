@@ -3,7 +3,15 @@ import {
   BID_STATUSES,
   LEAD_STATUSES,
   PROJECT_STATUSES,
+  BUILDING_ARCHETYPES,
+  ACCESS_TYPES,
 } from "./status-meta";
+
+/** Form select → archetype enum, with empty string / missing → null. */
+const archetypeField = z.preprocess(
+  (val: unknown) => (val === "" || val == null ? null : val),
+  z.union([z.enum(BUILDING_ARCHETYPES), z.null()]),
+);
 
 export const signInSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -87,6 +95,7 @@ export const updateBuildingSchema = z.object({
   id: z.string().uuid("Invalid building ID"),
   label: z.string().min(1, "Label is required"),
   count: z.coerce.number().int().min(1, "Count must be at least 1"),
+  archetype: archetypeField.optional(),
 });
 
 export const deleteBuildingSchema = z.object({
@@ -408,4 +417,54 @@ export const inviteOrgMemberSchema = z.object({
 
 export const removeOrgMemberSchema = z.object({
   membershipId: z.string().uuid("Invalid membership ID"),
+});
+
+export const setPropertyOwnershipSchema = z.object({
+  propertyId: z.string().uuid("Invalid property ID"),
+  legalOwnerName: optionalText,
+  legalOwnerAddress: optionalText,
+  ntoContactId: z.preprocess((val: unknown) => {
+    if (val === undefined || val === null || val === "") return null;
+    return String(val);
+  }, z.union([z.string().uuid("Invalid contact ID"), z.null()])),
+});
+
+// ── Access items ──
+
+const optionalNumericString = z.preprocess(
+  (val: unknown) => (val === "" || val == null ? null : val),
+  z.union([z.coerce.number().transform(String), z.null()]),
+);
+
+const optionalInt = z.preprocess(
+  (val: unknown) => (val === "" || val == null ? null : val),
+  z.union([z.coerce.number().int(), z.null()]),
+);
+
+export const createAccessItemSchema = z.object({
+  bidId: z.string().uuid("Invalid bid ID"),
+  type: z.enum(ACCESS_TYPES),
+  method: optionalText,
+  quantity: optionalNumericString,
+  durationDays: optionalInt,
+  amount: z.coerce
+    .number({ message: "Amount must be a number" })
+    .transform(String),
+});
+
+export const updateAccessItemSchema = z.object({
+  id: z.string().uuid("Invalid access item ID"),
+  bidId: z.string().uuid("Invalid bid ID"),
+  type: z.enum(ACCESS_TYPES),
+  method: optionalText,
+  quantity: optionalNumericString,
+  durationDays: optionalInt,
+  amount: z.coerce
+    .number({ message: "Amount must be a number" })
+    .transform(String),
+});
+
+export const deleteAccessItemSchema = z.object({
+  id: z.string().uuid("Invalid access item ID"),
+  bidId: z.string().uuid("Invalid bid ID"),
 });

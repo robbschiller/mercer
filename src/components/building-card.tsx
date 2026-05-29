@@ -11,6 +11,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { SurfaceList } from "@/components/surface-list";
 import { AddSurfaceForm } from "@/components/add-surface-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { BUILDING_ARCHETYPES, buildingArchetypeLabel } from "@/lib/status-meta";
 import type { Surface, BuildingWithSqft } from "@/lib/store";
 
 export function BuildingCard({
@@ -74,6 +75,27 @@ export function BuildingCard({
                   required
                 />
               </div>
+              <div className="flex flex-col gap-1.5 sm:w-36">
+                <Label
+                  htmlFor={`edit-archetype-${building.id}`}
+                  className="text-xs"
+                >
+                  Type
+                </Label>
+                <select
+                  id={`edit-archetype-${building.id}`}
+                  name="archetype"
+                  defaultValue={building.archetype ?? ""}
+                  className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="">—</option>
+                  {BUILDING_ARCHETYPES.map((a) => (
+                    <option key={a} value={a}>
+                      {buildingArchetypeLabel(a)}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="flex gap-2 justify-end">
               <Button
@@ -104,6 +126,11 @@ export function BuildingCard({
                 {building.count > 1 && (
                   <span className="text-muted-foreground text-sm shrink-0">
                     &times;{building.count}
+                  </span>
+                )}
+                {building.archetype && (
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground shrink-0">
+                    {buildingArchetypeLabel(building.archetype)}
                   </span>
                 )}
               </button>
