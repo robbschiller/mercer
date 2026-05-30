@@ -23,21 +23,23 @@ The deployed product today (Phase 0) is the non-AI substrate of that workflow: l
 ### Leads
 - CSV import with auto-mapping, source tags, and a clean sample fixture for demos.
 - **Property-first Niko table (default).** Trade-show CSV rows are property-level (one attendee with five communities shows up five times with five addresses), so `/leads` shows one row per property with embedded contact chips, account/company, pipeline mix, portfolio count, and follow-up. Niko owns search, filter, sort, and pagination; the legacy contact-row table remains available via `view=contact`.
-- **Normalized lead domain model.** Imports and manual lead creation normalize into durable `accounts`, `properties`, `contacts`, `property_contacts`, `leads`, and `lead_contacts`, while compatibility fields remain on `leads` during the transition. `activity_events` stores the readable sales timeline and `audit_log` stores structured change history.
+- **Property-rooted data model.** The property is the top-level object; projects, leads, and parties hang off it (one property → many projects, ≤1 proceeds). Imports and manual lead creation normalize into durable `accounts`, `properties` (`management_account_id` + `owner_account_id`), `property_parties` (owner / management / NTO recipient, with free-text legal owner fallback), `contacts`, `property_contacts`, `leads`, and `lead_contacts`. `activity_events` stores the readable sales timeline and `audit_log` stores structured change history. See [`docs/lead-data-model.md`](docs/lead-data-model.md).
 - **Dedicated detail pages per entity.** Property, account, and contact rows link to their own routes (`/leads/properties/[id]`, `/leads/accounts/[id]`, `/leads/contacts/[id]`) that render full detail panels with cross-links between accounts ↔ properties ↔ contacts ↔ leads, instead of an in-table side panel.
 - **Account autocomplete on new-lead entry.** `/leads/new` resolves the company field against existing accounts (suggest-as-you-type) so manually-added leads attach to the existing account graph rather than minting a near-duplicate.
 - **Per-lead outreach state.** `last_contacted_at`, `follow_up_at`, and `contact_attempts` columns drive an Outreach card on the lead detail (one-click "log contact attempt", follow-up date input with overdue indicator). The property table rolls up earliest follow-up across contacts.
 - Lead enrichment via Google Places: the CSV property address is treated as authoritative; Places fills in lat/lng and Place ID, and only resolves a fresh address when the row is `company`-only. Satellite imagery is generated at the bid layer.
 - Lead detail with manual override, status workflow (`new` / `quoted` / `won` / `lost`), and a one-click "Create bid from lead" handoff.
 
-### Bids
+### Bids (projects)
+- The bid row **is** the project (delivery fields fold onto the bid; cosmetic table rename skipped — see [`docs/lead-data-model.md`](docs/lead-data-model.md)).
 - Wizard-style new-bid flow: address → confirm with optional satellite snapshot → details.
-- Buildings + surfaces with factor-group dimension entry, presets for common surface names, and live sqft rollups per building and per bid.
-- Pricing engine: coverage (sqft/gal), price per gallon, labor rate ($/sqft), and margin (%) compute gallons, material, labor, and grand total live as you type.
-- Per-bid line items (pressure washing, dumpster rental, scaffolding, etc.).
+- Buildings + surfaces with factor-group dimension entry, presets for common surface names, and live paintable-sqft rollups per building and per bid. Per-building `archetype` (garden / townhome / mid-rise / high-rise) drives access scaling.
+- **Access scope** (lifts / scaffold / swing stage / safety) as a sibling dimension to surfaces — scales by height/archetype, not square footage.
+- Pricing engine (deterministic, never LLM-driven): coverage (sqft/gal), price per gallon, labor rate ($/sqft), margin (%), plus an access total, all computed live. Rates live in `rate_config` (org-scoped) so the AI side can only parse inputs, never invent rates.
+- Per-bid line items (pressure washing, dumpster rental, etc.).
 - Company defaults: pricing inputs auto-save to user defaults; new bids inherit the latest defaults.
 - OpenStreetMap building footprints (Overpass) shown on bid detail when coordinates exist.
-- Proposal PDFs generated with `@react-pdf/renderer`, stored as frozen snapshots in Supabase Storage so subsequent bid edits don't change what was sent.
+- Proposal PDFs generated with `@react-pdf/renderer`, stored as frozen snapshots in Supabase Storage so subsequent bid edits don't change what was sent. Snapshots include a party block (management / legal owner / owner address / NTO recipient), an access section, and per-building archetype as of generate time.
 
 ### Public proposal + project status page
 - Each proposal generates a shareable `/p/[slug]` URL with no login required.
@@ -45,12 +47,12 @@ The deployed product today (Phase 0) is the non-AI substrate of that workflow: l
 - Post-acceptance: the same URL pivots to a **project status page** (status badge, schedule, on-site assignment, public updates only, original-proposal summary) so the property manager can keep one bookmark across the lifecycle.
 
 ### Project layer
-- `projects` row created **atomically** on bid acceptance (not a separate manual step) and surfaced as a "Project created" badge on the bid page.
+- The bid row carries the post-acceptance project (no separate `projects` table since Phase 3 of the property-rooted re-model). Acceptance sets `delivery_status` and `accepted_*` on the bid; the bid id IS the project id, surfaced through a `ProjectView` mapper so pages talk to it as a project.
 - `/projects` list view with status filters and per-status counts.
 - `/projects/[id]` detail page with a state-machine UI (`not_started` → `in_progress` → `punch_out` → `complete`, plus `on_hold` and an explicit reopen from `complete` that clears the actual end date).
 - `actual_start_date` and `actual_end_date` auto-stamp on first transition into `in_progress` / `complete`.
 - Editable target dates, assigned subcontractor, crew lead, and notes.
-- Append-only `project_updates` feed with a per-entry `visible_on_public_url` opt-in (internal-by-default).
+- Append-only `project_updates` feed (keyed on `bid_id`) with a per-entry `visible_on_public_url` opt-in (internal-by-default).
 
 ### Dashboard
 - Funnel and source filters drilling down into `/leads?status=…&source=…`.
@@ -130,7 +132,7 @@ src/
 │   ├── theme-provider.tsx, theme-toggle.tsx
 │   └── page-loading.tsx         # Per-surface skeletons
 ├── db/
-│   ├── schema.ts                # Drizzle tables: lead domain, bids, proposals, projects, onboarding, etc.
+│   ├── schema.ts                # Drizzle tables: property-rooted lead domain, bids (== projects), proposals, onboarding, etc.
 │   └── index.ts
 ├── lib/
 │   ├── actions.ts               # Server actions (auth, lead/bid/project CRUD, share + accept/decline, proposal generation)
@@ -145,7 +147,7 @@ src/
 │   └── supabase/                # Client/server helpers + auth cache
 ├── proxy.ts                     # Next.js proxy (replaces middleware.ts)
 drizzle/
-└── manual/                      # Hand-written additive SQL migrations (001 → 014)
+└── manual/                      # Hand-written additive SQL migrations (001 → 020)
 docs/
 ├── prd.md                       # Product requirements: vision, personas, scope, milestones, AI principles
 ├── plan.md                      # Live execution tracker (shipped / open / paused / decisions)
@@ -197,7 +199,7 @@ We rely on hand-written additive SQL migrations in [`drizzle/manual/`](drizzle/m
 bun run db:apply-manual
 ```
 
-This creates the normalized lead-domain tables (`accounts`, `properties`, `contacts`, `property_contacts`, `leads`, `lead_contacts`, `activity_events`, `audit_log`), bid/proposal/project tables, onboarding/company profile tables, the `org_memberships` table for multi-user orgs, and supporting indexes.
+This creates the property-rooted lead-domain tables (`accounts` with `type`, `properties` with `management_account_id` / `owner_account_id`, `property_parties`, `contacts`, `property_contacts`, `leads`, `lead_contacts`, `activity_events`, `audit_log`), bid / scope tables (`bids` carrying both opportunity + delivery lifecycle, `buildings` with `archetype`, `surfaces`, `access_items`, `line_items`), `rate_config` for the deterministic pricing engine, proposals / proposal_shares, `project_updates` (keyed on `bid_id`), onboarding / company profile tables, the `org_memberships` table for multi-user orgs, and supporting indexes.
 
 `drizzle-kit push` is also available (`bun run db:push`) but **prefer the manual migrations** — push is known to crash against Supabase introspection on some schemas, and we use additive SQL as the source of truth per [`AGENTS.md`](AGENTS.md) → "Database Change Rules."
 

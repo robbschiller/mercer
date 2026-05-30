@@ -1338,6 +1338,19 @@ export async function updateProjectStatus(
     );
   }
 
+  // Pre-start checklist gate: NTO recipient + legal owner name/address must
+  // be set before the project can leave not_started for in_progress. NTO is a
+  // lien-rights instrument; starting work without it on file is the kind of
+  // mistake that costs lien rights.
+  if (current.deliveryStatus === "not_started" && next === "in_progress") {
+    const pre = await getProjectPreStart(id);
+    if (!pre || !isProjectStartReady(pre)) {
+      throw new Error(
+        "Pre-start checklist incomplete: set the legal owner name, owner address, and NTO recipient before starting the project.",
+      );
+    }
+  }
+
   const now = new Date();
   const patch: Partial<typeof bids.$inferInsert> = {
     deliveryStatus: next,
@@ -2603,18 +2616,16 @@ export async function getPropertyDetail(
 }
 
 /**
- * Set a property's legal owner and Notice-to-Owner recipient. The owner is
- * stored as a single `owner` property_party (also flagged as the NTO
- * recipient — NTO must reach the owner, not the manager, to preserve lien
- * rights). `ntoContactId`, when given, must be a contact already linked to
- * the property; it records which person at the owner the notice is addressed
- * to. Scoped + ownership-guarded by the org owner.
+ * Set which contact at a property is the **owner** (or owner's
+ * representative). Lead/sales-side concern — captured early in the funnel.
+ * Stored as the `owner` `property_parties` row's `contact_id`. Does not
+ * touch NTO, legal owner name, or legal owner address (those live on the
+ * `nto_recipient` row and are captured later via `setProjectNto` at the
+ * pre-project-start checklist). Scoped + ownership-guarded by the org owner.
  */
-export async function setPropertyOwnership(input: {
+export async function setPropertyOwnerContact(input: {
   propertyId: string;
-  legalOwnerName: string | null;
-  legalOwnerAddress: string | null;
-  ntoContactId: string | null;
+  contactId: string | null;
 }): Promise<void> {
   const user = await requireUser();
 
@@ -2630,10 +2641,99 @@ export async function setPropertyOwnership(input: {
     .limit(1);
   if (!propRows[0]) throw new Error("Property not found");
 
+  // Contact must already be linked to this property.
+  let contactId: string | null = null;
+  if (input.contactId) {
+    const linked = await db
+      .select({ id: propertyContacts.id })
+      .from(propertyContacts)
+      .where(
+        and(
+          eq(propertyContacts.userId, user.ownerUserId),
+          eq(propertyContacts.propertyId, input.propertyId),
+          eq(propertyContacts.contactId, input.contactId),
+        ),
+      )
+      .limit(1);
+    if (linked[0]) contactId = input.contactId;
+  }
+
+  const existing = await db
+    .select()
+    .from(propertyParties)
+    .where(
+      and(
+        eq(propertyParties.userId, user.ownerUserId),
+        eq(propertyParties.propertyId, input.propertyId),
+        eq(propertyParties.role, "owner"),
+      ),
+    )
+    .limit(1);
+
+  if (existing[0]) {
+    await db
+      .update(propertyParties)
+      .set({ contactId, updatedAt: new Date() })
+      .where(eq(propertyParties.id, existing[0].id));
+    await writeAuditLog({
+      userId: user.ownerUserId,
+      actorUserId: user.userId,
+      entityType: "property_party",
+      entityId: existing[0].id,
+      action: "update",
+      previousValues: existing[0],
+      newValues: { contactId },
+    });
+  } else {
+    const inserted = await db
+      .insert(propertyParties)
+      .values({
+        userId: user.ownerUserId,
+        propertyId: input.propertyId,
+        role: "owner",
+        contactId,
+      })
+      .returning();
+    await writeAuditLog({
+      userId: user.ownerUserId,
+      actorUserId: user.userId,
+      entityType: "property_party",
+      entityId: inserted[0].id,
+      action: "create",
+      newValues: inserted[0],
+    });
+  }
+}
+
+/**
+ * Set the project pre-start NTO block: who NTO is served to (the contact),
+ * plus the legal owner name and address NTO must reach (the lienable party).
+ * Bid-id keyed because this is project-side; resolves to the bid's property.
+ * Stored on the `nto_recipient` `property_parties` row (separate from the
+ * lead-side `owner` row, which only carries the owner-rep contact). The
+ * partial-unique index enforces one NTO recipient per property. Throws if
+ * the bid has no property or if a passed contact isn't linked to it.
+ */
+export async function setProjectNto(input: {
+  bidId: string;
+  legalOwnerName: string | null;
+  legalOwnerAddress: string | null;
+  ntoContactId: string | null;
+}): Promise<void> {
+  const user = await requireUser();
+
+  const bidRows = await db
+    .select({ id: bids.id, propertyId: bids.propertyId })
+    .from(bids)
+    .where(and(eq(bids.id, input.bidId), eq(bids.userId, user.ownerUserId)))
+    .limit(1);
+  const bid = bidRows[0];
+  if (!bid) throw new Error("Bid not found");
+  if (!bid.propertyId) throw new Error("Bid is not attached to a property");
+
   const legalOwnerName = cleanText(input.legalOwnerName) ?? null;
   const legalOwnerAddress = cleanText(input.legalOwnerAddress) ?? null;
 
-  // The NTO contact must already be linked to this property.
   let ntoContactId: string | null = null;
   if (input.ntoContactId) {
     const linked = await db
@@ -2642,7 +2742,7 @@ export async function setPropertyOwnership(input: {
       .where(
         and(
           eq(propertyContacts.userId, user.ownerUserId),
-          eq(propertyContacts.propertyId, input.propertyId),
+          eq(propertyContacts.propertyId, bid.propertyId),
           eq(propertyContacts.contactId, input.ntoContactId),
         ),
       )
@@ -2650,15 +2750,15 @@ export async function setPropertyOwnership(input: {
     if (linked[0]) ntoContactId = input.ntoContactId;
   }
 
-  // Only one NTO recipient per property (enforced by a partial unique index);
-  // clear any existing flag before re-asserting it on the owner row.
+  // Clear any stale is_nto_recipient flag elsewhere (legacy data may have
+  // had it on the owner row from before the lead/project split).
   await db
     .update(propertyParties)
     .set({ isNtoRecipient: false, updatedAt: new Date() })
     .where(
       and(
         eq(propertyParties.userId, user.ownerUserId),
-        eq(propertyParties.propertyId, input.propertyId),
+        eq(propertyParties.propertyId, bid.propertyId),
         eq(propertyParties.isNtoRecipient, true),
       ),
     );
@@ -2669,8 +2769,8 @@ export async function setPropertyOwnership(input: {
     .where(
       and(
         eq(propertyParties.userId, user.ownerUserId),
-        eq(propertyParties.propertyId, input.propertyId),
-        eq(propertyParties.role, "owner"),
+        eq(propertyParties.propertyId, bid.propertyId),
+        eq(propertyParties.role, "nto_recipient"),
       ),
     )
     .limit(1);
@@ -2700,8 +2800,8 @@ export async function setPropertyOwnership(input: {
       .insert(propertyParties)
       .values({
         userId: user.ownerUserId,
-        propertyId: input.propertyId,
-        role: "owner",
+        propertyId: bid.propertyId,
+        role: "nto_recipient",
         isNtoRecipient: true,
         legalOwnerName,
         legalOwnerAddress,
@@ -2717,6 +2817,204 @@ export async function setPropertyOwnership(input: {
       newValues: inserted[0],
     });
   }
+}
+
+/**
+ * Pre-start checklist data for a project: the owner-rep contact captured at
+ * the lead/property layer, the NTO block captured here, plus the contacts
+ * available to pick from. Used by /projects/[id] to render the gate, and by
+ * `assertProjectStartReady` to enforce it before flipping delivery_status to
+ * in_progress.
+ */
+export type ProjectPreStart = {
+  bidId: string;
+  propertyId: string | null;
+  ownerContact: { id: string; name: string } | null;
+  nto: {
+    legalOwnerName: string | null;
+    legalOwnerAddress: string | null;
+    contact: { id: string; name: string } | null;
+  };
+  propertyContactOptions: { id: string; name: string }[];
+};
+
+export async function getProjectPreStart(
+  bidId: string,
+): Promise<ProjectPreStart | null> {
+  const user = await requireUser();
+
+  const bidRows = await db
+    .select({ id: bids.id, propertyId: bids.propertyId })
+    .from(bids)
+    .where(and(eq(bids.id, bidId), eq(bids.userId, user.ownerUserId)))
+    .limit(1);
+  const bid = bidRows[0];
+  if (!bid) return null;
+  if (!bid.propertyId) {
+    return {
+      bidId: bid.id,
+      propertyId: null,
+      ownerContact: null,
+      nto: { legalOwnerName: null, legalOwnerAddress: null, contact: null },
+      propertyContactOptions: [],
+    };
+  }
+
+  const [partyRows, contactRows] = await Promise.all([
+    db
+      .select({
+        role: propertyParties.role,
+        legalOwnerName: propertyParties.legalOwnerName,
+        legalOwnerAddress: propertyParties.legalOwnerAddress,
+        contactId: propertyParties.contactId,
+        contactName: contacts.name,
+      })
+      .from(propertyParties)
+      .leftJoin(contacts, eq(contacts.id, propertyParties.contactId))
+      .where(
+        and(
+          eq(propertyParties.propertyId, bid.propertyId),
+          eq(propertyParties.userId, user.ownerUserId),
+        ),
+      ),
+    db
+      .select({ id: contacts.id, name: contacts.name })
+      .from(propertyContacts)
+      .innerJoin(contacts, eq(contacts.id, propertyContacts.contactId))
+      .where(
+        and(
+          eq(propertyContacts.propertyId, bid.propertyId),
+          eq(propertyContacts.userId, user.ownerUserId),
+          eq(propertyContacts.active, true),
+        ),
+      )
+      .orderBy(asc(contacts.name)),
+  ]);
+
+  const ownerRow = partyRows.find((p) => p.role === "owner") ?? null;
+  const ntoRow = partyRows.find((p) => p.role === "nto_recipient") ?? null;
+
+  return {
+    bidId: bid.id,
+    propertyId: bid.propertyId,
+    ownerContact:
+      ownerRow?.contactId && ownerRow.contactName
+        ? { id: ownerRow.contactId, name: ownerRow.contactName }
+        : null,
+    nto: {
+      legalOwnerName: ntoRow?.legalOwnerName ?? null,
+      legalOwnerAddress: ntoRow?.legalOwnerAddress ?? null,
+      contact:
+        ntoRow?.contactId && ntoRow.contactName
+          ? { id: ntoRow.contactId, name: ntoRow.contactName }
+          : null,
+    },
+    propertyContactOptions: contactRows,
+  };
+}
+
+export function isProjectStartReady(pre: ProjectPreStart): boolean {
+  return Boolean(
+    pre.propertyId &&
+      pre.nto.legalOwnerName &&
+      pre.nto.legalOwnerAddress &&
+      pre.nto.contact,
+  );
+}
+
+/**
+ * Slim party block for a property, frozen into a proposal snapshot at
+ * generate time. Returns null when the bid has no property attached. Keeps
+ * `getPropertyDetail`'s heavier joins (contacts, leads, portfolio) off the
+ * proposal hot path.
+ */
+export async function getProposalPartyBlock(
+  propertyId: string,
+): Promise<{
+  managementCompany: string | null;
+  ownerName: string | null;
+  ownerAddress: string | null;
+  ntoRecipientName: string | null;
+} | null> {
+  const user = await requireUser();
+
+  const propRows = await db
+    .select({
+      managementAccountId: properties.managementAccountId,
+      ownerAccountId: properties.ownerAccountId,
+      accountId: properties.accountId,
+    })
+    .from(properties)
+    .where(
+      and(
+        eq(properties.id, propertyId),
+        eq(properties.userId, user.ownerUserId),
+      ),
+    )
+    .limit(1);
+  const property = propRows[0];
+  if (!property) return null;
+
+  const referencedAccountIds = Array.from(
+    new Set(
+      [
+        property.managementAccountId ?? property.accountId,
+        property.ownerAccountId,
+      ].filter((v): v is string => Boolean(v)),
+    ),
+  );
+
+  const [accountRows, partyRows] = await Promise.all([
+    referencedAccountIds.length
+      ? db
+          .select({ id: accounts.id, name: accounts.name })
+          .from(accounts)
+          .where(
+            and(
+              inArray(accounts.id, referencedAccountIds),
+              eq(accounts.userId, user.ownerUserId),
+            ),
+          )
+      : Promise.resolve([] as { id: string; name: string }[]),
+    db
+      .select({
+        role: propertyParties.role,
+        isNtoRecipient: propertyParties.isNtoRecipient,
+        legalOwnerName: propertyParties.legalOwnerName,
+        legalOwnerAddress: propertyParties.legalOwnerAddress,
+        contactName: contacts.name,
+      })
+      .from(propertyParties)
+      .leftJoin(contacts, eq(contacts.id, propertyParties.contactId))
+      .where(
+        and(
+          eq(propertyParties.propertyId, propertyId),
+          eq(propertyParties.userId, user.ownerUserId),
+        ),
+      ),
+  ]);
+
+  const accountById = new Map(accountRows.map((a) => [a.id, a.name] as const));
+  const managementCompany =
+    accountById.get(
+      property.managementAccountId ?? property.accountId ?? "",
+    ) ?? null;
+  const ownerAccountName = property.ownerAccountId
+    ? (accountById.get(property.ownerAccountId) ?? null)
+    : null;
+  // Legal owner name/address and NTO recipient live on the `nto_recipient`
+  // party row, captured at the project pre-start checklist (separate from
+  // the lead-side `owner` row, which only carries the owner-rep contact).
+  const ntoParty =
+    partyRows.find((p) => p.role === "nto_recipient" || p.isNtoRecipient) ??
+    null;
+
+  return {
+    managementCompany,
+    ownerName: ownerAccountName ?? ntoParty?.legalOwnerName ?? null,
+    ownerAddress: ntoParty?.legalOwnerAddress ?? null,
+    ntoRecipientName: ntoParty?.contactName ?? null,
+  };
 }
 
 export async function getContactDetail(

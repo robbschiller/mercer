@@ -1,7 +1,7 @@
 ---
 name: Property-Rooted Data Model Re-model
 overview: "Re-root the data model from bid/job-rooted to PROPERTY-rooted, per the 2026-05-29 Jordan (AQP) working session. Property becomes the top-level object; the scoped opportunity ('project' in Jordan's words) and leads are children of a property; contacts are a parallel object; the scope object (surfaces + a new access dimension) lives inside a project; owner vs. management company vs. contact-role becomes first-class for Notice-to-Owner lien rights; surface measure is paintable square feet; rates are stored config the deterministic pricing engine reads. Sequenced so the cheap, least-arguable parts (property root, owner/NTO, access, rate config) ship before the higher-risk bid→project collapse. See docs/plan.md → 'Property-rooted re-model'."
-status: draft
+status: shipped
 todos:
   - id: decision-bid-project
     content: "DECISION (gates Phase 3-5) — reconcile 'bid' vs 'project'. RESOLVED 2026-05-29: Option A — collapse bids into a property-rooted projects spine (scope + pricing + lifecycle + delivery on one row)."
@@ -31,14 +31,14 @@ todos:
     content: "Phase 3 Stage 2 — SHIPPED + verified 2026-05-29. Cut the data layer over to the bid spine: accept flow sets delivery_status + accepted_* on the bid (no projects insert; re-accept never clobbers in-flight delivery); project identity = bid id; getProjectByBidId/getProjects/getProject/updateProjectStatus/updateProjectDetails/getProjectUpdates/createProjectUpdate/getPublicProjectByBidId/getProjectStatusCounts all read/write the bid spine + project_updates.bid_id; new ProjectView type + bidToProjectView mapper keep return shapes stable so pages/actions needed NO changes; ProjectStatus re-based on bids.delivery_status. project_updates.project_id made nullable (migration 019). ownerUserId scoping + ownership guards preserved throughout. tsc/lint/build clean; DB check: 5 legacy projects == 5 spine projects, 0 status mismatches. Legacy projects table left in place as a safety net until the flows are exercised in real use."
     status: completed
   - id: p4-proposal-snapshot
-    content: "Phase 4 — extend ProposalSnapshot (src/lib/pdf/types.ts) + generateProposalAction + PDF template + /p/[slug] to carry owner/management/NTO party block, access line items, and building archetype. Snapshot stays frozen at generate time."
-    status: pending
+    content: "Phase 4 — SHIPPED 2026-05-30. ProposalSnapshot (src/lib/pdf/types.ts) gained optional parties (management/owner/NTO), accessItems[] (separate from lineItems), and per-building archetype; older snapshots without the fields still render unchanged. generateProposalAction populates the new fields (parties via new slim getProposalPartyBlock(propertyId) in store; accessItems no longer fold into lineItems but still flow through calculateBidPricing.accessItems so the grand total reconciles). PDF template renders an 'Ownership & Notice to Owner' party grid, an 'Access' section with type/method/qty/duration/amount, and the archetype label in each building header. /p/[slug] mirrors the same: a party card, an access card, and an archetype line on each building in Scope & pricing. tsc/lint/build clean."
+    status: completed
   - id: p3-drop-projects
     content: "Phase 3 Stage 3 — SHIPPED + APPLIED 2026-05-29 (destructive). Migration 020_drop_projects.sql dropped project_updates.project_id and the projects table, and set project_updates.bid_id NOT NULL. Removed the projects pgTable + Project type + import from schema/store. 5 legacy projects rows dropped (data already lived on the bid spine). tsc/lint/build clean; verified projects table gone + bid_id NOT NULL. Cosmetic bids→projects table rename intentionally NOT done (high churn, low value)."
     status: completed
   - id: p5-docs-cleanup
-    content: "Phase 5 — update docs/lead-data-model.md + README data-model section to property-rooted; flip docs/plan.md 'Open now' #1 to shipped once Phase 4 lands."
-    status: pending
+    content: "Phase 5 — SHIPPED 2026-05-30. docs/lead-data-model.md fully rewritten to property-rooted (new object graph + entity table covering accounts.type, property_parties, archetype on buildings, access_items, rate_config, the bids==projects collapse; updated product rules; migration history through 020). README updated: 'Leads' bullet flipped to 'Property-rooted data model', new 'Bids (projects)' section explaining the bid==project collapse + access/archetype/rate_config, 'Project layer' rewritten (no separate projects table), schema and db:apply-manual descriptions updated, migration range bumped 014→020. docs/plan.md: Open-now #1 (re-root data model) moved to Shipped with a full Phase 1–5 entry; remaining open-now items renumbered; the inline 'Property-rooted re-model (open)' decision-record block flipped to '(shipped 2026-05-30)' with a lead-in pointer to the Shipped entry. Cross-reference to 'Open now #2' in the rationale updated to '#1' after renumbering."
+    status: completed
 ---
 
 # Property-Rooted Data Model Re-model — build plan

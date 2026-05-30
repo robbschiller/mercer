@@ -5,11 +5,11 @@ import {
   ExternalLink,
   Mail,
   Phone,
-  Scale,
   User,
+  UserCheck,
 } from "lucide-react";
 import type { PropertyDetail } from "@/lib/store";
-import { setPropertyOwnershipAction } from "@/lib/actions";
+import { setPropertyOwnerContactAction } from "@/lib/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,7 +18,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   leadStatusLabel,
@@ -41,12 +40,10 @@ export function PropertyDetailPanel({
   const { property, account, managementAccount, ownerParty, contacts, leads, portfolioCount } =
     detail;
   const managementName = managementAccount?.name ?? account?.name ?? null;
-  const ntoContact = ownerParty?.contactId
+  const ownerContact = ownerParty?.contactId
     ? (contacts.find((c) => c.contact.id === ownerParty.contactId)?.contact ??
       null)
     : null;
-  const ntoTarget =
-    ntoContact?.name ?? ownerParty?.legalOwnerName ?? null;
   const heading = property.name ?? property.address ?? "Untitled property";
   const earliestFollowUp = leads.reduce<string | null>((earliest, lead) => {
     if (!lead.followUpAt) return earliest;
@@ -191,50 +188,33 @@ export function PropertyDetailPanel({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <Scale className="h-4 w-4 text-muted-foreground" />
-            Ownership &amp; Notice to Owner
+            <UserCheck className="h-4 w-4 text-muted-foreground" />
+            Ownership
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-2">
             <Metric label="Management" value={managementName ?? "—"} />
-            <Metric
-              label="NTO recipient"
-              value={ntoTarget ?? "Not set"}
-            />
+            <Metric label="Owner contact" value={ownerContact?.name ?? "Not set"} />
           </div>
           <p className="text-xs text-muted-foreground">
-            Notice to Owner must reach the legal owner, not the management
-            company — serving the manager forfeits lien rights. Record the
-            owner and which contact the notice is addressed to.
+            Mark which contact at this property represents the owner. The
+            legal owner details and Notice to Owner recipient are captured
+            later on the project pre-start checklist, not here.
           </p>
-          <form action={setPropertyOwnershipAction} className="flex flex-col gap-3">
+          <form
+            action={setPropertyOwnerContactAction}
+            className="flex flex-col gap-3"
+          >
             <input type="hidden" name="propertyId" value={property.id} />
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="legalOwnerName">Legal owner</Label>
-              <Input
-                id="legalOwnerName"
-                name="legalOwnerName"
-                placeholder="e.g. Pura Vita Owner LLC"
-                defaultValue={ownerParty?.legalOwnerName ?? ""}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="legalOwnerAddress">Owner address</Label>
-              <Input
-                id="legalOwnerAddress"
-                name="legalOwnerAddress"
-                placeholder="Mailing address for legal notices"
-                defaultValue={ownerParty?.legalOwnerAddress ?? ""}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="ntoContactId">NTO recipient contact</Label>
+              <Label htmlFor="contactId">Owner contact</Label>
               <select
-                id="ntoContactId"
-                name="ntoContactId"
+                id="contactId"
+                name="contactId"
                 defaultValue={ownerParty?.contactId ?? ""}
                 className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                disabled={contacts.length === 0}
               >
                 <option value="">— None —</option>
                 {contacts.map(({ contact }) => (
@@ -243,9 +223,14 @@ export function PropertyDetailPanel({
                   </option>
                 ))}
               </select>
+              {contacts.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Add a contact to this property first.
+                </p>
+              ) : null}
             </div>
             <Button type="submit" size="sm" className="self-start">
-              Save ownership
+              Save owner
             </Button>
           </form>
         </CardContent>

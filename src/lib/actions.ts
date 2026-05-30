@@ -21,6 +21,7 @@ import {
   deleteAccessItem,
   upsertUserDefaults,
   getBidPageData,
+  getProposalPartyBlock,
   createProposal,
   createProposalShare,
   createLead,
@@ -30,7 +31,8 @@ import {
   updateLeadStatus,
   logLeadContact,
   setLeadFollowUp,
-  setPropertyOwnership,
+  setPropertyOwnerContact,
+  setProjectNto,
   getLead,
   acceptProposalShare,
   declineProposalShare,
@@ -89,7 +91,8 @@ import {
   enrichLeadActionSchema,
   logLeadContactSchema,
   setLeadFollowUpSchema,
-  setPropertyOwnershipSchema,
+  setPropertyOwnerContactSchema,
+  setProjectNtoSchema,
   updateProjectStatusSchema,
   updateProjectDetailsSchema,
   createProjectUpdateSchema,
@@ -495,10 +498,7 @@ export async function generateProposalAction(data: { bidId: string }) {
   const { bid, buildings, surfacesByBuilding, lineItems, accessItems, totalSqft } =
     pageData;
 
-  // Access items fold into the proposal's line items so the customer-facing
-  // total reconciles with the bid total. A dedicated access section in the
-  // snapshot/PDF is Phase 4 of the property-rooted re-model.
-  const accessAsLineItems = accessItems.map((a) => ({
+  const accessItemsForPricing = accessItems.map((a) => ({
     name: a.method ? `Access — ${a.method}` : `Access — ${a.type}`,
     amount: Number(a.amount),
   }));
@@ -517,12 +517,16 @@ export async function generateProposalAction(data: { bidId: string }) {
       name: li.name,
       amount: Number(li.amount),
     })),
-    accessItems: accessAsLineItems,
+    accessItems: accessItemsForPricing,
   });
 
   if (!pricing.complete || pricing.grandTotal == null) {
     return { error: "Pricing is incomplete. Fill in all pricing fields before generating a proposal.", pdfUrl: null };
   }
+
+  const parties = bid.propertyId
+    ? await getProposalPartyBlock(bid.propertyId)
+    : null;
 
   const snapshot: ProposalSnapshot = {
     propertyName: bid.propertyName,
@@ -532,6 +536,7 @@ export async function generateProposalAction(data: { bidId: string }) {
     buildings: buildings.map((b) => ({
       label: b.label,
       count: b.count,
+      archetype: b.archetype,
       totalSqft: b.totalSqft,
       surfaces: (surfacesByBuilding[b.id] ?? []).map((s) => ({
         name: s.name,
@@ -539,13 +544,18 @@ export async function generateProposalAction(data: { bidId: string }) {
         totalSqft: Number(s.totalSqft ?? 0),
       })),
     })),
-    lineItems: [
-      ...lineItems.map((li) => ({
-        name: li.name,
-        amount: Number(li.amount),
-      })),
-      ...accessAsLineItems,
-    ],
+    lineItems: lineItems.map((li) => ({
+      name: li.name,
+      amount: Number(li.amount),
+    })),
+    accessItems: accessItems.map((a) => ({
+      type: a.type,
+      method: a.method,
+      quantity: a.quantity != null ? Number(a.quantity) : null,
+      durationDays: a.durationDays,
+      amount: Number(a.amount),
+    })),
+    parties: parties ?? undefined,
     totalSqft,
     grandTotal: pricing.grandTotal,
     generatedAt: new Date().toISOString(),
@@ -851,8 +861,8 @@ export async function setLeadFollowUpAction(formData: FormData) {
   revalidatePath(`/leads/${result.data.id}`);
 }
 
-export async function setPropertyOwnershipAction(formData: FormData) {
-  const result = setPropertyOwnershipSchema.safeParse(
+export async function setPropertyOwnerContactAction(formData: FormData) {
+  const result = setPropertyOwnerContactSchema.safeParse(
     formDataToObject(formData),
   );
   if (!result.success) {
@@ -862,24 +872,43 @@ export async function setPropertyOwnershipAction(formData: FormData) {
       `/leads/properties/${id}?error=${encodeURIComponent(message)}`,
     );
   }
-  const { propertyId, legalOwnerName, legalOwnerAddress, ntoContactId } =
-    result.data;
+  const { propertyId, contactId } = result.data;
   try {
-    await setPropertyOwnership({
-      propertyId,
-      legalOwnerName,
-      legalOwnerAddress,
-      ntoContactId,
-    });
+    await setPropertyOwnerContact({ propertyId, contactId });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Failed to save ownership";
+      error instanceof Error ? error.message : "Failed to save owner contact";
     redirect(
       `/leads/properties/${propertyId}?error=${encodeURIComponent(message)}`,
     );
   }
   revalidatePath(`/leads/properties/${propertyId}`);
   redirect(`/leads/properties/${propertyId}?saved=1`);
+}
+
+export async function setProjectNtoAction(formData: FormData) {
+  const result = setProjectNtoSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    const id = (formData.get("bidId") as string) || null;
+    projectErrorRedirect(
+      id,
+      result.error.issues[0]?.message ?? "Invalid input",
+    );
+  }
+  const { bidId, legalOwnerName, legalOwnerAddress, ntoContactId } = result.data;
+  try {
+    await setProjectNto({
+      bidId,
+      legalOwnerName,
+      legalOwnerAddress,
+      ntoContactId,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to save NTO";
+    projectErrorRedirect(bidId, message);
+  }
+  await revalidateProjectAndShares(bidId, bidId);
 }
 
 export async function enrichLeadAction(formData: FormData) {
