@@ -8,7 +8,13 @@ import {
 } from "@react-pdf/renderer";
 import { formatDimensions } from "@/lib/dimensions";
 import { formatCurrency } from "@/lib/pricing";
-import type { ProposalSnapshot } from "./types";
+import {
+  ACCESS_TYPE_LABELS,
+  BUILDING_ARCHETYPE_LABELS,
+  type AccessType,
+  type BuildingArchetype,
+} from "@/lib/status-meta";
+import type { ProposalSnapshot, SnapshotAccessItem } from "./types";
 
 const styles = StyleSheet.create({
   page: {
@@ -71,6 +77,60 @@ const styles = StyleSheet.create({
     fontFamily: "Helvetica-Bold",
     marginBottom: 6,
     marginTop: 12,
+  },
+  buildingArchetype: {
+    fontSize: 9,
+    color: "#666",
+    fontFamily: "Helvetica",
+  },
+  partyGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 8,
+  },
+  partyCell: {
+    width: "50%",
+    paddingRight: 12,
+    marginBottom: 10,
+  },
+  partyLabel: {
+    fontSize: 8,
+    color: "#666",
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  partyValue: {
+    fontSize: 10,
+    color: "#1a1a1a",
+  },
+  partyValueMuted: {
+    fontSize: 10,
+    color: "#999",
+  },
+  accessRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  accessRowAlt: {
+    backgroundColor: "#f9f9f9",
+  },
+  accessDescription: {
+    flex: 1,
+    fontSize: 9,
+  },
+  accessMeta: {
+    width: 110,
+    fontSize: 9,
+    color: "#666",
+    textAlign: "right",
+  },
+  accessAmount: {
+    width: 80,
+    fontSize: 9,
+    textAlign: "right",
   },
   surfaceRow: {
     flexDirection: "row",
@@ -182,6 +242,13 @@ const styles = StyleSheet.create({
   },
 });
 
+function accessMeta(item: SnapshotAccessItem): string {
+  const parts: string[] = [];
+  if (item.quantity != null) parts.push(`qty ${item.quantity}`);
+  if (item.durationDays != null) parts.push(`${item.durationDays} d`);
+  return parts.join(" · ");
+}
+
 export function ProposalDocument({
   snapshot,
 }: {
@@ -199,6 +266,16 @@ export function ProposalDocument({
     "en-US",
     { year: "numeric", month: "long", day: "numeric" }
   );
+
+  const parties = snapshot.parties ?? null;
+  const hasParties =
+    parties != null &&
+    (parties.managementCompany ||
+      parties.ownerName ||
+      parties.ownerAddress ||
+      parties.ntoRecipientName);
+
+  const accessItems = snapshot.accessItems ?? [];
 
   return (
     <Document>
@@ -234,6 +311,62 @@ export function ProposalDocument({
           </View>
         ) : null}
 
+        {hasParties && parties ? (
+          <View wrap={false}>
+            <Text style={styles.sectionTitle}>Ownership & Notice to Owner</Text>
+            <View style={styles.partyGrid}>
+              <View style={styles.partyCell}>
+                <Text style={styles.partyLabel}>Management company</Text>
+                <Text
+                  style={
+                    parties.managementCompany
+                      ? styles.partyValue
+                      : styles.partyValueMuted
+                  }
+                >
+                  {parties.managementCompany ?? "—"}
+                </Text>
+              </View>
+              <View style={styles.partyCell}>
+                <Text style={styles.partyLabel}>Legal owner</Text>
+                <Text
+                  style={
+                    parties.ownerName
+                      ? styles.partyValue
+                      : styles.partyValueMuted
+                  }
+                >
+                  {parties.ownerName ?? "—"}
+                </Text>
+              </View>
+              <View style={styles.partyCell}>
+                <Text style={styles.partyLabel}>Owner address</Text>
+                <Text
+                  style={
+                    parties.ownerAddress
+                      ? styles.partyValue
+                      : styles.partyValueMuted
+                  }
+                >
+                  {parties.ownerAddress ?? "—"}
+                </Text>
+              </View>
+              <View style={styles.partyCell}>
+                <Text style={styles.partyLabel}>Notice to Owner recipient</Text>
+                <Text
+                  style={
+                    parties.ntoRecipientName
+                      ? styles.partyValue
+                      : styles.partyValueMuted
+                  }
+                >
+                  {parties.ntoRecipientName ?? "—"}
+                </Text>
+              </View>
+            </View>
+          </View>
+        ) : null}
+
         <Text style={styles.sectionTitle}>Building Breakdown</Text>
 
         {snapshot.buildings.map((building, bi) => (
@@ -241,6 +374,14 @@ export function ProposalDocument({
             <Text style={styles.buildingHeader}>
               {building.label}
               {building.count > 1 ? ` (x${building.count})` : ""}
+              {building.archetype ? (
+                <Text style={styles.buildingArchetype}>
+                  {"  ·  "}
+                  {BUILDING_ARCHETYPE_LABELS[
+                    building.archetype as BuildingArchetype
+                  ] ?? building.archetype}
+                </Text>
+              ) : null}
             </Text>
 
             {building.surfaces.map((surface, si) => (
@@ -297,6 +438,31 @@ export function ProposalDocument({
           <>
             <Text style={styles.sectionTitle}>Scope Includes</Text>
             <Text style={styles.scopeText}>{scopeList}</Text>
+          </>
+        )}
+
+        {accessItems.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Access</Text>
+            {accessItems.map((item, i) => (
+              <View
+                key={i}
+                style={
+                  i % 2 === 1
+                    ? [styles.accessRow, styles.accessRowAlt]
+                    : styles.accessRow
+                }
+              >
+                <Text style={styles.accessDescription}>
+                  {ACCESS_TYPE_LABELS[item.type as AccessType] ?? item.type}
+                  {item.method ? ` — ${item.method}` : ""}
+                </Text>
+                <Text style={styles.accessMeta}>{accessMeta(item)}</Text>
+                <Text style={styles.accessAmount}>
+                  {formatCurrency(item.amount)}
+                </Text>
+              </View>
+            ))}
           </>
         )}
 

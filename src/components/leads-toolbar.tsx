@@ -11,15 +11,16 @@ export function LeadsToolbar() {
       <Button
         variant="outline"
         size="icon"
+        className="h-8 w-8"
         aria-label="Import CSV"
         title="Import CSV"
         asChild
       >
         <Link href="/leads/import">
-          <Download className="size-4" />
+          <Download className="size-3.5" />
         </Link>
       </Button>
-      <Button variant="amber" asChild>
+      <Button variant="amber" size="sm" asChild>
         <Link href="/leads/new">New lead</Link>
       </Button>
     </PageHeaderActions>

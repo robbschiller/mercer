@@ -16,25 +16,39 @@ import { DataTableSearchFilter } from "@/components/niko-table/components/data-t
 import { DataTableSortMenu } from "@/components/niko-table/components/data-table-sort-menu";
 import { DataTableFilterMenu } from "@/components/niko-table/components/data-table-filter-menu";
 import { DataTablePagination } from "@/components/niko-table/components/data-table-pagination";
-import type { DataTableColumnDef } from "@/components/niko-table/types";
-import { FILTER_VARIANTS } from "@/components/niko-table/lib/constants";
+import type {
+  DataTableColumnDef,
+  ExtendedColumnFilter,
+} from "@/components/niko-table/types";
 import {
-  BID_STATUSES,
-  bidStatusLabel,
-  bidStatusVariant,
+  FILTER_OPERATORS,
+  FILTER_VARIANTS,
+  JOIN_OPERATORS,
+} from "@/components/niko-table/lib/constants";
+import {
+  PROJECT_STATUSES,
+  projectStatusLabel,
+  projectStatusVariant,
+  type ProjectStatus,
 } from "@/lib/status-meta";
-import { calculateBidPricing, formatCurrency } from "@/lib/pricing";
-import type { getBidsWithSummary } from "@/lib/store";
+import type { getProjects } from "@/lib/store";
 
-type BidSummary = Awaited<ReturnType<typeof getBidsWithSummary>>[number];
+type ProjectWithBid = Awaited<ReturnType<typeof getProjects>>[number];
 
-type BidRow = BidSummary & {
+type ProjectRow = {
+  id: string;
   href: string;
-  grandTotal: number | null;
+  propertyName: string;
+  clientName: string;
+  status: ProjectStatus;
+  targetStartDate: string | null;
+  targetEndDate: string | null;
+  assignedSub: string | null;
+  updatedAt: Date | null;
 };
 
-const STATUS_OPTIONS = BID_STATUSES.map((status) => ({
-  label: bidStatusLabel(status),
+const STATUS_OPTIONS = PROJECT_STATUSES.map((status) => ({
+  label: projectStatusLabel(status),
   value: status,
 }));
 
@@ -50,45 +64,39 @@ function MutedCell({ children }: { children: React.ReactNode }) {
   return <span className="text-muted-foreground">{children}</span>;
 }
 
-function formatShortDate(date: Date | null | undefined): string {
-  if (!date) return "—";
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
+function formatShortDate(value: Date | string | null | undefined): string {
+  if (!value) return "—";
+  const d = typeof value === "string" ? new Date(value) : value;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function computeBidTotal(bid: BidSummary): number | null {
-  const pricing = calculateBidPricing({
-    totalSqft: bid.totalSqft,
-    coverageSqftPerGallon: bid.coverageSqftPerGallon
-      ? Number(bid.coverageSqftPerGallon)
-      : null,
-    pricePerGallon: bid.pricePerGallon ? Number(bid.pricePerGallon) : null,
-    laborRatePerUnit: bid.laborRatePerUnit
-      ? Number(bid.laborRatePerUnit)
-      : null,
-    marginPercent: bid.marginPercent ? Number(bid.marginPercent) : null,
-    lineItems: [],
-  });
-  return pricing.grandTotal;
-}
-
-export function BidsTable({ bids }: { bids: BidSummary[] }) {
+export function ProjectsTable({
+  projects,
+  initialStatus,
+}: {
+  projects: ProjectWithBid[];
+  initialStatus?: ProjectStatus | null;
+}) {
   const router = useRouter();
   const [, startTransition] = useTransition();
 
-  const rows = useMemo<BidRow[]>(
+  const rows = useMemo<ProjectRow[]>(
     () =>
-      bids.map((bid) => ({
-        ...bid,
-        href: `/bids/${bid.id}`,
-        grandTotal: computeBidTotal(bid),
+      projects.map(({ project, bid }) => ({
+        id: project.id,
+        href: `/projects/${project.id}`,
+        propertyName: bid.propertyName,
+        clientName: bid.clientName,
+        status: project.status,
+        targetStartDate: project.targetStartDate,
+        targetEndDate: project.targetEndDate,
+        assignedSub: project.assignedSub,
+        updatedAt: project.updatedAt,
       })),
-    [bids],
+    [projects],
   );
 
-  const columns = useMemo<DataTableColumnDef<BidRow>[]>(
+  const columns = useMemo<DataTableColumnDef<ProjectRow>[]>(
     () => [
       {
         accessorKey: "propertyName",
@@ -114,66 +122,6 @@ export function BidsTable({ bids }: { bids: BidSummary[] }) {
         ),
       },
       {
-        accessorKey: "address",
-        enableSorting: false,
-        enableColumnFilter: false,
-        header: () => <HeaderLabel>Address</HeaderLabel>,
-        cell: ({ row }) => (
-          <span className="block max-w-[24ch] truncate text-muted-foreground">
-            {row.original.address || "—"}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "buildingCount",
-        enableSorting: true,
-        enableColumnFilter: false,
-        header: () => (
-          <span className="block text-right text-xs font-medium uppercase text-muted-foreground">
-            Buildings
-          </span>
-        ),
-        cell: ({ row }) => (
-          <span className="block text-right tabular-nums">
-            {row.original.buildingCount || "—"}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "totalSqft",
-        enableSorting: true,
-        enableColumnFilter: false,
-        header: () => (
-          <span className="block text-right text-xs font-medium uppercase text-muted-foreground">
-            Sqft
-          </span>
-        ),
-        cell: ({ row }) => (
-          <span className="block text-right tabular-nums">
-            {row.original.totalSqft > 0
-              ? row.original.totalSqft.toLocaleString()
-              : "—"}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "grandTotal",
-        enableSorting: true,
-        enableColumnFilter: false,
-        header: () => (
-          <span className="block text-right text-xs font-medium uppercase text-muted-foreground">
-            Bid total
-          </span>
-        ),
-        cell: ({ row }) => (
-          <span className="block text-right tabular-nums">
-            {row.original.grandTotal != null
-              ? formatCurrency(row.original.grandTotal)
-              : "—"}
-          </span>
-        ),
-      },
-      {
         accessorKey: "status",
         enableSorting: false,
         enableColumnFilter: true,
@@ -184,30 +132,76 @@ export function BidsTable({ bids }: { bids: BidSummary[] }) {
         },
         header: () => <HeaderLabel>Status</HeaderLabel>,
         cell: ({ row }) => (
-          <Badge variant={bidStatusVariant(row.original.status)}>
-            {bidStatusLabel(row.original.status)}
+          <Badge variant={projectStatusVariant(row.original.status)}>
+            {projectStatusLabel(row.original.status)}
           </Badge>
         ),
       },
       {
-        accessorKey: "lastProposalAt",
+        accessorKey: "targetStartDate",
         enableSorting: true,
         enableColumnFilter: false,
-        header: () => <HeaderLabel>Proposal</HeaderLabel>,
+        header: () => <HeaderLabel>Target start</HeaderLabel>,
         cell: ({ row }) => (
-          <MutedCell>{formatShortDate(row.original.lastProposalAt)}</MutedCell>
+          <MutedCell>{formatShortDate(row.original.targetStartDate)}</MutedCell>
+        ),
+      },
+      {
+        accessorKey: "targetEndDate",
+        enableSorting: true,
+        enableColumnFilter: false,
+        header: () => <HeaderLabel>Target end</HeaderLabel>,
+        cell: ({ row }) => (
+          <MutedCell>{formatShortDate(row.original.targetEndDate)}</MutedCell>
+        ),
+      },
+      {
+        accessorKey: "assignedSub",
+        enableSorting: true,
+        enableColumnFilter: false,
+        header: () => <HeaderLabel>Sub</HeaderLabel>,
+        cell: ({ row }) => (
+          <span className="block max-w-[24ch] truncate text-muted-foreground">
+            {row.original.assignedSub || "—"}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "updatedAt",
+        enableSorting: true,
+        enableColumnFilter: false,
+        header: () => <HeaderLabel>Updated</HeaderLabel>,
+        cell: ({ row }) => (
+          <MutedCell>{formatShortDate(row.original.updatedAt)}</MutedCell>
         ),
       },
     ],
     [],
   );
 
+  const initialColumnFilters = useMemo(() => {
+    if (!initialStatus) return [];
+    const filter: ExtendedColumnFilter<ProjectRow> = {
+      id: "status",
+      value: initialStatus,
+      variant: FILTER_VARIANTS.SELECT,
+      operator: FILTER_OPERATORS.EQ,
+      filterId: `status-eq-${initialStatus}`,
+      joinOperator: JOIN_OPERATORS.AND,
+    };
+    return [{ id: "status", value: filter }];
+  }, [initialStatus]);
+
   return (
     <DataTableRoot
       className="flex min-h-0 flex-1 flex-col space-y-0"
       data={rows}
       columns={columns}
-      getRowId={(bid) => bid.id}
+      getRowId={(row) => row.id}
+      initialState={{
+        columnFilters: initialColumnFilters,
+        sorting: [{ id: "updatedAt", desc: true }],
+      }}
       config={{
         enableFilters: true,
         enableSorting: true,
@@ -216,33 +210,33 @@ export function BidsTable({ bids }: { bids: BidSummary[] }) {
       <div className="flex min-h-0 flex-1 flex-col">
         <DataTableToolbarSection className="flex-wrap justify-between gap-2 border-b p-0 px-3 py-2">
           <div className="min-w-0 flex-1">
-            <DataTableSearchFilter<BidRow>
-              placeholder="Search bids..."
+            <DataTableSearchFilter<ProjectRow>
+              placeholder="Search projects..."
               className="w-full max-w-md [&_input]:border-0 [&_input]:shadow-none [&_input]:focus-visible:ring-0"
             />
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <DataTableFilterMenu<BidRow>
+            <DataTableFilterMenu<ProjectRow>
               autoOptions={false}
               showCounts={false}
             />
-            <DataTableSortMenu<BidRow> />
+            <DataTableSortMenu<ProjectRow> />
           </div>
         </DataTableToolbarSection>
         <DataTable className="min-h-0 flex-1 rounded-none border-0">
           <DataTableHeader className="bg-muted/40" />
-          <DataTableBody<BidRow>
-            onRowClick={(bid) => {
-              startTransition(() => router.push(bid.href));
+          <DataTableBody<ProjectRow>
+            onRowClick={(row) => {
+              startTransition(() => router.push(row.href));
             }}
           >
             <DataTableEmptyBody className="h-28 text-center text-sm text-muted-foreground">
-              No bids match this view.
+              No projects match this view.
             </DataTableEmptyBody>
           </DataTableBody>
         </DataTable>
         <div className="border-t bg-background">
-          <DataTablePagination<BidRow>
+          <DataTablePagination<ProjectRow>
             pageSizeOptions={[25, 50, 100, 250]}
             defaultPageSize={50}
           />

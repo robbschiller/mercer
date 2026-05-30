@@ -57,7 +57,10 @@ export function TeamSwitcher({
   primaryColor: string | null;
   role: string;
 }) {
-  const { isMobile } = useSidebar();
+  const { isMobile, setOpenMobile } = useSidebar();
+  const dismissOnMobile = () => {
+    if (isMobile) setOpenMobile(false);
+  };
   const initials = companyInitials(companyName);
   const fallbackStyle = primaryColor
     ? {
@@ -103,14 +106,14 @@ export function TeamSwitcher({
               Organization
             </DropdownMenuLabel>
             <DropdownMenuItem asChild className="gap-2 p-2">
-              <Link href="/settings">
+              <Link href="/settings" onClick={dismissOnMobile}>
                 <Settings className="size-4" />
                 Settings
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild className="gap-2 p-2">
-              <Link href="/settings/members">
+              <Link href="/settings/members" onClick={dismissOnMobile}>
                 <Building2 className="size-4" />
                 Manage team
               </Link>

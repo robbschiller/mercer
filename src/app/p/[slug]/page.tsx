@@ -19,6 +19,10 @@ import { PublicProposalResponse } from "@/components/public-proposal-response";
 import {
   projectStatusLabel,
   projectStatusVariant,
+  ACCESS_TYPE_LABELS,
+  BUILDING_ARCHETYPE_LABELS,
+  type AccessType,
+  type BuildingArchetype,
 } from "@/lib/status-meta";
 
 function getSnapshot(snapshot: unknown): ProposalSnapshot | null {
@@ -60,6 +64,17 @@ export default async function SharedProposalPage({
 
   const isAccepted = Boolean(record.share.acceptedAt);
   const isDeclined = Boolean(record.share.declinedAt);
+  const parties = snapshot.parties ?? null;
+  const hasParties =
+    parties != null &&
+    Boolean(
+      parties.managementCompany ||
+        parties.ownerName ||
+        parties.ownerAddress ||
+        parties.ntoRecipientName,
+    );
+  const accessItems = snapshot.accessItems ?? [];
+  const archetypeBuildings = snapshot.buildings.filter((b) => b.archetype);
   // After acceptance the URL pivots to a status page (PRD §5.5). The
   // project row is the trigger; if there's no project, fall back to the
   // proposal-acceptance render (covers older accepted shares from before
@@ -108,6 +123,24 @@ export default async function SharedProposalPage({
               </p>
             </div>
           </div>
+          {archetypeBuildings.length > 0 && (
+            <div className="rounded-md border p-3">
+              <p className="text-xs text-muted-foreground">Buildings</p>
+              <ul className="mt-1 text-sm">
+                {archetypeBuildings.map((b, i) => (
+                  <li key={i}>
+                    {b.label}
+                    {b.count > 1 ? ` (x${b.count})` : ""} ·{" "}
+                    <span className="text-muted-foreground">
+                      {BUILDING_ARCHETYPE_LABELS[
+                        b.archetype as BuildingArchetype
+                      ] ?? b.archetype}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div className="rounded-md border p-3">
             <p className="text-xs text-muted-foreground">Bid total</p>
             <p className="text-2xl font-semibold">
@@ -122,6 +155,93 @@ export default async function SharedProposalPage({
           )}
         </CardContent>
       </Card>
+
+      {hasParties && parties && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">
+              Ownership & Notice to Owner
+            </CardTitle>
+            <CardDescription>
+              Captured at the time this proposal was generated.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-md border p-3">
+              <p className="text-xs text-muted-foreground">
+                Management company
+              </p>
+              <p className="text-sm font-medium">
+                {parties.managementCompany ?? "—"}
+              </p>
+            </div>
+            <div className="rounded-md border p-3">
+              <p className="text-xs text-muted-foreground">Legal owner</p>
+              <p className="text-sm font-medium">
+                {parties.ownerName ?? "—"}
+              </p>
+            </div>
+            <div className="rounded-md border p-3 sm:col-span-2">
+              <p className="text-xs text-muted-foreground">Owner address</p>
+              <p className="mt-1 whitespace-pre-wrap text-sm">
+                {parties.ownerAddress ?? "—"}
+              </p>
+            </div>
+            <div className="rounded-md border p-3 sm:col-span-2">
+              <p className="text-xs text-muted-foreground">
+                Notice to Owner recipient
+              </p>
+              <p className="text-sm font-medium">
+                {parties.ntoRecipientName ?? "—"}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {accessItems.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Access</CardTitle>
+            <CardDescription>
+              Lifts, scaffolding, and other access methods included in the
+              bid total.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="flex flex-col divide-y">
+              {accessItems.map((item, i) => {
+                const meta: string[] = [];
+                if (item.quantity != null) meta.push(`qty ${item.quantity}`);
+                if (item.durationDays != null)
+                  meta.push(`${item.durationDays} d`);
+                return (
+                  <li
+                    key={i}
+                    className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">
+                        {ACCESS_TYPE_LABELS[item.type as AccessType] ??
+                          item.type}
+                        {item.method ? ` — ${item.method}` : ""}
+                      </p>
+                      {meta.length > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          {meta.join(" · ")}
+                        </p>
+                      )}
+                    </div>
+                    <p className="text-sm font-medium">
+                      {formatCurrency(item.amount)}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

@@ -9,22 +9,24 @@ export default async function BidsPage() {
   const bids = await getBidsWithSummary();
 
   return (
-    <div className="container mx-auto p-4">
+    <div className="flex h-[calc(100svh-3.5rem)] min-h-0 w-full flex-col overflow-hidden">
       <PageHeaderActions>
-        <Button variant="amber" asChild>
+        <Button variant="amber" size="sm" asChild>
           <Link href="/bids/new">New bid</Link>
         </Button>
       </PageHeaderActions>
 
       {bids.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-4 py-12">
-            <p className="text-muted-foreground">No bids yet.</p>
-            <Button asChild>
-              <Link href="/bids/new">Create your first bid</Link>
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="p-3 lg:p-4">
+          <Card>
+            <CardContent className="flex flex-col items-center gap-4 py-12">
+              <p className="text-muted-foreground">No bids yet.</p>
+              <Button asChild>
+                <Link href="/bids/new">Create your first bid</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       ) : (
         <BidsTable bids={bids} />
       )}

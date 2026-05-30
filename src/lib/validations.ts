@@ -419,14 +419,21 @@ export const removeOrgMemberSchema = z.object({
   membershipId: z.string().uuid("Invalid membership ID"),
 });
 
-export const setPropertyOwnershipSchema = z.object({
+const nullableContactId = z.preprocess((val: unknown) => {
+  if (val === undefined || val === null || val === "") return null;
+  return String(val);
+}, z.union([z.string().uuid("Invalid contact ID"), z.null()]));
+
+export const setPropertyOwnerContactSchema = z.object({
   propertyId: z.string().uuid("Invalid property ID"),
+  contactId: nullableContactId,
+});
+
+export const setProjectNtoSchema = z.object({
+  bidId: z.string().uuid("Invalid project ID"),
   legalOwnerName: optionalText,
   legalOwnerAddress: optionalText,
-  ntoContactId: z.preprocess((val: unknown) => {
-    if (val === undefined || val === null || val === "") return null;
-    return String(val);
-  }, z.union([z.string().uuid("Invalid contact ID"), z.null()])),
+  ntoContactId: nullableContactId,
 });
 
 // ── Access items ──

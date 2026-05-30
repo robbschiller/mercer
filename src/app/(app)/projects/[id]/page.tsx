@@ -2,14 +2,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   getProject,
+  getProjectPreStart,
   getProjectUpdates,
   allowedProjectStatusTransitions,
+  isProjectStartReady,
   type ProjectStatus,
 } from "@/lib/store";
 import {
   updateProjectStatusAction,
   updateProjectDetailsAction,
   createProjectUpdateAction,
+  setProjectNtoAction,
 } from "@/lib/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,6 +34,7 @@ import {
   projectStatusLabel,
   projectStatusVariant,
 } from "@/lib/status-meta";
+import type { ProjectPreStart } from "@/lib/store";
 
 const STATUS_DESCRIPTIONS: Record<ProjectStatus, string> = {
   not_started:
@@ -92,7 +96,11 @@ export default async function ProjectPage({
 
   const { project, bid } = data;
   const transitions = allowedProjectStatusTransitions(project.status);
-  const updates = await getProjectUpdates(project.id);
+  const [updates, preStart] = await Promise.all([
+    getProjectUpdates(project.id),
+    project.status === "not_started" ? getProjectPreStart(project.id) : Promise.resolve(null),
+  ]);
+  const startReady = preStart ? isProjectStartReady(preStart) : true;
 
   return (
     <div className="container mx-auto max-w-3xl px-4 py-8 flex flex-col gap-6">
@@ -176,15 +184,27 @@ export default async function ProjectPage({
             </p>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {transitions.map((next) => (
-                <form key={next} action={updateProjectStatusAction}>
-                  <input type="hidden" name="id" value={project.id} />
-                  <input type="hidden" name="status" value={next} />
-                  <SubmitButton variant="outline" size="sm">
-                    {transitionLabel(project.status, next)}
-                  </SubmitButton>
-                </form>
-              ))}
+              {transitions.map((next) => {
+                const gated = next === "in_progress" && !startReady;
+                return (
+                  <form key={next} action={updateProjectStatusAction}>
+                    <input type="hidden" name="id" value={project.id} />
+                    <input type="hidden" name="status" value={next} />
+                    <SubmitButton
+                      variant="outline"
+                      size="sm"
+                      disabled={gated}
+                      title={
+                        gated
+                          ? "Complete the pre-start checklist below first."
+                          : undefined
+                      }
+                    >
+                      {transitionLabel(project.status, next)}
+                    </SubmitButton>
+                  </form>
+                );
+              })}
             </div>
           )}
           <p className="text-xs text-muted-foreground">
@@ -194,6 +214,10 @@ export default async function ProjectPage({
           </p>
         </CardContent>
       </Card>
+
+      {preStart ? (
+        <PreStartCard preStart={preStart} startReady={startReady} />
+      ) : null}
 
       <Card>
         <form action={updateProjectDetailsAction}>
@@ -350,5 +374,112 @@ export default async function ProjectPage({
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function PreStartCard({
+  preStart,
+  startReady,
+}: {
+  preStart: ProjectPreStart;
+  startReady: boolean;
+}) {
+  const { nto, ownerContact, propertyContactOptions, bidId, propertyId } =
+    preStart;
+
+  if (!propertyId) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Pre-start checklist</CardTitle>
+          <CardDescription>
+            This project isn&apos;t attached to a property, so Notice to Owner
+            can&apos;t be captured here. Link the bid to a property to enable
+            the checklist.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between gap-3 text-base">
+          <span>Pre-start checklist</span>
+          {startReady ? (
+            <Badge variant="default">Ready to start</Badge>
+          ) : (
+            <Badge variant="outline">Required before start</Badge>
+          )}
+        </CardTitle>
+        <CardDescription>
+          Notice to Owner must reach the legal owner, not the management
+          company — serving the manager forfeits lien rights. Capture this
+          before crews mobilize.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form action={setProjectNtoAction} className="flex flex-col gap-4">
+          <input type="hidden" name="bidId" value={bidId} />
+          <div className="grid gap-1.5">
+            <Label htmlFor="legalOwnerName">Legal owner</Label>
+            <Input
+              id="legalOwnerName"
+              name="legalOwnerName"
+              placeholder="e.g. Pura Vita Owner LLC"
+              defaultValue={nto.legalOwnerName ?? ""}
+              required
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="legalOwnerAddress">Owner address</Label>
+            <Input
+              id="legalOwnerAddress"
+              name="legalOwnerAddress"
+              placeholder="Mailing address for legal notices"
+              defaultValue={nto.legalOwnerAddress ?? ""}
+              required
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="ntoContactId">NTO recipient contact</Label>
+            <select
+              id="ntoContactId"
+              name="ntoContactId"
+              defaultValue={nto.contact?.id ?? ownerContact?.id ?? ""}
+              required
+              disabled={propertyContactOptions.length === 0}
+              className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value="" disabled>
+                — Pick a contact —
+              </option>
+              {propertyContactOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            {propertyContactOptions.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No contacts linked to this property. Add one from the
+                property page first.
+              </p>
+            ) : ownerContact ? (
+              <p className="text-xs text-muted-foreground">
+                Defaulted to the owner contact{" "}
+                <span className="font-medium">{ownerContact.name}</span>. Pick
+                someone else if a different person at the owner should be
+                served.
+              </p>
+            ) : null}
+          </div>
+          <SubmitButton size="sm" className="self-start">
+            Save checklist
+          </SubmitButton>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
