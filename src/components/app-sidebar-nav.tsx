@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ClipboardList,
+  ContactRound,
   HardHat,
   LayoutDashboard,
   Settings,
@@ -18,6 +19,7 @@ import {
 
 const items = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/contacts", label: "Contacts", icon: ContactRound },
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/bids", label: "Bids", icon: ClipboardList },
   { href: "/projects", label: "Projects", icon: HardHat },

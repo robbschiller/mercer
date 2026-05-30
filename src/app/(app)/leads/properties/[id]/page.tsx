@@ -22,7 +22,7 @@ export default async function PropertyDetailPage({
         detail={detail}
         closeHref="/leads"
         buildAccountHref={(accountId) => `/leads/accounts/${accountId}`}
-        buildContactHref={(contactId) => `/leads/contacts/${contactId}`}
+        buildContactHref={(contactId) => `/contacts/${contactId}`}
         buildLeadHref={(leadId) => `/leads/${leadId}`}
       />
     </div>
