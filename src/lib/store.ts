@@ -1720,6 +1720,40 @@ export type LeadSourceOption = {
   value: string;
 };
 
+// ── Contacts ──
+
+/** Hard ceiling on `limit` — a tampered URL can't pull the whole table. */
+export const CONTACTS_PAGE_MAX_LIMIT = 500;
+/** Default page size when the caller doesn't specify one. */
+export const CONTACTS_PAGE_DEFAULT_LIMIT = 100;
+
+export const CONTACTS_SORTS = ["recent", "name"] as const;
+export type ContactsSort = (typeof CONTACTS_SORTS)[number];
+
+export type GetContactsOptions = {
+  q?: string | null;
+  sourceTag?: string | null;
+  sort?: ContactsSort | null;
+  limit?: number;
+  offset?: number;
+};
+
+export type ContactListRow = {
+  contact: Contact;
+  accountName: string | null;
+  propertyCount: number;
+  leadCount: number;
+  nextFollowUpAt: string | null;
+  lastContactedAt: Date | null;
+};
+
+export type GetContactsResult = {
+  rows: ContactListRow[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
 export type LeadPropertyGroup = {
   key: string;
   accountId: string | null;
@@ -1797,8 +1831,209 @@ function clampLeadLimit(limit: number | undefined): number {
   );
 }
 
+function clampContactLimit(limit: number | undefined): number {
+  return Math.max(
+    1,
+    Math.min(limit ?? CONTACTS_PAGE_DEFAULT_LIMIT, CONTACTS_PAGE_MAX_LIMIT),
+  );
+}
+
 function clampOffset(offset: number | undefined): number {
   return Math.max(0, offset ?? 0);
+}
+
+function contactListConditions(userId: string, options: GetContactsOptions): SQL[] {
+  const conditions: SQL[] = [eq(contacts.userId, userId)];
+
+  const sourceTag = options.sourceTag?.trim() || null;
+  if (sourceTag) conditions.push(eq(contacts.sourceTag, sourceTag));
+
+  const q = options.q?.trim() || null;
+  if (q) {
+    const needle = `%${escapeIlike(q)}%`;
+    const propertyMatch = sql`exists (
+      select 1
+      from ${propertyContacts}
+      inner join ${properties} on ${properties.id} = ${propertyContacts.propertyId}
+      where ${propertyContacts.contactId} = ${contacts.id}
+        and ${propertyContacts.userId} = ${userId}
+        and ${propertyContacts.active} = true
+        and (
+          ${properties.name} ilike ${needle}
+          or ${properties.address} ilike ${needle}
+        )
+    )`;
+    const searchable = or(
+      ilike(contacts.name, needle),
+      ilike(contacts.email, needle),
+      ilike(contacts.phone, needle),
+      ilike(contacts.title, needle),
+      ilike(contacts.sourceTag, needle),
+      ilike(accounts.name, needle),
+      propertyMatch,
+    );
+    if (searchable) conditions.push(searchable);
+  }
+
+  return conditions;
+}
+
+function contactRowOrderBy(sort: ContactsSort): SQL[] {
+  switch (sort) {
+    case "name":
+      return [asc(contacts.name), desc(contacts.createdAt), desc(contacts.id)];
+    case "recent":
+    default:
+      return [desc(contacts.createdAt), desc(contacts.id)];
+  }
+}
+
+export async function getContacts(
+  options: GetContactsOptions = {},
+): Promise<GetContactsResult> {
+  const user = await requireUser();
+  const limit = clampContactLimit(options.limit);
+  const offset = clampOffset(options.offset);
+  const conditions = contactListConditions(user.ownerUserId, options);
+  const where = and(...conditions)!;
+
+  const [rows, totalRows] = await Promise.all([
+    db
+      .select({
+        contact: contacts,
+        accountName: accounts.name,
+      })
+      .from(contacts)
+      .leftJoin(
+        accounts,
+        and(
+          eq(accounts.id, contacts.accountId),
+          eq(accounts.userId, user.ownerUserId),
+        ),
+      )
+      .where(where)
+      .orderBy(...contactRowOrderBy(options.sort ?? "recent"))
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({ count: sql<number>`count(distinct ${contacts.id})::int` })
+      .from(contacts)
+      .leftJoin(
+        accounts,
+        and(
+          eq(accounts.id, contacts.accountId),
+          eq(accounts.userId, user.ownerUserId),
+        ),
+      )
+      .where(where),
+  ]);
+
+  const contactIds = rows.map((row) => row.contact.id);
+  if (contactIds.length === 0) {
+    return {
+      rows: [],
+      total: Number(totalRows[0]?.count ?? 0),
+      limit,
+      offset,
+    };
+  }
+
+  const [propertyCountRows, leadRollupRows] = await Promise.all([
+    db
+      .select({
+        contactId: propertyContacts.contactId,
+        count: sql<number>`count(distinct ${propertyContacts.propertyId})::int`.as(
+          "count",
+        ),
+      })
+      .from(propertyContacts)
+      .where(
+        and(
+          eq(propertyContacts.userId, user.ownerUserId),
+          eq(propertyContacts.active, true),
+          inArray(propertyContacts.contactId, contactIds),
+        ),
+      )
+      .groupBy(propertyContacts.contactId),
+    db
+      .select({
+        contactId: leads.primaryContactId,
+        leadCount: sql<number>`count(*)::int`.as("lead_count"),
+        nextFollowUpAt: sql<string | null>`min(${leads.followUpAt})::text`.as(
+          "next_follow_up_at",
+        ),
+        lastContactedAt: sql<Date | null>`max(${leads.lastContactedAt})`.as(
+          "last_contacted_at",
+        ),
+      })
+      .from(leads)
+      .where(
+        and(
+          eq(leads.userId, user.ownerUserId),
+          inArray(leads.primaryContactId, contactIds),
+        ),
+      )
+      .groupBy(leads.primaryContactId),
+  ]);
+
+  const propertyCountByContactId = new Map(
+    propertyCountRows.map((row) => [row.contactId, Number(row.count)]),
+  );
+  const leadRollupByContactId = new Map(
+    leadRollupRows.flatMap((row) =>
+      row.contactId
+        ? [
+            [
+              row.contactId,
+              {
+                leadCount: Number(row.leadCount),
+                nextFollowUpAt: row.nextFollowUpAt,
+                lastContactedAt: row.lastContactedAt,
+              },
+            ] as const,
+          ]
+        : [],
+    ),
+  );
+
+  return {
+    rows: rows.map(({ contact, accountName }) => {
+      const leadRollup = leadRollupByContactId.get(contact.id);
+      return {
+        contact,
+        accountName,
+        propertyCount: propertyCountByContactId.get(contact.id) ?? 0,
+        leadCount: leadRollup?.leadCount ?? 0,
+        nextFollowUpAt: leadRollup?.nextFollowUpAt ?? null,
+        lastContactedAt: leadRollup?.lastContactedAt ?? null,
+      };
+    }),
+    total: Number(totalRows[0]?.count ?? 0),
+    limit,
+    offset,
+  };
+}
+
+export async function getContactSourceOptions(): Promise<LeadSourceOption[]> {
+  const user = await requireUser();
+  const rows = await db
+    .selectDistinct({
+      value: contacts.sourceTag,
+    })
+    .from(contacts)
+    .where(
+      and(
+        eq(contacts.userId, user.ownerUserId),
+        sql`${contacts.sourceTag} is not null`,
+        sql`btrim(${contacts.sourceTag}) <> ''`,
+      ),
+    )
+    .orderBy(asc(contacts.sourceTag));
+
+  return rows.flatMap((row) => {
+    const value = row.value?.trim();
+    return value ? [{ label: value, value }] : [];
+  });
 }
 
 const leadPropertyGroupKey = sql<string>`coalesce(lower(nullif(btrim(${leads.resolvedAddress}), '')), '__no_address__')`;
@@ -3328,6 +3563,69 @@ async function findOrCreateContact(input: {
     newValues: inserted[0],
   });
   return inserted[0];
+}
+
+export async function createContact(data: {
+  name: string;
+  title?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  company?: string | null;
+  accountId?: string | null;
+  sourceTag?: string | null;
+  notes?: string;
+}): Promise<Contact> {
+  const user = await requireUser();
+  let account: Account | null = null;
+
+  if (data.accountId) {
+    const rows = await db
+      .select()
+      .from(accounts)
+      .where(
+        and(
+          eq(accounts.id, data.accountId),
+          eq(accounts.userId, user.ownerUserId),
+        ),
+      )
+      .limit(1);
+    account = rows[0] ?? null;
+    if (!account) throw new Error("Account not found");
+  } else {
+    account = await findOrCreateAccount({
+      userId: user.ownerUserId,
+      name: data.company,
+      sourceTag: data.sourceTag,
+      type: "management_company",
+    });
+  }
+
+  const contact = await findOrCreateContact({
+    userId: user.ownerUserId,
+    accountId: account?.id ?? null,
+    name: data.name,
+    email: data.email,
+    phone: data.phone,
+    title: data.title,
+    sourceTag: data.sourceTag,
+  });
+
+  const notes = cleanText(data.notes);
+  if (notes && contact.notes !== notes) {
+    const updated = await db
+      .update(contacts)
+      .set({ notes, updatedAt: new Date() })
+      .where(
+        and(
+          eq(contacts.id, contact.id),
+          eq(contacts.userId, user.ownerUserId),
+        ),
+      )
+      .returning();
+    return updated[0] ?? contact;
+  }
+
+  return contact;
 }
 
 async function findOrCreateProperty(input: {

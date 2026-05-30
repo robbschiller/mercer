@@ -90,7 +90,7 @@ function buildAccountHref(id: string): string {
 }
 
 function buildContactHref(id: string): string {
-  return `/leads/contacts/${id}`;
+  return `/contacts/${id}`;
 }
 
 export default async function LeadsPage({
@@ -238,13 +238,13 @@ function EmptyState({
             <p className="text-muted-foreground">No leads yet.</p>
             <p className="max-w-sm text-sm text-muted-foreground/80">
               Import a CSV from a trade-show list, or add a single lead to
-              start your pipeline.
+              start your pipeline once a contact asks for work.
             </p>
             <div className="flex items-center gap-2">
-              <Button asChild>
-                <Link href="/leads/import">Import a CSV</Link>
-              </Button>
               <Button variant="outline" asChild>
+                <Link href="/contacts/import">Import contacts</Link>
+              </Button>
+              <Button asChild>
                 <Link href="/leads/new">Add a single lead</Link>
               </Button>
             </div>

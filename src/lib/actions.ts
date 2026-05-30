@@ -49,6 +49,7 @@ import {
   setEnrichmentResult,
   inviteOrgMember,
   removeOrgMember,
+  createContact,
 } from "./store";
 import { getOrgContext } from "./org-context";
 import { enrichCompanyFromWebsite } from "./onboarding/enrich-from-website";
@@ -85,6 +86,7 @@ import {
   acceptProposalShareSchema,
   declineProposalShareSchema,
   createLeadSchema,
+  createContactSchema,
   importLeadsSchema,
   updateLeadStatusSchema,
   updateLeadSchema,
@@ -704,8 +706,21 @@ export async function createLeadAction(formData: FormData) {
   redirect("/leads");
 }
 
+export async function createContactAction(formData: FormData) {
+  const result = createContactSchema.safeParse(formDataToObject(formData));
+
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/contacts/new?error=${encodeURIComponent(message)}`);
+  }
+
+  const contact = await createContact(result.data);
+  revalidatePath("/contacts");
+  redirect(`/contacts/${contact.id}`);
+}
+
 /**
- * Import leads from a CSV file upload.
+ * Import contacts/properties from a CSV file upload.
  *
  * Expected form fields:
  *   - file: File (text/csv)
@@ -716,9 +731,12 @@ export async function createLeadAction(formData: FormData) {
  * so large trade-show files do not sit inside one long-running server action.
  */
 export async function importLeadsAction(formData: FormData) {
+  const requestedReturnTo = formData.get("returnTo");
+  const returnTo = requestedReturnTo === "/contacts" ? "/contacts" : "/leads";
+  const importPath = `${returnTo}/import`;
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
-    redirect(`/leads/import?error=${encodeURIComponent("Select a CSV file")}`);
+    redirect(`${importPath}?error=${encodeURIComponent("Select a CSV file")}`);
   }
 
   const parsedMeta = importLeadsSchema.safeParse({
@@ -726,7 +744,7 @@ export async function importLeadsAction(formData: FormData) {
   });
   if (!parsedMeta.success) {
     const message = parsedMeta.error.issues[0]?.message ?? "Invalid input";
-    redirect(`/leads/import?error=${encodeURIComponent(message)}`);
+    redirect(`${importPath}?error=${encodeURIComponent(message)}`);
   }
 
   const text = await (file as File).text();
@@ -734,14 +752,14 @@ export async function importLeadsAction(formData: FormData) {
 
   if (headers.length === 0 || rows.length === 0) {
     redirect(
-      `/leads/import?error=${encodeURIComponent("CSV appears empty or malformed")}`
+      `${importPath}?error=${encodeURIComponent("CSV appears empty or malformed")}`
     );
   }
 
   const mapping = autoMapColumns(headers);
   if (!mapping.name && !mapping.firstName && !mapping.lastName) {
     redirect(
-      `/leads/import?error=${encodeURIComponent(
+      `${importPath}?error=${encodeURIComponent(
         `Could not find a name column. Headers seen: ${headers.join(", ")}`
       )}`
     );
@@ -750,7 +768,7 @@ export async function importLeadsAction(formData: FormData) {
   const leadsToInsert = mapRowsToLeads(rows, mapping);
   if (leadsToInsert.length === 0) {
     redirect(
-      `/leads/import?error=${encodeURIComponent("No rows with a name value")}`
+      `${importPath}?error=${encodeURIComponent("No rows with a name value")}`
     );
   }
 
@@ -765,7 +783,8 @@ export async function importLeadsAction(formData: FormData) {
   });
 
   revalidatePath("/leads");
-  redirect(`/leads?imported=${inserted.length}`);
+  revalidatePath("/contacts");
+  redirect(`${returnTo}?imported=${inserted.length}`);
 }
 
 export async function updateLeadStatusAction(formData: FormData) {

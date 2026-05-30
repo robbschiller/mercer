@@ -15,6 +15,7 @@ import { useBreadcrumbLabels } from "@/components/breadcrumb-label";
 
 const SECTION_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
+  contacts: "Contacts",
   leads: "Leads",
   bids: "Bids",
   projects: "Projects",

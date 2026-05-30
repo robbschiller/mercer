@@ -238,6 +238,19 @@ export const createLeadSchema = z.object({
     .transform((v) => (v ?? "").trim()),
 });
 
+export const createContactSchema = z.object({
+  name: z.string().trim().min(1, "Name is required"),
+  title: optionalText,
+  email: optionalEmail,
+  phone: optionalText,
+  company: optionalText,
+  accountId: formOptionalUuid,
+  sourceTag: optionalText,
+  notes: z
+    .union([z.string(), z.undefined()])
+    .transform((v) => (v ?? "").trim()),
+});
+
 export const importLeadsSchema = z.object({
   sourceTag: optionalText,
 });

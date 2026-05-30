@@ -160,12 +160,13 @@ Leads enter Mercer from three sources: trade-show attendee lists (CSV), inbound 
 A **lead-qualification agent** runs on every imported row. Given a name, company, and email, it researches the property portfolio the management company operates, pulls public data on those properties (year built, unit count, public RFP activity), estimates repaint timing from typical recoat cycles and visible satellite condition, and produces a ranked brief per lead. The contractor's queue is a ranked pipeline with explanations, not a spreadsheet to manually triage.
 
 **Capabilities**
-- CSV import with column auto-mapping and per-import source tagging
+- CSV import with column auto-mapping and per-import source tagging into the **contacts database**; trade-show attendee rows are contacts plus property context, not automatically true leads
 - Manual single-lead entry
 - Lead-qualification agent run per lead with: resolved property portfolio, estimated paint-timing score, generated brief, satellite thumbnails for top candidate properties
 - Confidence score per enrichment with graceful degradation (low-confidence leads surface as "needs human review" rather than fabricated data)
 - Lead list view with ranking by qualification score, filtering by source and status, and detail view per lead
-- **Property-first lead table** as the default. Trade-show CSV rows are property-level, not contact-level: one attendee covering five communities appears five times with five different addresses. The live `/leads` surface uses Niko search/filter/sort/pagination and shows one row per property with embedded contacts, account/company, pipeline mix, portfolio count, and earliest follow-up. Property rows and contact/account chips link to routed detail pages. A contact-row table remains available via `view=contact` for debugging or contact-first work.
+- **Contacts as the database, leads as work requests.** A trade-show CSV creates durable contacts and links them to one or more properties; a contact may or may not be connected to a property management group. A contact becomes a lead when they ask for work against a property, and the next step is creating a bid.
+- **Property-first lead table** as the default. Once a contact is a lead, the live `/leads` surface uses Niko search/filter/sort/pagination and shows one row per property with embedded contacts, account/company, pipeline mix, portfolio count, and earliest follow-up. Property rows and contact/account chips link to routed detail pages. The contact database lives at `/contacts`.
 - **Outreach state per lead**: `last_contacted_at`, `follow_up_at`, `contact_attempts`. Lead detail surfaces a one-click "log contact attempt" (timestamps + increments the counter) and a follow-up date input. The property table rolls up the earliest follow-up across contacts at that property.
 - Live lead status: new / quoted / won / lost. `qualified` is reserved for the qualification-agent-driven flow in Milestone 3.
 - Manual override and correction of agent output (becomes training data)
@@ -628,8 +629,9 @@ As of this PRD, the following is live at mercer-bids.vercel.app:
 - Bid status tracking (draft / sent / won / lost) with automatic updates on proposal response
 - OSM building footprints on bid detail (hidden pending accuracy resolution)
 - Lead import (CSV) with column auto-mapping, source tags, enrichment status, lead detail
-- Property-first Niko leads table (default) with embedded contacts, account/company, pipeline mix, portfolio count, follow-up rollup, and Niko search/filter/sort/pagination. Contact-row table remains available via `view=contact`.
-- Routed detail pages for properties, accounts, and contacts (`/leads/properties/[id]`, `/leads/accounts/[id]`, `/leads/contacts/[id]`) with cross-links between accounts ↔ properties ↔ contacts ↔ leads, replacing the in-table side panel.
+- First-class `/contacts` database with CSV import, contact search/filter/sort/pagination, account/property rollups, and contact detail at `/contacts/[id]`.
+- Property-first Niko leads table (default) with embedded contacts, account/company, pipeline mix, portfolio count, follow-up rollup, and Niko search/filter/sort/pagination.
+- Routed detail pages for properties, accounts, and contacts (`/leads/properties/[id]`, `/leads/accounts/[id]`, `/contacts/[id]`) with cross-links between accounts ↔ properties ↔ contacts ↔ leads, replacing the in-table side panel.
 - Account autocomplete on `/leads/new` that suggests existing accounts so manually-added leads attach to the existing account graph instead of minting near-duplicates.
 - Normalized lead-domain model (`accounts`, `properties`, `contacts`, relationship tables, `activity_events`, `audit_log`) with compatibility fields on legacy leads during migration
 - Per-lead outreach state: `last_contacted_at`, `follow_up_at`, `contact_attempts`, with log-contact and follow-up controls on lead detail and overdue rollups on property rows
