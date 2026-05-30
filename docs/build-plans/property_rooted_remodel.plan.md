@@ -10,10 +10,10 @@ todos:
     content: "Phase 1 schema — SHIPPED 2026-05-29. accounts.type ('management_company'|'owner'|'other', default management_company); properties.management_account_id + owner_account_id (FK accounts); property_parties table (property↔account/contact + role + is_nto_recipient + free-text legal owner; partial-unique one NTO recipient per property). Migration 015_property_root.sql (additive + backfill management_account_id = account_id). leads.property_id NOT NULL deferred to the bid→project collapse (Phase 3) to avoid breaking the no-address lead pool."
     status: completed
   - id: p1-store-property-root
-    content: "Phase 1 store — SHIPPED 2026-05-29. findOrCreateAccount(type), findOrCreateProperty(managementAccountId default=accountId, ownerAccountId); getPropertyDetail returns managementAccount/ownerAccount/ownerParty/ntoParty; new setPropertyOwnership(propertyId, legalOwnerName, legalOwnerAddress, ntoContactId) with ownership guard + audit log; PropertyParty type exported."
+    content: "Phase 1 store — SHIPPED 2026-05-29, then superseded by the 2026-05-30 Ownership/NTO split. findOrCreateAccount(type), findOrCreateProperty(managementAccountId default=accountId, ownerAccountId); getPropertyDetail returns managementAccount/ownerAccount/ownerParty/ntoParty; the first combined setPropertyOwnership helper was replaced by setPropertyOwnerContact (property owner-rep contact) + setProjectNto (project pre-start legal owner / NTO block), both with ownership guards + audit log."
     status: completed
   - id: p1-ui-property-root
-    content: "Phase 1 UI — SHIPPED 2026-05-29. property detail panel gained an 'Ownership & Notice to Owner' card: shows management company + NTO recipient, and a form (legal owner name/address + NTO-recipient contact select) posting to setPropertyOwnershipAction. DEFERRED: /leads/new ownership entry (ownership is property-scoped, not known at lead creation) and account-autocomplete type filtering (auto-created accounts default to management_company in the store, which is correct for BAAA imports)."
+    content: "Phase 1 UI — SHIPPED 2026-05-29, then superseded by the 2026-05-30 Ownership/NTO split. The first combined 'Ownership & Notice to Owner' property card became a slim property-level Ownership card posting to setPropertyOwnerContactAction, while legal owner name/address + NTO recipient moved to the /projects/[id] pre-start checklist via setProjectNtoAction. DEFERRED: /leads/new ownership entry (ownership is property-scoped, not known at lead creation) and account-autocomplete type filtering (auto-created accounts default to management_company in the store, which is correct for BAAA imports)."
     status: completed
   - id: p2-schema-scope-access
     content: "Phase 2 schema — SHIPPED 2026-05-29. access_items table (bid_id FK cascade, optional building_id, type lift|scaffold|swing_stage|safety|other, method, quantity, duration_days, amount, rate_derived, sort_order) + buildings.archetype (garden|townhome|mid_rise|high_rise|other). Migration 016_scope_access.sql. Paintable-sqft: treated as semantics on existing surfaces.total_sqft (no column change); UI relabel deferred."
@@ -354,4 +354,3 @@ sections.
 - **Phase ordering:** 1 → 2 ship value immediately and are reversible/low-risk;
   do not start Phase 3 until the bid↔project decision is signed off.
 ```
-
