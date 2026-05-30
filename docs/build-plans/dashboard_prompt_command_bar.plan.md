@@ -10,7 +10,7 @@ todos:
     content: "Add an agent_runs table (or prompt_command_runs if we want a narrower name) with user_id, agent_type, input_text, parsed_intent, tool_calls, status, error, model, prompt_version, cost_usd, started_at, completed_at. Manual migration required."
     status: pending
   - id: intent-contract
-    content: "Define the v1 intent schema with Zod: create_lead, create_project_from_property, draft_bid_from_prompt, log_contact, set_follow_up, navigate, answer_dashboard_question, unsupported. Require confidence + missing_fields + confirmation_required."
+    content: "Define the v1 intent schema with Zod: create_contact, promote_contact_to_lead, create_project_from_property, draft_bid_from_prompt, log_contact, set_follow_up, navigate, answer_dashboard_question, unsupported. Require confidence + missing_fields + confirmation_required."
     status: pending
   - id: llm-parser
     content: "Create a server-only parser module that calls the model with structured output. It receives the raw prompt plus a minimal org-scoped context summary, never arbitrary table dumps. It returns only the typed intent contract."
@@ -19,10 +19,10 @@ todos:
     content: "Implement deterministic server tools behind the intent layer. Tools call existing store/action helpers where possible, validate user ownership, and return structured results. No direct model writes to DB."
     status: pending
   - id: dashboard-ui
-    content: "Add a bottom prompt bar to /dashboard with compact fixed/sticky placement, submit/loading/error states, recent result summary, suggested chips, and links to created/opened records."
-    status: pending
+    content: "UI SHELL SHIPPED 2026-05-30. Added a fixed bottom-of-viewport prompt bar to /dashboard with suggested chips, input, submit/loading state, and a not-connected result state. Parser/tool integration, review cards, and links to created/opened records remain pending in later todos."
+    status: completed
   - id: confirmation-review
-    content: "For any write with ambiguity or customer-facing impact, show a review step before execution. Safe v1 writes may include create lead, log contact, set follow-up, and create draft project/bid shell; proposal generation and status changes require explicit confirmation or stay out of scope."
+    content: "For any write with ambiguity or customer-facing impact, show a review step before execution. Safe v1 writes may include create contact, log contact, set follow-up, and promote a contact/property into a lead/work request; draft project/bid shells, proposal generation, and status changes require explicit confirmation or stay out of scope."
     status: pending
   - id: observability
     content: "Persist agent run records, model errors, unsupported intents, and user confirmations so prompt behavior can be replayed and evaluated."
@@ -37,11 +37,12 @@ todos:
 ## Why this, why now
 
 The dashboard is already the daily triage surface: pipeline totals, source filters,
-lead drill-downs, bid counts, and project counts. A bottom prompt input can make
+contact and lead drill-downs, bid counts, and project counts. A bottom prompt input can make
 the app feel more AI-native immediately by letting Jordan start common actions in
 plain language:
 
-- "Add a lead for Pura Vida, managed by Highmark, follow up Friday"
+- "Add Sarah Chen at Highmark as a contact"
+- "Sarah at Greystar asked us to look at Vista Palms"
 - "Log that I called Sarah at Greystar today"
 - "Start a draft bid for Pura Vida blue section"
 - "Show overdue follow-ups"
@@ -86,33 +87,47 @@ dashboard slice.
 Prioritize low-risk actions that prove the interaction model:
 
 1. **Navigate / filter**
-   - "Show BAAA won leads" → `/leads?source=BAAA&status=won`
+   - "Show BAAA contacts" → `/contacts?source=BAAA`
+   - "Show won leads from BAAA" → `/leads?source=BAAA&status=won`
    - "Open projects in punch out" → `/projects?status=punch_out`
 
-2. **Create lead shell**
-   - "Add a lead for Vista Palms managed by Greystar"
-   - Required fields: property/account name or enough text to form a lead.
-   - Optional fields: address, contact name, email, phone, source tag,
-     follow-up date.
-   - If address/contact is missing, create the shell only after review.
+2. **Create contact**
+   - "Add Sarah Chen at Greystar, sarah@example.com, from NAA Orlando"
+   - Required fields: contact name.
+   - Optional fields: email, phone, title, management group, source tag, notes.
+   - Writes a durable contact at `/contacts/[id]`.
+   - Does **not** create a lead. Trade-show and networking prompts land in
+     contacts unless the user describes an actual work request.
 
-3. **Log outreach**
+3. **Promote contact/property to lead/work request**
+   - "Sarah at Greystar asked us to bid Vista Palms"
+   - Requires a matched or newly created contact plus a property/work-request
+     description.
+   - Creates a lead/opportunity only after review, because a lead means work was
+     requested against a property.
+   - If the property match is ambiguous, ask the user to choose or create the
+     property first.
+
+4. **Log outreach**
    - "Log that I called Maria at Highmark today"
    - Requires matching a known contact/lead or asking the user to choose.
-   - Uses the existing outreach event path (`logLeadContact` equivalent).
+   - If the interaction belongs to an existing lead/work request, use the lead
+     outreach path. If it is general relationship activity, log it against the
+     contact once contact-level activity is implemented.
 
-4. **Set follow-up**
+5. **Set follow-up**
    - "Remind me to follow up with Sarah Friday"
    - Requires contact/lead match and a parsed date.
-   - Uses the existing follow-up path.
+   - If a lead exists, use the existing follow-up path. Contact-only follow-up
+     should be a separate contact-level field/tool before it writes anything.
 
-5. **Create draft project/bid shell**
+6. **Create draft project/bid shell**
    - "Start a draft bid for Pura Vida blue section"
    - Creates a draft scoped opportunity linked to a property when the property
      match is clear.
    - No generated price. No proposal. No rate invention.
 
-6. **Basic dashboard answers**
+7. **Basic dashboard answers**
    - "What is open pipeline from BAAA?"
    - Answer from existing aggregate getters, not model-generated arithmetic.
 
@@ -125,12 +140,27 @@ Create a server-only schema, likely in `src/lib/agents/dashboard-command.ts` or
 type DashboardCommandIntent =
   | {
       type: "navigate";
-      target: "leads" | "projects" | "bids" | "dashboard";
+      target: "contacts" | "leads" | "projects" | "bids" | "dashboard";
       filters: Record<string, string>;
       confidence: number;
     }
   | {
-      type: "create_lead";
+      type: "create_contact";
+      fields: {
+        contactName?: string;
+        title?: string;
+        email?: string;
+        phone?: string;
+        accountName?: string;
+        sourceTag?: string;
+        notes?: string;
+      };
+      missingFields: string[];
+      confirmationRequired: true;
+      confidence: number;
+    }
+  | {
+      type: "promote_contact_to_lead";
       fields: {
         propertyName?: string;
         accountName?: string;
@@ -211,8 +241,8 @@ flowchart LR
 
 - `src/lib/agents/dashboard-command/context.ts`
   Builds minimal candidate context for entity matching:
-  recent properties, contacts, source tags, dashboard aggregate names, maybe top
-  follow-ups. Keep it bounded.
+  recent contacts, recent/open leads, properties, source tags, dashboard aggregate
+  names, maybe top follow-ups. Keep it bounded.
 
 - `src/lib/agents/dashboard-command/tools.ts`
   Deterministic execution layer. Calls existing store helpers and new small store
@@ -275,6 +305,7 @@ multi-user pattern.
 - Supply only bounded context:
   - current dashboard source filter
   - source tags
+  - relevant contacts by name/email/account
   - relevant recent/open leads and properties by name
   - dashboard aggregate labels
 - Never supply private customer proposal snapshots unless a later, explicit tool
@@ -312,13 +343,15 @@ Place the command bar at the bottom of the dashboard viewport:
 - Mobile: full-width bottom bar with enough bottom padding so content is not
   hidden behind it.
 - Suggested chips should be actions, not explanatory copy:
-  - `Add lead`
+  - `Add contact`
+  - `Create lead`
   - `Log call`
   - `Set follow-up`
   - `Start draft bid`
   - `Show overdue`
 - Result card examples:
-  - "Lead created: Vista Palms" with `Open lead`
+  - "Contact created: Sarah Chen" with `Open contact`
+  - "Lead created: Vista Palms repaint" with `Open lead`
   - "Follow-up set for Friday" with `Open contact`
   - "I need a property match before I can start that draft."
 
@@ -334,7 +367,9 @@ Avoid a chat transcript in v1. One input, one result, one review step.
 
 ### Phase 1 — Read-only / navigation slice
 
-- Build command bar UI.
+- Build command bar UI. **Shipped 2026-05-30 as UI shell only:** fixed
+  bottom-of-viewport bar, suggestion chips, input, submit/loading state, and
+  not-connected result state on `/dashboard`.
 - Add intent schema and parser.
 - Support `navigate` and `answer_dashboard_question` only.
 - Persist `agent_runs`.
@@ -344,7 +379,8 @@ This proves the UI and parser without writes.
 
 ### Phase 2 — Safe writes
 
-- Add `create_lead`, `log_contact`, and `set_follow_up`.
+- Add `create_contact`, `promote_contact_to_lead`, `log_contact`, and
+  `set_follow_up`.
 - Add confirmation card for all writes.
 - Add entity matching and ambiguity handling.
 - Revalidate relevant pages.
@@ -373,7 +409,8 @@ Minimum before marking shipped:
   - no API key graceful failure
   - navigation intent
   - unsupported/destructive request
-  - create lead confirmation
+  - create contact confirmation
+  - promote contact/property to lead confirmation
   - log contact / set follow-up with ambiguous match
   - draft bid shell creates no generated price
 
@@ -383,7 +420,9 @@ Minimum before marking shipped:
   separate provider abstraction now?
 - Should `agent_runs` be broad now, or start with `prompt_command_runs` and
   migrate later?
-- Which safe write should ship first: create lead or log contact?
+- Which safe write should ship first: create contact or log contact?
+- Should contact-only follow-up get its own field/table now, or should v1
+  follow-up writes remain lead-only until the promote-to-lead flow exists?
 - Should prompt bar appear only on `/dashboard`, or eventually in the global app
   shell? V1: dashboard only.
 - How much recent entity context is enough for matching without bloating prompt

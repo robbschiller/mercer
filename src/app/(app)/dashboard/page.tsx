@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DashboardCommandBar } from "@/components/dashboard-command-bar";
 import {
   getBidStatusCounts,
   getDashboardPipelineFinances,
@@ -65,7 +66,7 @@ export default async function DashboardPage({
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 pb-24">
       <Card className="mb-6">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-base flex items-center gap-2">
@@ -304,6 +305,8 @@ export default async function DashboardPage({
           </CardContent>
         </Card>
       </div>
+
+      <DashboardCommandBar />
     </div>
   );
 }
