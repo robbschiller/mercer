@@ -89,8 +89,9 @@ bid.
 
 Structured data changes live in `audit_log`. Core create/update paths write the
 entity type, entity id, action, changed fields, previous values, new values,
-actor, source, and timestamp. `setPropertyOwnership` writes an audit entry on
-every owner/NTO edit.
+actor, source, and timestamp. `setPropertyOwnerContact` writes audit entries for
+owner-contact changes, and `setProjectNto` writes audit entries for legal
+owner/NTO changes.
 
 ## Product rules
 

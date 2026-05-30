@@ -2,7 +2,7 @@
 
 **Status:** Draft
 **Audience:** Robbie + Timmy
-**Last updated:** 2026-05-13
+**Last updated:** 2026-05-30
 
 ---
 
@@ -165,7 +165,7 @@ A **lead-qualification agent** runs on every imported row. Given a name, company
 - Lead-qualification agent run per lead with: resolved property portfolio, estimated paint-timing score, generated brief, satellite thumbnails for top candidate properties
 - Confidence score per enrichment with graceful degradation (low-confidence leads surface as "needs human review" rather than fabricated data)
 - Lead list view with ranking by qualification score, filtering by source and status, and detail view per lead
-- **Property-first lead table** as the default. Trade-show CSV rows are property-level, not contact-level: one attendee covering five communities appears five times with five different addresses. The live `/leads` surface uses Niko search/filter/sort/pagination and shows one row per property with embedded contacts, account/company, pipeline mix, portfolio count, earliest follow-up, and a resizable property detail side panel. A contact-row table remains available via `view=contact` for debugging or contact-first work.
+- **Property-first lead table** as the default. Trade-show CSV rows are property-level, not contact-level: one attendee covering five communities appears five times with five different addresses. The live `/leads` surface uses Niko search/filter/sort/pagination and shows one row per property with embedded contacts, account/company, pipeline mix, portfolio count, and earliest follow-up. Property rows and contact/account chips link to routed detail pages. A contact-row table remains available via `view=contact` for debugging or contact-first work.
 - **Outreach state per lead**: `last_contacted_at`, `follow_up_at`, `contact_attempts`. Lead detail surfaces a one-click "log contact attempt" (timestamps + increments the counter) and a follow-up date input. The property table rolls up the earliest follow-up across contacts at that property.
 - Live lead status: new / quoted / won / lost. `qualified` is reserved for the qualification-agent-driven flow in Milestone 3.
 - Manual override and correction of agent output (becomes training data)
@@ -239,7 +239,7 @@ PDF export remains available for property managers who insist. It is not the pri
 - Accept/decline actions with capture of approver name and title
 - Scope-change request UI: property manager requests a change; negotiation agent drafts a revised bid; contractor reviews and sends
 - PDF export as fallback
-- Proposal-response status propagation: on accept, bid → won, lead → won, project created (see §5.5)
+- Proposal-response status propagation: on accept, bid → won, lead → won, and the bid row becomes the project by setting its delivery fields (see §5.5)
 
 **Deferred**
 - Real email sending with open/click tracking (SendGrid / Postmark)
@@ -254,9 +254,9 @@ When a bid is accepted, the deal becomes a **project**. The scope is deliberatel
 
 #### Lifecycle and trigger
 
-Project creation is **automatic on acceptance**. The instant `proposal_share.accepted_at` is set, a `project` row is created in the same database transaction that flips the bid to `won` and the lead to `won`. There is no separate "convert to project" step for the contractor — the moment the property manager signs, the deal is a project. One project per bid; if a previously-declined share is re-accepted, the existing project is updated rather than duplicated. Defensive `ON CONFLICT DO NOTHING` on `bid_id` makes the create idempotent under any race.
+Project activation is **automatic on acceptance**. The instant `proposal_share.accepted_at` is set, the same database transaction flips the bid to `won`, flips the lead to `won`, and sets the bid's delivery fields (`delivery_status`, `accepted_by_*`, `accepted_at`). There is no separate "convert to project" step for the contractor — the moment the property manager signs, the bid row **is** the project. One project per accepted bid; if a previously-declined share is re-accepted, the existing bid/project spine is updated rather than duplicated.
 
-A bid that has not been accepted has no project. A bid that is later marked declined keeps any project that was previously created (post-acceptance state changes, including unwinding a deal, are project-side concerns rather than bid-side ones).
+A bid that has not been accepted has no delivery lifecycle (`delivery_status` is null). A bid that is later marked declined keeps any delivery state that was previously activated (post-acceptance state changes, including unwinding a deal, are project-side concerns rather than bid-side ones).
 
 #### State machine
 
@@ -353,18 +353,20 @@ Primary entities, with AI-native additions called out:
 | Entity | Key fields | Relationships |
 |---|---|---|
 | user | id, email, auth fields, defaults (coverage, labor rate, margin) | — |
-| account | id, user_id, name, website, source_tag, status, notes | properties, contacts |
-| property | id, user_id, account_id, name, address, lat/lng, place_id, satellite_image_url, enrichment fields, source_tag, raw_source | leads, bids, property_contacts |
+| account | id, user_id, name, type (`owner`/`management_company`/`other`), website, source_tag, status, notes | properties, contacts |
+| property | id, user_id, account_id, management_account_id, owner_account_id, name, address, lat/lng, place_id, satellite_image_url, enrichment fields, source_tag, raw_source | leads, bids, property_contacts, property_parties |
+| property_party | id, user_id, property_id, account_id, contact_id, role (`owner`/`management_company`/`billing`/`nto_recipient`/`other`), is_nto_recipient, legal_owner_name, legal_owner_address | property, account, contact |
 | contact | id, user_id, account_id, name, email, phone, title, source_tag, relationship_tier | property_contacts, lead_contacts |
 | property_contact | id, user_id, property_id, contact_id, role, decision_influence, source_tag, import_ref, active, first_seen_at, last_seen_at | property, contact |
 | lead | id, user_id, property_id, account_id, primary_contact_id, source_tag, legacy contact/property compatibility fields, **qualification_score**, **qualification_brief**, **agent_run_id**, status, priority, opened_at, closed_at, notes | lead_contacts, activity_events, bids |
 | lead_contact | id, user_id, lead_id, contact_id, property_contact_id, role, is_primary | lead, contact |
 | activity_event | id, user_id, lead_id/contact_id/property_id/account_id/bid_id, type, title, body, occurred_at, metadata | human-readable timeline |
 | audit_log | id, user_id, actor_user_id, entity_type, entity_id, action, changed_fields, previous_values, new_values, source, created_at | structured change history |
-| bid | id, user_id, lead_id (nullable), property_id, primary_contact_id, property_name, client, address, lat/lng, satellite_image_url, status, subtotal/margin/total, notes | buildings, line_items, proposals, project, **captures** |
+| bid (== project spine) | id, user_id, lead_id (nullable), property_id, primary_contact_id, property_name, client, address, lat/lng, satellite_image_url, status, pricing inputs, delivery_status, target/actual dates, assigned_sub, crew_lead_name, accepted_by_*, accepted_at, delivery_notes, notes | buildings, access_items, line_items, proposals, project_updates, **captures** |
 | **capture** | id, bid_id, type (photo/video/satellite/streetview), storage_url, taken_at, gps, **vision_agent_run_id** | surfaces (agent-produced), scope_flags |
-| building | id, bid_id, type_name, count, notes, **capture_refs** | surfaces |
+| building | id, bid_id, type_name, count, archetype, notes, **capture_refs** | surfaces |
 | surface | id, building_id, surface_name, dimension_inputs (structured), computed_sqft, substrate, **source_type** (agent/human), **confidence_score**, **capture_ref** | — |
+| access_item | id, bid_id, building_id, type, method, quantity, duration_days, amount, rate_derived, sort_order | bid, building |
 | **scope_item** | id, bid_id, description, amount, kind (material/labor/other), **source_type** (measurement/spec/capture/customer_request/contractor_judgment), **source_ref** | — |
 | **scope_flag** | id, bid_id, flag_type, description, source_refs, status (open/accepted/dismissed), dismissed_reason, created_by_agent_run_id | — |
 | **spec_document** | id, bid_id, storage_url, extraction_agent_run_id, parsed_products (jsonb), parsed_areas (jsonb) | — |
@@ -373,8 +375,8 @@ Primary entities, with AI-native additions called out:
 | proposal_share | id (slug), proposal_id, accessed_at, accepted_at, accepted_by_name, accepted_by_title, declined_at, decline_reason | proposal_comments |
 | **proposal_comment** | id, proposal_share_id, scope_item_id (nullable), author_name, body, created_at | — |
 | **scope_change_request** | id, proposal_share_id, original_scope_snapshot, requested_change_description, negotiation_agent_run_id, proposed_revised_bid, status | — |
-| project | id, bid_id (unique), user_id, status (`not_started`/`in_progress`/`punch_out`/`complete`/`on_hold`), target_start_date, target_end_date, actual_start_date, actual_end_date, assigned_sub, crew_lead_name, **accepted_by_name**, **accepted_by_title**, **accepted_at**, notes | project_updates (full spec: §6.3) |
-| project_update | id, project_id, **author_type** (human/crew_auto/agent), author_name, body, attachments_ref (jsonb), **visible_on_public_url** (bool), created_at | — (full spec: §6.3.1) |
+| project_update | id, bid_id, **author_type** (human/crew_auto/agent), author_name, body, attachments_ref (jsonb), **visible_on_public_url** (bool), created_at | bid/project (full spec: §6.3.1) |
+| rate_config | user_id, coverage_sqft_per_gallon, price_per_gallon, labor_rate_per_unit, margin_percent, access_rates | bid pricing defaults |
 | **agent_run** | id, agent_type, inputs_ref, outputs_ref, model, prompt_version, started_at, completed_at, confidence_metrics (jsonb), cost_usd | — |
 
 The `agent_run` table is load-bearing. Every agent operation produces a record with enough traceability to replay, debug, and evaluate. Without this, the product becomes impossible to improve and impossible to trust.
@@ -507,18 +509,17 @@ Subtotal, margin amount, and total are **computed deterministically** by `src/li
 
 ### 6.3 Project fields
 
-New entity introduced for the project layer. Created automatically when a `proposal_share` is accepted; see §5.5 for lifecycle. The project owns delivery metadata; everything contractual lives on the bid by reference.
+The project layer lives on the `bids` table after the property-rooted re-model. A bid becomes a project when a `proposal_share` is accepted; see §5.5 for lifecycle. The project owns delivery metadata; everything contractual remains the accepted bid/proposal snapshot.
 
 *Identity*
 
-- `id` (uuid, PK).
-- `bid_id` (uuid, not null, **unique**, FK → `bids.id` on delete cascade) — one project per bid; uniqueness is the database guarantee that supports `ON CONFLICT DO NOTHING` idempotency on accept.
-- `user_id` (uuid, not null) — denormalized from the bid for cheap ownership checks (mirrors how `bids.user_id` works).
+- `id` (uuid, PK on `bids`) — the bid id is also the project id.
+- `user_id` (uuid, not null) — owner / org owner id.
 - `created_at`, `updated_at` (timestamptz, not null).
 
 *Inherited references — read-only from the project's perspective*
 
-Not stored as columns beyond `bid_id`. Reached via the existing join graph:
+Stored on, or reached from, the same bid row:
 
 - bid (and through it: property info, scope, price, satellite, line items, captures, spec documents, scope items, scope flags)
 - proposal snapshot (the frozen version the property manager accepted)
@@ -538,11 +539,11 @@ Not stored as columns beyond `bid_id`. Reached via the existing join graph:
 
 *Workflow*
 
-- `status` (text enum, not null, default `not_started`) — `not_started | in_progress | punch_out | complete | on_hold`. State machine in §5.5.
+- `delivery_status` (text enum, nullable until accepted) — `not_started | in_progress | punch_out | complete | on_hold`. State machine in §5.5.
 
 *Acceptance provenance*
 
-Copied from `proposal_share` at create-time so the project carries the signer even if the share row changes later.
+Copied from `proposal_share` at acceptance time so the bid/project spine carries the signer even if the share row changes later.
 
 - `accepted_by_name` (text, nullable).
 - `accepted_by_title` (text, nullable).
@@ -550,7 +551,7 @@ Copied from `proposal_share` at create-time so the project carries the signer ev
 
 *Notes*
 
-- `notes` (text, not null, default `''`) — contractor-only freeform. Not shown on the public status page.
+- `delivery_notes` (text, not null, default `''`) — contractor-only freeform. Not shown on the public status page.
 
 *Agent layer — aspirational, Milestone 5*
 
@@ -562,7 +563,7 @@ Copied from `proposal_share` at create-time so the project carries the signer ev
 Child entity that drives both the public status page and the contractor-internal feed. Introduced in Slice 3 of the project layer (§5.5 public status-page pivot) and live in the current schema.
 
 - `id` (uuid, PK).
-- `project_id` (uuid, not null, FK → `projects.id` on delete cascade).
+- `bid_id` (uuid, not null, FK → `bids.id` on delete cascade) — the accepted bid is the project identity.
 - `author_type` (text enum, not null) — `human | crew_auto | agent`.
 - `author_name` (text, not null, default `''`) — display name; empty for `crew_auto` / `agent`.
 - `body` (text, not null).
@@ -631,7 +632,7 @@ As of this PRD, the following is live at mercer-bids.vercel.app:
 - Routed detail pages for properties, accounts, and contacts (`/leads/properties/[id]`, `/leads/accounts/[id]`, `/leads/contacts/[id]`) with cross-links between accounts ↔ properties ↔ contacts ↔ leads, replacing the in-table side panel.
 - Account autocomplete on `/leads/new` that suggests existing accounts so manually-added leads attach to the existing account graph instead of minting near-duplicates.
 - Normalized lead-domain model (`accounts`, `properties`, `contacts`, relationship tables, `activity_events`, `audit_log`) with compatibility fields on legacy leads during migration
-- Per-lead outreach state: `last_contacted_at`, `follow_up_at`, `contact_attempts`, with log-contact and follow-up controls in the lead detail aside and overdue rollups on property rows
+- Per-lead outreach state: `last_contacted_at`, `follow_up_at`, `contact_attempts`, with log-contact and follow-up controls on lead detail and overdue rollups on property rows
 - Lead-to-bid conversion with pre-filled bid creation
 - Shareable proposal pages at `/p/[slug]` with accept/decline and status propagation
 - Dashboard at `/dashboard` with lead and bid summary counts
