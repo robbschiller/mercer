@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Building2, ChevronsUpDown, Settings } from "lucide-react";
+import { Building2, PanelLeft, Settings } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -57,7 +57,7 @@ export function TeamSwitcher({
   primaryColor: string | null;
   role: string;
 }) {
-  const { isMobile, setOpenMobile } = useSidebar();
+  const { isMobile, setOpenMobile, toggleSidebar } = useSidebar();
   const dismissOnMobile = () => {
     if (isMobile) setOpenMobile(false);
   };
@@ -93,7 +93,27 @@ export function TeamSwitcher({
                 </span>
                 <span className="truncate text-xs capitalize">{role}</span>
               </div>
-              <ChevronsUpDown className="ml-auto" />
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label="Toggle sidebar"
+                className="ml-auto inline-flex size-6 items-center justify-center rounded-md text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  toggleSidebar();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleSidebar();
+                  }
+                }}
+              >
+                <PanelLeft className="size-4" />
+              </span>
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
