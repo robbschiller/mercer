@@ -1670,6 +1670,91 @@ export async function getLeadStatusCounts(options?: {
   return counts;
 }
 
+// ── Dashboard recents ──
+
+export type DashboardRecentKind = "Lead" | "Bid" | "Project";
+
+export type DashboardRecent = {
+  id: string;
+  kind: DashboardRecentKind;
+  title: string;
+  sub: string;
+  updatedAt: Date;
+  href: string;
+};
+
+/**
+ * "Jump back in" feed for the dashboard hero. Returns the user's most
+ * recently touched leads, bids, and projects (bids with delivery_status)
+ * merged into one list by `updated_at` desc.
+ *
+ * TODO Phase 2: include accounts/contacts; switch ranking to an
+ * activity-feed table once one exists, so opens/views also bubble up.
+ */
+export async function getDashboardRecents(
+  limit = 5,
+): Promise<DashboardRecent[]> {
+  const user = await requireUser();
+  const perTableLimit = Math.max(limit, 5);
+
+  const [leadRows, bidRows] = await Promise.all([
+    db
+      .select({
+        id: leads.id,
+        name: leads.name,
+        propertyName: leads.propertyName,
+        status: leads.status,
+        updatedAt: leads.updatedAt,
+      })
+      .from(leads)
+      .where(eq(leads.userId, user.ownerUserId))
+      .orderBy(desc(leads.updatedAt), desc(leads.id))
+      .limit(perTableLimit),
+    db
+      .select({
+        id: bids.id,
+        propertyName: bids.propertyName,
+        clientName: bids.clientName,
+        status: bids.status,
+        deliveryStatus: bids.deliveryStatus,
+        updatedAt: bids.updatedAt,
+      })
+      .from(bids)
+      .where(eq(bids.userId, user.ownerUserId))
+      .orderBy(desc(bids.updatedAt), desc(bids.id))
+      .limit(perTableLimit),
+  ]);
+
+  const merged: DashboardRecent[] = [
+    ...leadRows.map<DashboardRecent>((l) => ({
+      id: l.id,
+      kind: "Lead",
+      title: l.propertyName?.trim() || l.name,
+      sub: l.status ? l.status.replace(/_/g, " ") : "Lead",
+      updatedAt: l.updatedAt,
+      href: `/leads/${l.id}`,
+    })),
+    ...bidRows.map<DashboardRecent>((b) => {
+      const isProject = b.deliveryStatus != null;
+      const statusLabel = (isProject ? b.deliveryStatus! : b.status).replace(
+        /_/g,
+        " ",
+      );
+      return {
+        id: b.id,
+        kind: isProject ? "Project" : "Bid",
+        title: b.propertyName || b.clientName,
+        sub: statusLabel,
+        updatedAt: b.updatedAt,
+        href: isProject ? `/projects/${b.id}` : `/bids/${b.id}`,
+      };
+    }),
+  ];
+
+  merged.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  return merged.slice(0, limit);
+}
+
 // ── Leads ──
 
 /** Hard ceiling on `limit` — a tampered URL can't pull the whole table. */
