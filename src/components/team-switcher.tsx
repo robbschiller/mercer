@@ -17,103 +17,71 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-
-function companyInitials(name: string): string {
-  const trimmed = (name || "").trim();
-  if (!trimmed) return "M";
-  const words = trimmed.split(/\s+/).filter(Boolean);
-  if (words.length >= 2) {
-    return ((words[0][0] ?? "") + (words[1][0] ?? "")).toUpperCase();
-  }
-  return trimmed.slice(0, 2).toUpperCase();
-}
-
-function readableTextColor(bgHex: string | null | undefined): string {
-  const hex = (bgHex ?? "").replace(/^#/, "");
-  const full =
-    hex.length === 3
-      ? hex
-          .split("")
-          .map((c) => c + c)
-          .join("")
-      : hex;
-  if (full.length !== 6 || !/^[0-9a-f]{6}$/i.test(full)) return "#ffffff";
-  const r = parseInt(full.slice(0, 2), 16);
-  const g = parseInt(full.slice(2, 4), 16);
-  const b = parseInt(full.slice(4, 6), 16);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.6 ? "#111111" : "#ffffff";
-}
 
 export function TeamSwitcher({
   companyName,
-  logoUrl,
-  primaryColor,
-  role,
 }: {
   companyName: string;
+  // Accepted for callsite compatibility; no longer rendered now that the
+  // team switcher is a plain name + collapse icon.
   logoUrl: string | null;
   primaryColor: string | null;
   role: string;
 }) {
-  const { isMobile, setOpenMobile, toggleSidebar } = useSidebar();
+  const { isMobile, setOpenMobile, toggleSidebar, state } = useSidebar();
+  const isCollapsed = state === "collapsed";
   const dismissOnMobile = () => {
     if (isMobile) setOpenMobile(false);
   };
-  const initials = companyInitials(companyName);
-  const fallbackStyle = primaryColor
-    ? {
-        backgroundColor: primaryColor,
-        color: readableTextColor(primaryColor),
-      }
-    : undefined;
+
+  function handleToggle(e: React.SyntheticEvent) {
+    e.stopPropagation();
+    e.preventDefault();
+    toggleSidebar();
+  }
 
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <DropdownMenu>
+        {/* Dropdown is forced closed when collapsed — the row's only job
+            then is to expand the sidebar. */}
+        <DropdownMenu open={isCollapsed ? false : undefined}>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
-              size="lg"
+              // Default size (h-8) in both states so the row height never
+              // changes when collapsing — the whole thing is a pure
+              // horizontal-only transition. Matches the nav rows below for
+              // consistent icon rhythm in collapsed mode.
+              onClick={isCollapsed ? handleToggle : undefined}
+              aria-label={isCollapsed ? "Expand sidebar" : undefined}
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <Avatar className="size-8 rounded-md">
-                <AvatarImage src={logoUrl ?? undefined} alt={companyName} />
-                <AvatarFallback
-                  className="rounded-md bg-sidebar-primary text-sidebar-primary-foreground"
-                  style={fallbackStyle}
-                >
-                  {initials || <Building2 className="size-4" />}
-                </AvatarFallback>
-              </Avatar>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">
-                  {companyName || "Mercer"}
-                </span>
-                <span className="truncate text-xs capitalize">{role}</span>
-              </div>
-              <span
-                role="button"
-                tabIndex={0}
-                aria-label="Toggle sidebar"
-                className="ml-auto inline-flex size-6 items-center justify-center rounded-md text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  toggleSidebar();
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    toggleSidebar();
-                  }
-                }}
-              >
-                <PanelLeft className="size-4" />
-              </span>
+              {isCollapsed ? (
+                // Bare SVG: shadcn's [&>svg]:size-4 sizes & centers it,
+                // matching every nav icon below — same x, same width.
+                <PanelLeft />
+              ) : (
+                <>
+                  <span className="flex-1 truncate text-left font-medium text-sidebar-foreground">
+                    {companyName || "Mercer"}
+                  </span>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Collapse sidebar"
+                    className="ml-auto inline-flex size-6 items-center justify-center rounded-md text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground shrink-0"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={handleToggle}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        handleToggle(e);
+                      }
+                    }}
+                  >
+                    <PanelLeft className="size-4" />
+                  </span>
+                </>
+              )}
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
