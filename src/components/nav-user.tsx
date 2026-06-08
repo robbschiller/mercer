@@ -38,7 +38,11 @@ export function NavUser({
   const { isMobile } = useSidebar();
   const { theme, setTheme } = useTheme();
   const [, startTransition] = useTransition();
-  const display = name || email || "Account";
+  // Show name only (no email anywhere in the UI). Fall back to a generic
+  // label if name is unknown — never surface the email.
+  const display = name || "Account";
+  // Initials still use email as a quiet fallback for the avatar glyph
+  // when there's no name; it isn't shown as text.
   const initials = (name || email || "?")
     .split(/\s+|@/)
     .filter(Boolean)
@@ -59,10 +63,9 @@ export function NavUser({
                 <AvatarImage src={avatarUrl ?? undefined} alt={display} />
                 <AvatarFallback>{initials || "?"}</AvatarFallback>
               </Avatar>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{display}</span>
-                <span className="truncate text-xs">{email}</span>
-              </div>
+              <span className="flex-1 truncate text-left text-sm font-medium">
+                {display}
+              </span>
               <ChevronsUpDown className="ml-auto size-4" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
@@ -80,10 +83,9 @@ export function NavUser({
                     {initials || "?"}
                   </AvatarFallback>
                 </Avatar>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{display}</span>
-                  <span className="truncate text-xs">{email}</span>
-                </div>
+                <span className="flex-1 truncate text-sm font-medium">
+                  {display}
+                </span>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
