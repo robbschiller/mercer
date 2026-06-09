@@ -5,6 +5,8 @@ import {
   PROJECT_STATUSES,
   BUILDING_ARCHETYPES,
   ACCESS_TYPES,
+  EXPENSE_CATEGORIES,
+  PAYMENT_TYPES,
 } from "./status-meta";
 
 /** Form select → archetype enum, with empty string / missing → null. */
@@ -249,6 +251,29 @@ export const createContactSchema = z.object({
   notes: z
     .union([z.string(), z.undefined()])
     .transform((v) => (v ?? "").trim()),
+});
+
+// ── Money layer (AQP reconciliation, Phase 1) ──
+export const createExpenseSchema = z.object({
+  bidId: z.string().uuid("Invalid project ID"),
+  date: z.string().min(1, "Date is required"),
+  category: z.enum(EXPENSE_CATEGORIES),
+  paymentType: z.preprocess(
+    (v) => (v === "" || v == null ? null : v),
+    z.union([z.enum(PAYMENT_TYPES), z.null()]),
+  ),
+  vendor: optionalText,
+  description: optionalText,
+  amount: z.coerce
+    .number({ message: "Amount must be a number" })
+    .finite("Amount must be a number"),
+  tax: z.coerce.number().finite().default(0),
+  invoiceNumber: optionalText,
+});
+
+export const deleteExpenseSchema = z.object({
+  id: z.string().uuid("Invalid expense ID"),
+  bidId: z.string().uuid("Invalid project ID"),
 });
 
 export const importLeadsSchema = z.object({

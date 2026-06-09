@@ -19,6 +19,7 @@ import {
   activityEvents,
   auditLog,
   projectUpdates,
+  expenses,
   companyProfiles,
   onboardings,
   orgMemberships,
@@ -39,7 +40,11 @@ import { getOrgContext } from "@/lib/org-context";
 import { computeTotalSqft } from "@/lib/dimensions";
 import { buildSatelliteProxyPath } from "@/lib/maps/satellite-path";
 import { calculateBidPricing } from "@/lib/pricing";
-import type { AccountType } from "@/lib/status-meta";
+import type {
+  AccountType,
+  ExpenseCategory,
+  PaymentType,
+} from "@/lib/status-meta";
 
 export type Bid = typeof bids.$inferSelect;
 export type Building = typeof buildings.$inferSelect;
@@ -1002,6 +1007,17 @@ export async function markProposalShareAccessed(slug: string) {
   return rows[0] ?? null;
 }
 
+/** Pull the grand total out of a proposal snapshot (jsonb), as a numeric
+ * string for the `bids.contract_value` column. Tolerant of snapshot shape. */
+function snapshotTotal(snapshot: unknown): string | null {
+  const s = snapshot as
+    | { pricing?: { grandTotal?: number }; grandTotal?: number }
+    | null
+    | undefined;
+  const total = s?.pricing?.grandTotal ?? s?.grandTotal ?? null;
+  return total == null ? null : String(total);
+}
+
 async function respondToProposalShare(
   slug: string,
   outcome: "won" | "lost",
@@ -1017,6 +1033,8 @@ async function respondToProposalShare(
         propertyId: bids.propertyId,
         primaryContactId: bids.primaryContactId,
         deliveryStatus: bids.deliveryStatus,
+        contractValue: bids.contractValue,
+        snapshot: proposals.snapshot,
       })
       .from(proposalShares)
       .innerJoin(proposals, eq(proposalShares.proposalId, proposals.id))
@@ -1052,6 +1070,10 @@ async function respondToProposalShare(
               acceptedByName: updatedShare.acceptedByName,
               acceptedByTitle: updatedShare.acceptedByTitle,
               acceptedAt: updatedShare.acceptedAt,
+              // Snapshot the contract baseline once (immutable); a re-accept
+              // under any race keeps the original via the ?? guard.
+              contractValue:
+                existing.contractValue ?? snapshotTotal(existing.snapshot),
             }
           : { status: outcome, updatedAt: now },
       )
@@ -4998,6 +5020,131 @@ async function buildAccountPack(id: string): Promise<ContextPack> {
     label: account.name,
     found: true,
     markdown: lines.join("\n"),
+  };
+}
+
+// ── Money layer (AQP reconciliation, Phase 1) ──────────────────────────────
+//
+// Expenses hang off the bid spine (the bid IS the project, Model A). Job
+// financial state is always DERIVED from dated expense rows + the immutable
+// contract_value snapshot — never stored (AQP principle #5).
+
+export type Expense = typeof expenses.$inferSelect;
+
+export async function getExpensesForBid(bidId: string): Promise<Expense[]> {
+  await requireBidOwnership(bidId);
+  return db
+    .select()
+    .from(expenses)
+    .where(eq(expenses.bidId, bidId))
+    .orderBy(desc(expenses.date), desc(expenses.createdAt));
+}
+
+export async function createExpense(data: {
+  bidId: string;
+  date: string;
+  category: ExpenseCategory;
+  paymentType?: PaymentType | null;
+  vendor?: string | null;
+  description?: string | null;
+  amount: number;
+  tax?: number | null;
+  invoiceNumber?: string | null;
+}): Promise<Expense> {
+  const user = await requireUser();
+  await requireBidOwnership(data.bidId, user.ownerUserId);
+  const rows = await db
+    .insert(expenses)
+    .values({
+      userId: user.ownerUserId,
+      bidId: data.bidId,
+      date: data.date,
+      category: data.category,
+      paymentType: data.paymentType ?? null,
+      vendor: data.vendor ?? null,
+      description: (data.description ?? "").trim(),
+      amount: String(data.amount),
+      tax: String(data.tax ?? 0),
+      invoiceNumber: data.invoiceNumber ?? null,
+      enteredBy: user.userId,
+    })
+    .returning();
+  return rows[0];
+}
+
+export async function deleteExpense(id: string): Promise<void> {
+  const user = await requireUser();
+  await db
+    .delete(expenses)
+    .where(and(eq(expenses.id, id), eq(expenses.userId, user.ownerUserId)));
+}
+
+export type CategorySpend = { category: ExpenseCategory; spent: number };
+
+export type JobFinancials = {
+  contractValue: number | null;
+  spent: number;
+  remaining: number | null;
+  /** Gross profit-of-spent: contract − spent. Null until a contract value. */
+  profit: number | null;
+  /** 0–1 fraction of contract spent; null without a contract value. */
+  pctSpent: number | null;
+  byCategory: CategorySpend[];
+  expenseCount: number;
+};
+
+/**
+ * Derive a job's financial state from the contract baseline + dated expenses.
+ * Nothing here is stored — it's computed live on every read.
+ */
+export async function getJobFinancials(bidId: string): Promise<JobFinancials> {
+  await requireBidOwnership(bidId);
+
+  const [bidRows, totalRows, catRows] = await Promise.all([
+    db
+      .select({ contractValue: bids.contractValue })
+      .from(bids)
+      .where(eq(bids.id, bidId))
+      .limit(1),
+    db
+      .select({
+        spent: sql<number>`coalesce(sum(${expenses.amount}::numeric + ${expenses.tax}::numeric), 0)`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(expenses)
+      .where(eq(expenses.bidId, bidId)),
+    db
+      .select({
+        category: expenses.category,
+        spent: sql<number>`coalesce(sum(${expenses.amount}::numeric + ${expenses.tax}::numeric), 0)`,
+      })
+      .from(expenses)
+      .where(eq(expenses.bidId, bidId))
+      .groupBy(expenses.category)
+      .orderBy(
+        sql`coalesce(sum(${expenses.amount}::numeric + ${expenses.tax}::numeric), 0) desc`,
+      ),
+  ]);
+
+  const contractValue =
+    bidRows[0]?.contractValue != null ? Number(bidRows[0].contractValue) : null;
+  const spent = Number(totalRows[0]?.spent ?? 0);
+  const remaining = contractValue == null ? null : contractValue - spent;
+  const profit = remaining;
+  const pctSpent =
+    contractValue == null || contractValue === 0 ? null : spent / contractValue;
+
+  return {
+    contractValue,
+    spent,
+    remaining,
+    profit,
+    pctSpent,
+    byCategory: catRows.map((r) => ({
+      category: r.category as ExpenseCategory,
+      spent: Number(r.spent),
+    })),
+    expenseCount: Number(totalRows[0]?.count ?? 0),
   };
 }
 
