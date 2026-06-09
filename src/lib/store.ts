@@ -2452,6 +2452,9 @@ export async function createLead(
         | "propertyName"
         | "resolvedAddress"
         | "notes"
+        | "isLargeJob"
+        | "scopeCategory"
+        | "estValue"
       >
     > & { accountId?: string | null }
 ) {
@@ -2513,6 +2516,11 @@ export async function createLead(
       propertyName: data.propertyName ?? null,
       resolvedAddress: data.resolvedAddress ?? null,
       notes: data.notes ?? "",
+      isLargeJob: data.isLargeJob ?? false,
+      scopeCategory: data.scopeCategory ?? null,
+      estValue: data.estValue ?? null,
+      // Rep follows the firm: inherit the management company's rep as owner.
+      ownerId: account?.internalRepId ?? null,
     })
     .returning();
   await createLeadContactLink({

@@ -39,6 +39,12 @@ export const accounts = pgTable("accounts", {
     .default("management_company"),
   sourceTag: text("source_tag"),
   status: text("status").notNull().default("active"),
+  /**
+   * The AQP rep who owns this management-company relationship long-term (AQP
+   * principle: "rep follows the firm"). Inherited onto new leads as ownerId.
+   * Meaningful mainly when type = management_company.
+   */
+  internalRepId: uuid("internal_rep_id"),
   notes: text("notes").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -326,6 +332,12 @@ export const leads = pgTable("leads", {
   status: text("status", { enum: LEAD_STATUSES })
     .notNull()
     .default("new"),
+  /** Drives the large/small takeoff + billing fork (AQP 2-week threshold). */
+  isLargeJob: boolean("is_large_job").notNull().default(false),
+  /** Scope tags, e.g. ["Full exterior","Breezeways"]. */
+  scopeCategory: text("scope_category").array(),
+  /** Rough $ estimate before takeoff — powers pipeline value/forecast. */
+  estValue: numeric("est_value"),
   /* ── Enrichment fields (populated asynchronously by enrichLead worker) ── */
   resolvedAddress: text("resolved_address"),
   latitude: doublePrecision("latitude"),

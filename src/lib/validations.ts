@@ -242,6 +242,27 @@ export const createLeadSchema = z.object({
   notes: z
     .union([z.string(), z.undefined()])
     .transform((v) => (v ?? "").trim()),
+  isLargeJob: z.preprocess(
+    (v) => v === "on" || v === "true" || v === true,
+    z.boolean(),
+  ),
+  estValue: z
+    .preprocess(
+      (v) => (v === "" || v == null ? null : Number(v)),
+      z.union([z.number().finite(), z.null()]),
+    )
+    .transform((v) => (v == null ? null : String(v))),
+  scopeCategory: z.preprocess(
+    (v) => {
+      if (typeof v !== "string") return null;
+      const arr = v
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return arr.length ? arr : null;
+    },
+    z.union([z.array(z.string()), z.null()]),
+  ),
 });
 
 export const createContactSchema = z.object({
