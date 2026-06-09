@@ -1,13 +1,14 @@
 import { getOrgContext } from "@/lib/org-context";
-import { getDashboardRecents } from "@/lib/store";
+import { getDashboardRecents, getOverdueFollowUps } from "@/lib/store";
 import { DashboardHero } from "@/components/dashboard-hero";
 import { DashboardActionPills } from "@/components/dashboard-action-pills";
 import { DashboardRecents } from "@/components/dashboard-recents";
 
 export default async function DashboardPage() {
-  const [ctx, recents] = await Promise.all([
+  const [ctx, recents, overdue] = await Promise.all([
     getOrgContext(),
     getDashboardRecents(5),
+    getOverdueFollowUps(20),
   ]);
   const firstName = pickFirstName(ctx?.name ?? null, ctx?.email ?? null);
 
@@ -20,7 +21,7 @@ export default async function DashboardPage() {
       />
       <div className="relative mx-auto w-full max-w-[46rem] px-6 pt-20 pb-20">
         <DashboardHero firstName={firstName} />
-        <DashboardActionPills />
+        <DashboardActionPills overdue={overdue} />
 
         {/* The pills sit visually under the composer (inside the hero card area).
             The recents section starts further down to give the welcome moment room. */}

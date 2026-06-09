@@ -1755,6 +1755,56 @@ export async function getDashboardRecents(
   return merged.slice(0, limit);
 }
 
+export type OverdueFollowUp = {
+  leadId: string;
+  name: string;
+  propertyName: string | null;
+  company: string | null;
+  /** ISO YYYY-MM-DD. */
+  followUpAt: string;
+  daysLate: number;
+};
+
+/**
+ * Open leads whose follow-up date is in the past (excludes won/lost). Powers
+ * the dashboard "Show overdue" sheet; ordered most-overdue first.
+ */
+export async function getOverdueFollowUps(
+  limit = 20,
+): Promise<OverdueFollowUp[]> {
+  const user = await requireUser();
+  const capped = Math.min(Math.max(limit, 1), 100);
+
+  const rows = await db
+    .select({
+      id: leads.id,
+      name: leads.name,
+      propertyName: leads.propertyName,
+      company: leads.company,
+      followUpAt: leads.followUpAt,
+      daysLate: sql<number>`(current_date - ${leads.followUpAt})::int`,
+    })
+    .from(leads)
+    .where(
+      and(
+        eq(leads.userId, user.ownerUserId),
+        sql`${leads.followUpAt} < current_date`,
+        sql`${leads.status} not in ('won', 'lost')`,
+      ),
+    )
+    .orderBy(leads.followUpAt)
+    .limit(capped);
+
+  return rows.map((r) => ({
+    leadId: r.id,
+    name: r.name,
+    propertyName: r.propertyName,
+    company: r.company,
+    followUpAt: r.followUpAt as string,
+    daysLate: Number(r.daysLate),
+  }));
+}
+
 // ── Leads ──
 
 /** Hard ceiling on `limit` — a tampered URL can't pull the whole table. */

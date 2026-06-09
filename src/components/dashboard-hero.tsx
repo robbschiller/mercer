@@ -125,7 +125,7 @@ export function DashboardHero({ firstName }: DashboardHeroProps) {
           value={value}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          placeholder="Ask Mercer to start an action…"
+          placeholder="Ask Mercer to do anything..."
           aria-label="Ask Mercer"
           disabled={pending}
           className="w-full resize-none border-0 bg-transparent outline-none text-[1.0625rem] leading-6 placeholder:text-muted-foreground px-2.5 py-2 min-h-11 max-h-48 disabled:opacity-60"
@@ -139,9 +139,6 @@ export function DashboardHero({ firstName }: DashboardHeroProps) {
             >
               <Plus className="size-4" />
             </button>
-            <span className="text-xs text-muted-foreground whitespace-nowrap">
-              Type a request, or pick an action below
-            </span>
           </div>
           <button
             type="submit"

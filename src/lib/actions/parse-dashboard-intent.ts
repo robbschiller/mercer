@@ -85,6 +85,116 @@ export type ParseDashboardIntentResult =
   | { ok: true; intent: DashboardIntent }
   | { ok: false; error: string };
 
+// ---------------------------------------------------------------------------
+// TEMPORARY local mock — keyword-based intent matching, used ONLY when
+// ANTHROPIC_API_KEY is absent. Lets the dashboard composer route to the right
+// action sheet during dev before the business provisions an API key. Real
+// Claude parsing takes over automatically the moment the key is set; to fully
+// retire the stopgap, delete this block and restore the no-key error return
+// in parseDashboardIntent (see the branch below).
+// ---------------------------------------------------------------------------
+
+function blankIntent(kind: DashboardIntentKind): DashboardIntent {
+  return {
+    kind,
+    confidence: "low",
+    summary: null,
+    name: null,
+    company: null,
+    email: null,
+    phone: null,
+    propertyAddress: null,
+    primaryContact: null,
+    source: null,
+    contact: null,
+    outcome: null,
+    notes: null,
+    about: null,
+    dueDate: null,
+    note: null,
+    scopeSummary: null,
+    sourceTag: null,
+  };
+}
+
+function mockParseDashboardIntent(prompt: string): DashboardIntent {
+  const text = prompt.trim();
+  const lower = text.toLowerCase();
+  const email = text.match(/[\w.+-]+@[\w-]+\.[\w.-]+/)?.[0] ?? null;
+  const phone = text.match(/\+?\d[\d\s().-]{7,}\d/)?.[0]?.trim() ?? null;
+  // "... at|from|with <Proper Noun phrase>" — a weak company/org guess.
+  const company =
+    text
+      .match(/\b(?:at|from|with)\s+([A-Z][\w&'.-]*(?:\s+[A-Z][\w&'.-]*)*)/)?.[1]
+      ?.trim() ?? null;
+
+  if (/\boverdue\b/.test(lower)) {
+    const i = blankIntent("show-overdue");
+    i.confidence = "high";
+    i.summary = "Showing overdue follow-ups";
+    return i;
+  }
+
+  if (/\bfollow[\s-]?up\b|\bremind(?:er)?\b/.test(lower)) {
+    const i = blankIntent("set-follow-up");
+    i.confidence = "medium";
+    const about =
+      text.match(/follow[\s-]?up (?:with|on|about) (.+)/i)?.[1]?.trim() ?? null;
+    i.about = about;
+    i.summary = about ? `Set a follow-up: ${about}` : "Set a follow-up";
+    return i;
+  }
+
+  if (/\bcalled?\b|\bvoicemail\b/.test(lower)) {
+    const i = blankIntent("log-call");
+    i.confidence = "medium";
+    const contact =
+      text
+        .match(/call(?:ed)?\s+(?:with\s+)?([A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*)*)/)?.[1]
+        ?.trim() ?? null;
+    i.contact = contact;
+    i.notes = text;
+    i.summary = contact ? `Log a call with ${contact}` : "Log a call";
+    return i;
+  }
+
+  if (/\bbid\b|\bproposal\b|\bestimate\b|\bquote\b/.test(lower)) {
+    const i = blankIntent("start-draft-bid");
+    i.confidence = "medium";
+    i.summary = "Start a draft bid";
+    return i;
+  }
+
+  if (/\blead\b|\bopportunity\b/.test(lower)) {
+    const i = blankIntent("create-lead");
+    i.confidence = "medium";
+    i.summary = "Create a lead";
+    return i;
+  }
+
+  if (/\bcontact\b|\badd\b|\bnew\b/.test(lower)) {
+    const i = blankIntent("add-contact");
+    i.confidence = "medium";
+    const name =
+      text
+        .match(/(?:add|contact|new)\s+(?:contact\s+)?([A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*)*)/)?.[1]
+        ?.trim() ?? null;
+    i.name = name;
+    i.company = company;
+    i.email = email;
+    i.phone = phone;
+    i.summary = name
+      ? `Add ${name}${company ? ` at ${company}` : ""}`
+      : "Add a contact";
+    return i;
+  }
+
+  const unknown = blankIntent("unknown");
+  unknown.summary =
+    "Offline mode (no API key yet) — try a keyword like “add”, “call”, “lead”, “bid”, “follow up”, or “overdue”.";
+  return unknown;
+}
+
 export async function parseDashboardIntent(
   prompt: string,
 ): Promise<ParseDashboardIntentResult> {
@@ -102,11 +212,10 @@ export async function parseDashboardIntent(
   }
 
   if (!process.env.ANTHROPIC_API_KEY) {
-    return {
-      ok: false,
-      error:
-        "ANTHROPIC_API_KEY is not configured. Add it to .env.local to enable the dashboard composer.",
-    };
+    // TEMPORARY: no key yet — fall back to the local keyword mock so the
+    // composer is usable during dev. Replace this with the no-key error
+    // return once the API key is configured (and delete mockParseDashboardIntent).
+    return { ok: true, intent: mockParseDashboardIntent(trimmed) };
   }
 
   const client = new Anthropic();
