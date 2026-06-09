@@ -1,7 +1,15 @@
 # Build plan — Conversation tab (entity-scoped LLM chat)
 
-**Status:** Queued (captured 2026-06-09). Not started.
+**Status:** **P1 shipped 2026-06-09** (read-only Q&A, offline mock). P2 (persistence) + P3 (in-chat actions) remain. Shipped as the **"Ask"** tab (`/ask`).
 **Relates to:** PRD §5.6 (NL query/reporting surface, currently "deferred"), Open-now #1 (dashboard prompt command bar / prompt-bidding boundary), [`parse-dashboard-intent.ts`](../../src/lib/actions/parse-dashboard-intent.ts), [`dashboard-quick-actions.ts`](../../src/lib/actions/dashboard-quick-actions.ts).
+
+## Shipped in P1 (2026-06-09)
+
+- `/ask` route + sidebar item; thread UI with "+ Add context" unit search, persistent context chips ([`src/components/ask-chat.tsx`](../../src/components/ask-chat.tsx), [`src/app/(app)/ask/page.tsx`](../../src/app/(app)/ask/page.tsx)).
+- 5 unit types: lead, bid/project, property, contact, company. Data layer `searchUnits` + `buildContextPacks` in [`src/lib/store.ts`](../../src/lib/store.ts) (bid pack reuses `getBidPageData` + `calculateBidPricing`).
+- `askMercer` server action ([`src/lib/actions/ask.ts`](../../src/lib/actions/ask.ts)): Opus 4.8 when keyed, grounded **offline mock** otherwise. Both run the real search + context resolution.
+
+**Still to do:** P2 persistence, P3 in-chat actions, markdown rendering, streaming, real `ANTHROPIC_API_KEY` (deferred). See the Phasing / Open-questions sections below.
 
 ## The idea
 

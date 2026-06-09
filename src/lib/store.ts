@@ -38,6 +38,7 @@ import {
 import { getOrgContext } from "@/lib/org-context";
 import { computeTotalSqft } from "@/lib/dimensions";
 import { buildSatelliteProxyPath } from "@/lib/maps/satellite-path";
+import { calculateBidPricing } from "@/lib/pricing";
 import type { AccountType } from "@/lib/status-meta";
 
 export type Bid = typeof bids.$inferSelect;
@@ -4608,4 +4609,420 @@ export async function removeOrgMember(membershipId: string) {
         eq(orgMemberships.ownerUserId, user.ownerUserId),
       ),
     );
+}
+
+// ── AI context (Ask tab) ───────────────────────────────────────────────────
+//
+// "Units" the user can tag into an Ask conversation, plus the compact,
+// org-scoped context packs the model (or the offline mock) reasons over. The
+// bid pack covers the project/delivery facet too (the bid row IS the project).
+
+export const AI_UNIT_TYPES = [
+  "lead",
+  "bid",
+  "property",
+  "contact",
+  "account",
+] as const;
+export type AiUnitType = (typeof AI_UNIT_TYPES)[number];
+
+export type UnitRef = { type: AiUnitType; id: string };
+
+export type UnitHit = {
+  type: AiUnitType;
+  id: string;
+  label: string;
+  sublabel: string | null;
+};
+
+export type ContextPack = {
+  type: AiUnitType;
+  id: string;
+  label: string;
+  found: boolean;
+  /** Compact markdown summary — fed to the model and shown in the UI. */
+  markdown: string;
+};
+
+function fmtMoney(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(n)) return "n/a";
+  return "$" + Math.round(n).toLocaleString("en-US");
+}
+
+function numOrNull(v: unknown): number | null {
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Type-ahead search across the taggable units for the Ask composer. Returns a
+ * bounded, org-scoped set of hits across leads, bids, properties, contacts,
+ * and accounts.
+ */
+export async function searchUnits(q: string, perType = 4): Promise<UnitHit[]> {
+  const user = await requireUser();
+  const trimmed = q.trim();
+  if (!trimmed) return [];
+  const needle = `%${escapeIlike(trimmed)}%`;
+
+  const [leadRows, bidRows, propertyRows, contactRows, accountRows] =
+    await Promise.all([
+      db
+        .select({
+          id: leads.id,
+          name: leads.name,
+          propertyName: leads.propertyName,
+          company: leads.company,
+          status: leads.status,
+        })
+        .from(leads)
+        .where(
+          and(
+            eq(leads.userId, user.ownerUserId),
+            or(
+              ilike(leads.name, needle),
+              ilike(leads.company, needle),
+              ilike(leads.propertyName, needle),
+            ),
+          ),
+        )
+        .orderBy(desc(leads.updatedAt))
+        .limit(perType),
+      db
+        .select({
+          id: bids.id,
+          propertyName: bids.propertyName,
+          clientName: bids.clientName,
+          status: bids.status,
+          deliveryStatus: bids.deliveryStatus,
+        })
+        .from(bids)
+        .where(
+          and(
+            eq(bids.userId, user.ownerUserId),
+            or(
+              ilike(bids.propertyName, needle),
+              ilike(bids.clientName, needle),
+              ilike(bids.address, needle),
+            ),
+          ),
+        )
+        .orderBy(desc(bids.updatedAt))
+        .limit(perType),
+      db
+        .select({
+          id: properties.id,
+          name: properties.name,
+          address: properties.address,
+        })
+        .from(properties)
+        .where(
+          and(
+            eq(properties.userId, user.ownerUserId),
+            or(
+              ilike(properties.name, needle),
+              ilike(properties.address, needle),
+            ),
+          ),
+        )
+        .orderBy(desc(properties.updatedAt))
+        .limit(perType),
+      db
+        .select({
+          id: contacts.id,
+          name: contacts.name,
+          title: contacts.title,
+        })
+        .from(contacts)
+        .where(
+          and(eq(contacts.userId, user.ownerUserId), ilike(contacts.name, needle)),
+        )
+        .orderBy(desc(contacts.updatedAt))
+        .limit(perType),
+      db
+        .select({ id: accounts.id, name: accounts.name, type: accounts.type })
+        .from(accounts)
+        .where(
+          and(eq(accounts.userId, user.ownerUserId), ilike(accounts.name, needle)),
+        )
+        .orderBy(desc(accounts.updatedAt))
+        .limit(perType),
+    ]);
+
+  const hits: UnitHit[] = [];
+  for (const l of leadRows) {
+    hits.push({
+      type: "lead",
+      id: l.id,
+      label: l.propertyName?.trim() || l.name,
+      sublabel: `Lead · ${l.status}`,
+    });
+  }
+  for (const b of bidRows) {
+    hits.push({
+      type: "bid",
+      id: b.id,
+      label: b.propertyName?.trim() || b.clientName,
+      sublabel: b.deliveryStatus
+        ? `Project · ${b.deliveryStatus.replace(/_/g, " ")}`
+        : `Bid · ${b.status}`,
+    });
+  }
+  for (const p of propertyRows) {
+    hits.push({
+      type: "property",
+      id: p.id,
+      label: p.name?.trim() || p.address || "Property",
+      sublabel: p.name ? p.address : "Property",
+    });
+  }
+  for (const c of contactRows) {
+    hits.push({
+      type: "contact",
+      id: c.id,
+      label: c.name,
+      sublabel: c.title || "Contact",
+    });
+  }
+  for (const a of accountRows) {
+    hits.push({
+      type: "account",
+      id: a.id,
+      label: a.name,
+      sublabel: `Company · ${a.type.replace(/_/g, " ")}`,
+    });
+  }
+  return hits;
+}
+
+async function buildBidPack(id: string): Promise<ContextPack> {
+  const data = await getBidPageData(id);
+  if (!data) {
+    return { type: "bid", id, label: "Unknown bid", found: false, markdown: "" };
+  }
+  const { bid, buildings: bldgs, lineItems: lis, accessItems: ais, totalSqft } =
+    data;
+  const isProject = bid.deliveryStatus != null;
+  const label = bid.propertyName?.trim() || bid.clientName;
+
+  const pricing = calculateBidPricing({
+    totalSqft,
+    coverageSqftPerGallon: numOrNull(bid.coverageSqftPerGallon),
+    pricePerGallon: numOrNull(bid.pricePerGallon),
+    laborRatePerUnit: numOrNull(bid.laborRatePerUnit),
+    marginPercent: numOrNull(bid.marginPercent),
+    lineItems: lis.map((li) => ({
+      name: li.name,
+      amount: numOrNull(li.amount) ?? 0,
+    })),
+    accessItems: ais.map((a) => ({
+      name: a.type,
+      amount: numOrNull(a.amount) ?? 0,
+    })),
+  });
+
+  // Accepted amount, if a proposal snapshot captured one.
+  const snap = data.proposals[0]?.snapshot as
+    | { pricing?: { grandTotal?: number }; grandTotal?: number }
+    | undefined;
+  const acceptedTotal = snap?.pricing?.grandTotal ?? snap?.grandTotal ?? null;
+
+  const lines = [
+    `${isProject ? "Project" : "Bid"}: ${label}${bid.address ? ` — ${bid.address}` : ""}`,
+    `Client: ${bid.clientName}`,
+    `Stage: ${(isProject ? bid.deliveryStatus! : bid.status).replace(/_/g, " ")}`,
+    `Estimated total: ${fmtMoney(pricing.grandTotal)}${pricing.complete ? "" : " (pricing incomplete)"}`,
+    `Buildings: ${bldgs.length} (${Math.round(totalSqft).toLocaleString("en-US")} sqft paintable)`,
+  ];
+  if (data.proposals.length > 0) {
+    lines.push(
+      `Proposal: ${data.proposals.length} generated${acceptedTotal != null ? `; snapshot total ${fmtMoney(acceptedTotal)}` : ""}`,
+    );
+  }
+  if (bid.acceptedByName || bid.acceptedAt) {
+    lines.push(
+      `Accepted${bid.acceptedByName ? ` by ${bid.acceptedByName}` : ""}${bid.acceptedAt ? ` on ${bid.acceptedAt.toISOString().slice(0, 10)}` : ""}`,
+    );
+  }
+  if (isProject) {
+    if (bid.targetStartDate || bid.targetEndDate) {
+      lines.push(
+        `Target dates: ${bid.targetStartDate ?? "?"} → ${bid.targetEndDate ?? "?"}`,
+      );
+    }
+    if (bid.crewLeadName || bid.assignedSub) {
+      lines.push(
+        `Crew: ${[bid.crewLeadName, bid.assignedSub].filter(Boolean).join(" / ")}`,
+      );
+    }
+  }
+  return { type: "bid", id, label, found: true, markdown: lines.join("\n") };
+}
+
+async function buildLeadPack(id: string): Promise<ContextPack> {
+  const lead = await getLead(id);
+  if (!lead) {
+    return {
+      type: "lead",
+      id,
+      label: "Unknown lead",
+      found: false,
+      markdown: "",
+    };
+  }
+  const label = lead.propertyName?.trim() || lead.name;
+  const lines = [
+    `Lead: ${label}`,
+    `Contact: ${lead.name}${lead.company ? ` (${lead.company})` : ""}`,
+    `Status: ${lead.status}`,
+    `Follow-up: ${lead.followUpAt ?? "none"}`,
+    `Contact attempts: ${lead.contactAttempts}${lead.lastContactedAt ? `, last ${lead.lastContactedAt.toISOString().slice(0, 10)}` : ""}`,
+  ];
+  if (lead.notes?.trim()) lines.push(`Notes: ${lead.notes.trim().slice(0, 240)}`);
+  return { type: "lead", id, label, found: true, markdown: lines.join("\n") };
+}
+
+async function buildPropertyPack(id: string): Promise<ContextPack> {
+  const user = await requireUser();
+  const rows = await db
+    .select()
+    .from(properties)
+    .where(and(eq(properties.id, id), eq(properties.userId, user.ownerUserId)))
+    .limit(1);
+  const property = rows[0];
+  if (!property) {
+    return {
+      type: "property",
+      id,
+      label: "Unknown property",
+      found: false,
+      markdown: "",
+    };
+  }
+  const [bidCount, leadCount] = await Promise.all([
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(bids)
+      .where(and(eq(bids.userId, user.ownerUserId), eq(bids.propertyId, id))),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(leads)
+      .where(and(eq(leads.userId, user.ownerUserId), eq(leads.propertyId, id))),
+  ]);
+  const label = property.name?.trim() || property.address || "Property";
+  const lines = [
+    `Property: ${label}`,
+    property.address ? `Address: ${property.address}` : null,
+    `Bids/projects: ${bidCount[0]?.n ?? 0}`,
+    `Leads: ${leadCount[0]?.n ?? 0}`,
+  ].filter(Boolean) as string[];
+  return { type: "property", id, label, found: true, markdown: lines.join("\n") };
+}
+
+async function buildContactPack(id: string): Promise<ContextPack> {
+  const user = await requireUser();
+  const rows = await db
+    .select({
+      contact: contacts,
+      accountName: accounts.name,
+    })
+    .from(contacts)
+    .leftJoin(accounts, eq(contacts.accountId, accounts.id))
+    .where(and(eq(contacts.id, id), eq(contacts.userId, user.ownerUserId)))
+    .limit(1);
+  const row = rows[0];
+  if (!row) {
+    return {
+      type: "contact",
+      id,
+      label: "Unknown contact",
+      found: false,
+      markdown: "",
+    };
+  }
+  const c = row.contact;
+  const lines = [
+    `Contact: ${c.name}${c.title ? ` — ${c.title}` : ""}`,
+    row.accountName ? `Company: ${row.accountName}` : null,
+    c.email ? `Email: ${c.email}` : null,
+    c.phone ? `Phone: ${c.phone}` : null,
+  ].filter(Boolean) as string[];
+  return { type: "contact", id, label: c.name, found: true, markdown: lines.join("\n") };
+}
+
+async function buildAccountPack(id: string): Promise<ContextPack> {
+  const user = await requireUser();
+  const rows = await db
+    .select()
+    .from(accounts)
+    .where(and(eq(accounts.id, id), eq(accounts.userId, user.ownerUserId)))
+    .limit(1);
+  const account = rows[0];
+  if (!account) {
+    return {
+      type: "account",
+      id,
+      label: "Unknown company",
+      found: false,
+      markdown: "",
+    };
+  }
+  const [propCount, leadCount] = await Promise.all([
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(properties)
+      .where(
+        and(
+          eq(properties.userId, user.ownerUserId),
+          or(
+            eq(properties.managementAccountId, id),
+            eq(properties.ownerAccountId, id),
+            eq(properties.accountId, id),
+          ),
+        ),
+      ),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(leads)
+      .where(and(eq(leads.userId, user.ownerUserId), eq(leads.accountId, id))),
+  ]);
+  const lines = [
+    `Company: ${account.name} (${account.type.replace(/_/g, " ")})`,
+    `Properties: ${propCount[0]?.n ?? 0}`,
+    `Leads: ${leadCount[0]?.n ?? 0}`,
+  ];
+  return {
+    type: "account",
+    id,
+    label: account.name,
+    found: true,
+    markdown: lines.join("\n"),
+  };
+}
+
+/** Resolve tagged unit refs into compact, org-scoped context packs. */
+export async function buildContextPacks(
+  refs: UnitRef[],
+): Promise<ContextPack[]> {
+  const unique = refs.filter(
+    (r, i) =>
+      refs.findIndex((o) => o.type === r.type && o.id === r.id) === i,
+  );
+  return Promise.all(
+    unique.map((ref) => {
+      switch (ref.type) {
+        case "bid":
+          return buildBidPack(ref.id);
+        case "lead":
+          return buildLeadPack(ref.id);
+        case "property":
+          return buildPropertyPack(ref.id);
+        case "contact":
+          return buildContactPack(ref.id);
+        case "account":
+          return buildAccountPack(ref.id);
+      }
+    }),
+  );
 }
