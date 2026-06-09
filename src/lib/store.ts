@@ -14,6 +14,9 @@ import {
   contacts,
   propertyContacts,
   propertyParties,
+  propertyMgmt,
+  propertyOwner,
+  contactEmployment,
   leads,
   leadContacts,
   activityEvents,
@@ -5350,4 +5353,107 @@ export async function buildContextPacks(
       }
     }),
   );
+}
+
+// ── Dated relationships (Phase 2b) ──────────────────────────────────────────
+
+export type RelationshipRow = {
+  id: string;
+  accountId: string;
+  accountName: string;
+  startDate: string;
+  endDate: string | null;
+  current: boolean;
+};
+
+export type PropertyRelationshipHistory = {
+  management: RelationshipRow[];
+  owner: RelationshipRow[];
+};
+
+export async function getPropertyRelationshipHistory(
+  propertyId: string,
+): Promise<PropertyRelationshipHistory> {
+  const user = await requireUser();
+  const [mgmt, own] = await Promise.all([
+    db
+      .select({
+        id: propertyMgmt.id,
+        accountId: propertyMgmt.accountId,
+        accountName: accounts.name,
+        startDate: propertyMgmt.startDate,
+        endDate: propertyMgmt.endDate,
+      })
+      .from(propertyMgmt)
+      .innerJoin(accounts, eq(propertyMgmt.accountId, accounts.id))
+      .where(
+        and(
+          eq(propertyMgmt.propertyId, propertyId),
+          eq(propertyMgmt.userId, user.ownerUserId),
+        ),
+      )
+      .orderBy(desc(propertyMgmt.startDate)),
+    db
+      .select({
+        id: propertyOwner.id,
+        accountId: propertyOwner.accountId,
+        accountName: accounts.name,
+        startDate: propertyOwner.startDate,
+        endDate: propertyOwner.endDate,
+      })
+      .from(propertyOwner)
+      .innerJoin(accounts, eq(propertyOwner.accountId, accounts.id))
+      .where(
+        and(
+          eq(propertyOwner.propertyId, propertyId),
+          eq(propertyOwner.userId, user.ownerUserId),
+        ),
+      )
+      .orderBy(desc(propertyOwner.startDate)),
+  ]);
+
+  const toRow = (r: {
+    id: string;
+    accountId: string;
+    accountName: string;
+    startDate: string;
+    endDate: string | null;
+  }): RelationshipRow => ({ ...r, current: r.endDate == null });
+
+  return { management: mgmt.map(toRow), owner: own.map(toRow) };
+}
+
+export type EmploymentRow = {
+  id: string;
+  accountId: string;
+  accountName: string;
+  title: string | null;
+  startDate: string;
+  endDate: string | null;
+  current: boolean;
+};
+
+export async function getContactEmploymentHistory(
+  contactId: string,
+): Promise<EmploymentRow[]> {
+  const user = await requireUser();
+  const rows = await db
+    .select({
+      id: contactEmployment.id,
+      accountId: contactEmployment.accountId,
+      accountName: accounts.name,
+      title: contactEmployment.title,
+      startDate: contactEmployment.startDate,
+      endDate: contactEmployment.endDate,
+    })
+    .from(contactEmployment)
+    .innerJoin(accounts, eq(contactEmployment.accountId, accounts.id))
+    .where(
+      and(
+        eq(contactEmployment.contactId, contactId),
+        eq(contactEmployment.userId, user.ownerUserId),
+      ),
+    )
+    .orderBy(desc(contactEmployment.startDate));
+  return rows.map((r) => ({ ...r, current: r.endDate == null }));
 }

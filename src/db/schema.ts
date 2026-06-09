@@ -164,6 +164,66 @@ export const propertyParties = pgTable("property_parties", {
     .defaultNow(),
 });
 
+/**
+ * Dated property↔management-company relationship (AQP principle #2 —
+ * relationships have time). `endDate` null = current. A partial-unique index
+ * (one current per property) is enforced in the migration. The current-state
+ * `properties.management_account_id` FK is kept as a derived convenience.
+ */
+export const propertyMgmt = pgTable("property_mgmt", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  propertyId: uuid("property_id")
+    .notNull()
+    .references(() => properties.id, { onDelete: "cascade" }),
+  accountId: uuid("account_id")
+    .notNull()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/** Dated property↔owner relationship. Same shape as propertyMgmt. */
+export const propertyOwner = pgTable("property_owner", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  propertyId: uuid("property_id")
+    .notNull()
+    .references(() => properties.id, { onDelete: "cascade" }),
+  accountId: uuid("account_id")
+    .notNull()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Dated contact↔company employment (AQP: contacts move between firms). The
+ * current-state `contacts.account_id` FK is kept as a derived convenience.
+ */
+export const contactEmployment = pgTable("contact_employment", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  contactId: uuid("contact_id")
+    .notNull()
+    .references(() => contacts.id, { onDelete: "cascade" }),
+  accountId: uuid("account_id")
+    .notNull()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  title: text("title"),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const bids = pgTable("bids", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull(),
