@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   CalendarClock,
   Check,
   CircleAlert,
   ClipboardList,
+  Loader2,
   Phone,
   Target,
   UserPlus,
@@ -31,6 +33,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { DashboardIntent } from "@/lib/actions/parse-dashboard-intent";
+import {
+  quickAddContact,
+  quickCreateLead,
+  quickLogCall,
+  quickSetFollowUp,
+  type QuickResult,
+} from "@/lib/actions/dashboard-quick-actions";
+import type { OverdueFollowUp } from "@/lib/store";
 
 type FieldDef =
   | { kind: "input"; label: string; placeholder?: string; type?: string }
@@ -50,7 +60,6 @@ type OverdueAction = {
   kind: "overdue";
   title: string;
   description: string;
-  items: { title: string; sub: string; badge: string }[];
 };
 
 type ActionDef = FormAction | OverdueAction;
@@ -63,10 +72,12 @@ type ActionKey =
   | "start-draft-bid"
   | "show-overdue";
 
-// TODO Phase 2: forms should submit to the matching server action
-// (createContact / createLeadAction / logLeadContactAction /
-// setLeadFollowUpAction / createBidAction). "show-overdue" should query
-// real overdue follow-ups instead of the placeholder list.
+// Form actions submit to the result-returning quick actions in
+// dashboard-quick-actions.ts (add-contact / create-lead / log-call /
+// set-follow-up). "start-draft-bid" routes into the full /bids/new wizard
+// (a bid needs a client + property name the composer doesn't collect).
+// "show-overdue" renders real overdue follow-ups passed in via the `overdue`
+// prop (getOverdueFollowUps).
 const ACTIONS: Record<ActionKey, ActionDef> = {
   "add-contact": {
     kind: "form",
@@ -191,19 +202,7 @@ const ACTIONS: Record<ActionKey, ActionDef> = {
   "show-overdue": {
     kind: "overdue",
     title: "Overdue follow-ups",
-    description: "Items past their reminder date",
-    items: [
-      {
-        title: "Follow up with Greystar",
-        sub: "Due 3 days ago · Vista Palms quote",
-        badge: "3d late",
-      },
-      {
-        title: "Send Pura Vida proposal",
-        sub: "Due yesterday · Blue Section",
-        badge: "1d late",
-      },
-    ],
+    description: "Open leads past their reminder date",
   },
 };
 
@@ -258,15 +257,45 @@ function prefillFromIntent(intent: DashboardIntent): Prefill {
   }
 }
 
-export function DashboardActionPills() {
+// Format an ISO YYYY-MM-DD as "Jun 3" without going through Date (avoids the
+// UTC-vs-local off-by-one a date-only string is prone to).
+function formatDueDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  const months = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+  return `${months[m - 1]} ${d}`;
+}
+
+export function DashboardActionPills({
+  overdue = [],
+}: {
+  overdue?: OverdueFollowUp[];
+}) {
+  const router = useRouter();
   const [open, setOpen] = useState<ActionKey | null>(null);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [prefill, setPrefill] = useState<Prefill>({});
+  const [values, setValues] = useState<Prefill>({});
+  const [status, setStatus] = useState<
+    { kind: "idle" } | { kind: "success" } | { kind: "error"; text: string }
+  >({ kind: "idle" });
+  const [submitting, startSubmit] = useTransition();
 
   function close() {
     setOpen(null);
-    setShowSuccess(false);
-    setPrefill({});
+    setStatus({ kind: "idle" });
+    setValues({});
+  }
+
+  function openManual(key: ActionKey) {
+    setStatus({ kind: "idle" });
+    setValues({});
+    setOpen(key);
+  }
+
+  function setField(label: string, value: string) {
+    setValues((v) => ({ ...v, [label]: value }));
   }
 
   // Listen for parsed intents from the dashboard composer (Claude API). The
@@ -277,15 +306,70 @@ export function DashboardActionPills() {
       const ce = e as CustomEvent<DashboardIntent>;
       const intent = ce.detail;
       if (intent.kind === "unknown") return;
-      setShowSuccess(false);
-      setPrefill(prefillFromIntent(intent));
+      setStatus({ kind: "idle" });
+      setValues(prefillFromIntent(intent));
       setOpen(intent.kind);
     }
     window.addEventListener("dashboard:intent", onIntent);
     return () => window.removeEventListener("dashboard:intent", onIntent);
   }, []);
 
+  function handleSubmit() {
+    if (!open || open === "show-overdue") return;
+
+    // A bid needs a client + property name the composer doesn't collect —
+    // route into the full wizard instead of a partial one-shot create.
+    if (open === "start-draft-bid") {
+      close();
+      router.push("/bids/new");
+      return;
+    }
+
+    const v = (label: string) => (values[label] ?? "").trim();
+
+    startSubmit(async () => {
+      let res: QuickResult;
+      switch (open) {
+        case "add-contact":
+          res = await quickAddContact({
+            name: v("Full name"),
+            company: v("Company"),
+            email: v("Email"),
+            phone: v("Phone"),
+          });
+          break;
+        case "create-lead":
+          res = await quickCreateLead({
+            propertyAddress: v("Property address"),
+            primaryContact: v("Primary contact"),
+            source: v("Source"),
+          });
+          break;
+        case "log-call":
+          res = await quickLogCall({
+            contact: v("Contact"),
+            outcome: v("Outcome"),
+            notes: v("Notes"),
+          });
+          break;
+        case "set-follow-up":
+          res = await quickSetFollowUp({
+            about: v("About"),
+            dueDate: v("Due date"),
+            note: v("Note"),
+          });
+          break;
+        default:
+          res = { ok: false, error: "Unknown action." };
+      }
+      setStatus(
+        res.ok ? { kind: "success" } : { kind: "error", text: res.error },
+      );
+    });
+  }
+
   const action = open ? ACTIONS[open] : null;
+  const showSuccess = status.kind === "success";
 
   return (
     <>
@@ -294,10 +378,7 @@ export function DashboardActionPills() {
           <button
             key={key}
             type="button"
-            onClick={() => {
-              setShowSuccess(false);
-              setOpen(key);
-            }}
+            onClick={() => openManual(key)}
             className="inline-flex items-center gap-1.5 rounded-full border bg-card/60 px-3.5 py-1.5 text-[0.8125rem] font-medium text-muted-foreground transition-[background-color,border-color,color,transform] hover:bg-card hover:text-foreground hover:border-foreground/25 active:translate-y-px whitespace-nowrap"
           >
             <Icon className="size-3.5" />
@@ -335,55 +416,85 @@ export function DashboardActionPills() {
                 {action.kind === "form" && !showSuccess && (
                   <form
                     id={FORM_ID}
-                    // key remounts the form whenever a new prefill arrives so
-                    // uncontrolled inputs pick up the new defaultValue.
-                    key={`${open}-${Object.values(prefill).join("|")}`}
                     onSubmit={(e) => {
                       e.preventDefault();
-                      // TODO Phase 2: call the matching server action here.
-                      setShowSuccess(true);
+                      handleSubmit();
                     }}
                     className="flex flex-col gap-5"
                   >
+                    {status.kind === "error" && (
+                      <p className="text-xs text-destructive dark:text-[var(--color-amber-soft)] -mb-1">
+                        {status.text}
+                      </p>
+                    )}
                     {action.fields.map((f, i) => (
                       <Field
                         key={i}
                         field={f}
-                        defaultValue={prefill[f.label] ?? ""}
+                        value={values[f.label] ?? ""}
+                        onChange={(val) => setField(f.label, val)}
+                        disabled={submitting}
                       />
                     ))}
                   </form>
                 )}
 
-                {action.kind === "overdue" && (
-                  <div className="flex flex-col gap-2">
-                    {action.items.map((it, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center gap-3 rounded-lg border bg-background px-4 py-3.5"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium">{it.title}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {it.sub}
-                          </p>
-                        </div>
-                        <span className="text-[0.6875rem] font-semibold px-2 py-0.5 rounded-full bg-foreground/10 text-foreground whitespace-nowrap">
-                          {it.badge}
-                        </span>
+                {action.kind === "overdue" &&
+                  (overdue.length === 0 ? (
+                    <div className="flex flex-col items-center text-center py-10 gap-2">
+                      <div className="size-12 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center">
+                        <Check className="size-6" />
                       </div>
-                    ))}
-                  </div>
-                )}
+                      <p className="text-sm font-medium">All caught up</p>
+                      <p className="text-xs text-muted-foreground">
+                        No follow-ups are past due.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {overdue.map((it) => (
+                        <button
+                          key={it.leadId}
+                          type="button"
+                          onClick={() => {
+                            close();
+                            router.push(`/leads/${it.leadId}`);
+                          }}
+                          className="flex items-center gap-3 rounded-lg border bg-background px-4 py-3.5 text-left transition-colors hover:bg-accent"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              {it.propertyName?.trim() || it.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                              Due {formatDueDate(it.followUpAt)}
+                              {it.company ? ` · ${it.company}` : ""}
+                            </p>
+                          </div>
+                          <span className="text-[0.6875rem] font-semibold px-2 py-0.5 rounded-full bg-foreground/10 text-foreground whitespace-nowrap">
+                            {it.daysLate}d late
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ))}
               </div>
 
               <SheetFooter className="px-6 py-4 border-t flex-row justify-end gap-2">
                 {action.kind === "form" && !showSuccess && (
                   <>
-                    <Button type="button" variant="ghost" onClick={close}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={close}
+                      disabled={submitting}
+                    >
                       Cancel
                     </Button>
-                    <Button type="submit" form={FORM_ID}>
+                    <Button type="submit" form={FORM_ID} disabled={submitting}>
+                      {submitting && (
+                        <Loader2 className="size-4 animate-spin" />
+                      )}
                       {action.cta}
                     </Button>
                   </>
@@ -409,10 +520,14 @@ export function DashboardActionPills() {
 
 function Field({
   field,
-  defaultValue,
+  value,
+  onChange,
+  disabled,
 }: {
   field: FieldDef;
-  defaultValue: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   const id = `f-${field.label.replace(/\s+/g, "-").toLowerCase()}`;
   return (
@@ -425,7 +540,9 @@ function Field({
           id={id}
           type={field.type ?? "text"}
           placeholder={field.placeholder}
-          defaultValue={defaultValue}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
         />
       )}
       {field.kind === "textarea" && (
@@ -433,14 +550,16 @@ function Field({
           id={id}
           placeholder={field.placeholder}
           className="min-h-20"
-          defaultValue={defaultValue}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
         />
       )}
       {field.kind === "select" && (
         <Select
-          defaultValue={
-            field.options.includes(defaultValue) ? defaultValue : undefined
-          }
+          value={field.options.includes(value) ? value : undefined}
+          onValueChange={onChange}
+          disabled={disabled}
         >
           <SelectTrigger id={id} className="w-full">
             <SelectValue placeholder="Select…" />
