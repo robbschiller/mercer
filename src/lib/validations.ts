@@ -7,6 +7,10 @@ import {
   ACCESS_TYPES,
   EXPENSE_CATEGORIES,
   PAYMENT_TYPES,
+  INVOICE_TYPES,
+  INVOICE_STATUSES,
+  CHANGE_ORDER_REASONS,
+  CHANGE_ORDER_STATUSES,
 } from "./status-meta";
 
 /** Form select → archetype enum, with empty string / missing → null. */
@@ -273,6 +277,56 @@ export const createExpenseSchema = z.object({
 
 export const deleteExpenseSchema = z.object({
   id: z.string().uuid("Invalid expense ID"),
+  bidId: z.string().uuid("Invalid project ID"),
+});
+
+// ── Money layer Phase 1b: invoices + change orders ──
+export const createInvoiceSchema = z.object({
+  bidId: z.string().uuid("Invalid project ID"),
+  type: z.enum(INVOICE_TYPES),
+  amount: z.coerce
+    .number({ message: "Amount must be a number" })
+    .finite("Amount must be a number"),
+  sequence: z.preprocess(
+    (v) => (v === "" || v == null ? null : v),
+    z.union([z.coerce.number().int(), z.null()]),
+  ),
+  trigger: optionalText,
+  dueAt: optionalText,
+});
+
+export const setInvoiceStatusSchema = z.object({
+  id: z.string().uuid("Invalid invoice ID"),
+  bidId: z.string().uuid("Invalid project ID"),
+  status: z.enum(INVOICE_STATUSES),
+});
+
+export const deleteInvoiceSchema = z.object({
+  id: z.string().uuid("Invalid invoice ID"),
+  bidId: z.string().uuid("Invalid project ID"),
+});
+
+export const createChangeOrderSchema = z.object({
+  bidId: z.string().uuid("Invalid project ID"),
+  description: z.string().trim().min(1, "Description is required"),
+  amount: z.coerce
+    .number({ message: "Amount must be a number" })
+    .finite("Amount must be a number"),
+  reason: z.preprocess(
+    (v) => (v === "" || v == null ? null : v),
+    z.union([z.enum(CHANGE_ORDER_REASONS), z.null()]),
+  ),
+  detail: optionalText,
+});
+
+export const setChangeOrderStatusSchema = z.object({
+  id: z.string().uuid("Invalid change order ID"),
+  bidId: z.string().uuid("Invalid project ID"),
+  status: z.enum(CHANGE_ORDER_STATUSES),
+});
+
+export const deleteChangeOrderSchema = z.object({
+  id: z.string().uuid("Invalid change order ID"),
   bidId: z.string().uuid("Invalid project ID"),
 });
 

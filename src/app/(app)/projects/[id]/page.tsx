@@ -6,11 +6,15 @@ import {
   getProjectUpdates,
   getJobFinancials,
   getExpensesForBid,
+  getInvoicesForBid,
+  getChangeOrdersForBid,
   allowedProjectStatusTransitions,
   isProjectStartReady,
   type ProjectStatus,
   type JobFinancials,
   type Expense,
+  type Invoice,
+  type ChangeOrder,
 } from "@/lib/store";
 import {
   updateProjectStatusAction,
@@ -19,6 +23,12 @@ import {
   setProjectNtoAction,
   createExpenseAction,
   deleteExpenseAction,
+  createInvoiceAction,
+  setInvoiceStatusAction,
+  deleteInvoiceAction,
+  createChangeOrderAction,
+  setChangeOrderStatusAction,
+  deleteChangeOrderAction,
 } from "@/lib/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,6 +53,15 @@ import {
   paymentTypeLabel,
   EXPENSE_CATEGORIES,
   PAYMENT_TYPES,
+  INVOICE_TYPES,
+  INVOICE_STATUSES,
+  invoiceTypeLabel,
+  invoiceStatusLabel,
+  invoiceStatusVariant,
+  CHANGE_ORDER_REASONS,
+  changeOrderReasonLabel,
+  changeOrderStatusLabel,
+  changeOrderStatusVariant,
 } from "@/lib/status-meta";
 import type { ProjectPreStart } from "@/lib/store";
 
@@ -115,12 +134,17 @@ export default async function ProjectPage({
 
   const { project, bid } = data;
   const transitions = allowedProjectStatusTransitions(project.status);
-  const [updates, preStart, financials, expenses] = await Promise.all([
-    getProjectUpdates(project.id),
-    project.status === "not_started" ? getProjectPreStart(project.id) : Promise.resolve(null),
-    getJobFinancials(project.id),
-    getExpensesForBid(project.id),
-  ]);
+  const [updates, preStart, financials, expenses, invoices, changeOrders] =
+    await Promise.all([
+      getProjectUpdates(project.id),
+      project.status === "not_started"
+        ? getProjectPreStart(project.id)
+        : Promise.resolve(null),
+      getJobFinancials(project.id),
+      getExpensesForBid(project.id),
+      getInvoicesForBid(project.id),
+      getChangeOrdersForBid(project.id),
+    ]);
   const startReady = preStart ? isProjectStartReady(preStart) : true;
 
   return (
@@ -198,6 +222,10 @@ export default async function ProjectPage({
         financials={financials}
         expenses={expenses}
       />
+
+      <ChangeOrdersCard projectId={project.id} changeOrders={changeOrders} />
+
+      <InvoicesCard projectId={project.id} invoices={invoices} />
 
       <Card>
         <CardHeader>
@@ -547,7 +575,18 @@ function BudgetCard({
   financials: JobFinancials;
   expenses: Expense[];
 }) {
-  const { contractValue, spent, remaining, pctSpent, byCategory } = financials;
+  const {
+    contractValue,
+    changeOrdersTotal,
+    adjustedContract,
+    spent,
+    remaining,
+    pctSpent,
+    byCategory,
+    invoicedTotal,
+    paidTotal,
+    outstanding,
+  } = financials;
   const pct = pctSpent == null ? null : Math.min(100, Math.round(pctSpent * 100));
   const over = remaining != null && remaining < 0;
 
@@ -557,13 +596,13 @@ function BudgetCard({
         <CardTitle className="text-base">Budget</CardTitle>
         <CardDescription>
           Real-time spend against the contract baseline. Contract value is
-          snapshotted from the accepted proposal; spent, remaining, and profit
-          derive live from dated expenses.
+          snapshotted from the accepted proposal; approved change orders adjust
+          it; spent, remaining, and billing derive live.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         <div className="grid gap-3 sm:grid-cols-3">
-          <Stat label="Contract" value={fmtMoney(contractValue)} />
+          <Stat label="Contract" value={fmtMoney(adjustedContract)} />
           <Stat label="Spent" value={fmtMoney(spent)} />
           <Stat
             label={over ? "Over by" : "Remaining"}
@@ -572,12 +611,25 @@ function BudgetCard({
           />
         </div>
 
+        {changeOrdersTotal !== 0 && (
+          <p className="-mt-2 text-xs text-muted-foreground">
+            Base {fmtMoney(contractValue)} + approved change orders{" "}
+            {fmtMoney(changeOrdersTotal)} = {fmtMoney(adjustedContract)}
+          </p>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Stat label="Invoiced" value={fmtMoney(invoicedTotal)} />
+          <Stat label="Paid" value={fmtMoney(paidTotal)} />
+          <Stat label="Outstanding" value={fmtMoney(outstanding)} />
+        </div>
+
         {pct != null ? (
           <div>
             <div className="mb-1 flex justify-between text-xs text-muted-foreground">
               <span>{pct}% of contract spent</span>
               <span className="tabular-nums">
-                {fmtMoney(spent)} / {fmtMoney(contractValue)}
+                {fmtMoney(spent)} / {fmtMoney(adjustedContract)}
               </span>
             </div>
             <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
@@ -754,5 +806,338 @@ function BudgetCard({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function fmtSigned(n: number): string {
+  const s = money.format(Math.abs(n));
+  return n < 0 ? `−${s}` : `+${s}`;
+}
+
+function ChangeOrdersCard({
+  projectId,
+  changeOrders,
+}: {
+  projectId: string;
+  changeOrders: ChangeOrder[];
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Change orders</CardTitle>
+        <CardDescription>
+          Signed scope adjustments (positive adds to the contract, negative
+          credits). Approved change orders adjust the budget baseline above.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <form
+          action={createChangeOrderAction}
+          className="grid gap-3 rounded-md border p-3"
+        >
+          <input type="hidden" name="bidId" value={projectId} />
+          <p className="text-sm font-medium">Add change order</p>
+          <div className="grid gap-1.5">
+            <Label htmlFor="co-desc">Description</Label>
+            <Input
+              id="co-desc"
+              name="description"
+              placeholder="Added stucco repair, building 4"
+              required
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-1.5">
+              <Label htmlFor="co-amount">Amount (− for credit)</Label>
+              <Input
+                id="co-amount"
+                name="amount"
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                required
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="co-reason">Reason</Label>
+              <select
+                id="co-reason"
+                name="reason"
+                defaultValue=""
+                className={SELECT_CLASS}
+              >
+                <option value="">—</option>
+                {CHANGE_ORDER_REASONS.map((r) => (
+                  <option key={r} value={r}>
+                    {changeOrderReasonLabel(r)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="co-detail">Detail</Label>
+            <Input id="co-detail" name="detail" placeholder="Optional note" />
+          </div>
+          <div>
+            <SubmitButton size="sm">Add change order</SubmitButton>
+          </div>
+        </form>
+
+        {changeOrders.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No change orders.</p>
+        ) : (
+          <ul className="flex flex-col divide-y">
+            {changeOrders.map((co) => {
+              const amount = Number(co.amount);
+              return (
+                <li key={co.id} className="flex flex-col gap-2 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">
+                        {co.number ? `${co.number} · ` : ""}
+                        {co.description}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {co.reason ? changeOrderReasonLabel(co.reason) : "—"}
+                        {co.detail ? ` · ${co.detail}` : ""}
+                      </p>
+                    </div>
+                    <span
+                      className={
+                        "shrink-0 tabular-nums text-sm font-medium " +
+                        (amount < 0 ? "text-destructive" : "text-emerald-600")
+                      }
+                    >
+                      {fmtSigned(amount)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={changeOrderStatusVariant(co.status)}>
+                      {changeOrderStatusLabel(co.status)}
+                    </Badge>
+                    <div className="flex flex-wrap gap-1.5">
+                      {co.status !== "approved" && (
+                        <StatusButton
+                          action={setChangeOrderStatusAction}
+                          id={co.id}
+                          bidId={projectId}
+                          status="approved"
+                          label="Approve"
+                        />
+                      )}
+                      {co.status !== "denied" && (
+                        <StatusButton
+                          action={setChangeOrderStatusAction}
+                          id={co.id}
+                          bidId={projectId}
+                          status="denied"
+                          label="Deny"
+                        />
+                      )}
+                      <DeleteButton
+                        action={deleteChangeOrderAction}
+                        id={co.id}
+                        bidId={projectId}
+                        label="Delete"
+                      />
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function InvoicesCard({
+  projectId,
+  invoices,
+}: {
+  projectId: string;
+  invoices: Invoice[];
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Invoices &amp; draws</CardTitle>
+        <CardDescription>
+          Customer billing — draws on milestones for large jobs, deposit + final
+          for small. Marking paid feeds the billing totals above.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <form
+          action={createInvoiceAction}
+          className="grid gap-3 rounded-md border p-3"
+        >
+          <input type="hidden" name="bidId" value={projectId} />
+          <p className="text-sm font-medium">Add invoice</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-1.5">
+              <Label htmlFor="inv-type">Type</Label>
+              <select
+                id="inv-type"
+                name="type"
+                defaultValue="draw"
+                className={SELECT_CLASS}
+              >
+                {INVOICE_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {invoiceTypeLabel(t)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="inv-amount">Amount</Label>
+              <Input
+                id="inv-amount"
+                name="amount"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                required
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="inv-seq">Sequence</Label>
+              <Input
+                id="inv-seq"
+                name="sequence"
+                type="number"
+                min="1"
+                placeholder="e.g. 1"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="inv-due">Due date</Label>
+              <Input id="inv-due" name="dueAt" type="date" />
+            </div>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="inv-trigger">Trigger</Label>
+            <Input
+              id="inv-trigger"
+              name="trigger"
+              placeholder="Building 4 complete"
+            />
+          </div>
+          <div>
+            <SubmitButton size="sm">Add invoice</SubmitButton>
+          </div>
+        </form>
+
+        {invoices.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No invoices yet.</p>
+        ) : (
+          <ul className="flex flex-col divide-y">
+            {invoices.map((inv) => (
+              <li key={inv.id} className="flex flex-col gap-2 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">
+                      {invoiceTypeLabel(inv.type)}
+                      {inv.sequence != null ? ` #${inv.sequence}` : ""}
+                      {inv.number ? ` · ${inv.number}` : ""}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {inv.trigger ? `${inv.trigger} · ` : ""}
+                      {inv.dueAt ? `due ${formatDate(inv.dueAt)}` : "no due date"}
+                      {inv.paidAt ? ` · paid ${formatDate(inv.paidAt)}` : ""}
+                    </p>
+                  </div>
+                  <span className="shrink-0 tabular-nums text-sm font-medium">
+                    {fmtMoney(Number(inv.amount))}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={invoiceStatusVariant(inv.status)}>
+                    {invoiceStatusLabel(inv.status)}
+                  </Badge>
+                  <div className="flex flex-wrap gap-1.5">
+                    {INVOICE_STATUSES.filter((s) => s !== inv.status).map(
+                      (s) => (
+                        <StatusButton
+                          key={s}
+                          action={setInvoiceStatusAction}
+                          id={inv.id}
+                          bidId={projectId}
+                          status={s}
+                          label={invoiceStatusLabel(s)}
+                        />
+                      ),
+                    )}
+                    <DeleteButton
+                      action={deleteInvoiceAction}
+                      id={inv.id}
+                      bidId={projectId}
+                      label="Delete"
+                    />
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function StatusButton({
+  action,
+  id,
+  bidId,
+  status,
+  label,
+}: {
+  action: (formData: FormData) => void | Promise<void>;
+  id: string;
+  bidId: string;
+  status: string;
+  label: string;
+}) {
+  return (
+    <form action={action}>
+      <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="bidId" value={bidId} />
+      <input type="hidden" name="status" value={status} />
+      <button
+        type="submit"
+        className="rounded-full border px-2 py-0.5 text-[0.6875rem] text-muted-foreground hover:bg-accent hover:text-foreground"
+      >
+        {label}
+      </button>
+    </form>
+  );
+}
+
+function DeleteButton({
+  action,
+  id,
+  bidId,
+  label,
+}: {
+  action: (formData: FormData) => void | Promise<void>;
+  id: string;
+  bidId: string;
+  label: string;
+}) {
+  return (
+    <form action={action}>
+      <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="bidId" value={bidId} />
+      <button
+        type="submit"
+        className="rounded-full border border-transparent px-2 py-0.5 text-[0.6875rem] text-muted-foreground hover:text-destructive"
+      >
+        {label}
+      </button>
+    </form>
   );
 }

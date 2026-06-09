@@ -20,6 +20,8 @@ import {
   auditLog,
   projectUpdates,
   expenses,
+  changeOrders,
+  invoices,
   companyProfiles,
   onboardings,
   orgMemberships,
@@ -44,6 +46,10 @@ import type {
   AccountType,
   ExpenseCategory,
   PaymentType,
+  InvoiceType,
+  InvoiceStatus,
+  ChangeOrderReason,
+  ChangeOrderStatus,
 } from "@/lib/status-meta";
 
 export type Bid = typeof bids.$inferSelect;
@@ -5083,24 +5089,35 @@ export type CategorySpend = { category: ExpenseCategory; spent: number };
 
 export type JobFinancials = {
   contractValue: number | null;
+  /** Sum of approved change orders (signed). */
+  changeOrdersTotal: number;
+  /** contractValue + changeOrdersTotal; null without a contract value. */
+  adjustedContract: number | null;
   spent: number;
+  /** adjustedContract − spent. Null until a contract value. */
   remaining: number | null;
-  /** Gross profit-of-spent: contract − spent. Null until a contract value. */
+  /** Same as remaining here (gross profit-of-spent). */
   profit: number | null;
-  /** 0–1 fraction of contract spent; null without a contract value. */
+  /** 0–1 fraction of the adjusted contract spent; null without one. */
   pctSpent: number | null;
+  /** Billed: invoices in invoiced/paid/overdue. */
+  invoicedTotal: number;
+  paidTotal: number;
+  /** invoicedTotal − paidTotal. */
+  outstanding: number;
   byCategory: CategorySpend[];
   expenseCount: number;
 };
 
 /**
- * Derive a job's financial state from the contract baseline + dated expenses.
- * Nothing here is stored — it's computed live on every read.
+ * Derive a job's financial state from the contract baseline + approved change
+ * orders + dated expenses + invoices. Nothing here is stored — it's computed
+ * live on every read (AQP principle #5).
  */
 export async function getJobFinancials(bidId: string): Promise<JobFinancials> {
   await requireBidOwnership(bidId);
 
-  const [bidRows, totalRows, catRows] = await Promise.all([
+  const [bidRows, totalRows, catRows, coRows, invRows] = await Promise.all([
     db
       .select({ contractValue: bids.contractValue })
       .from(bids)
@@ -5124,28 +5141,181 @@ export async function getJobFinancials(bidId: string): Promise<JobFinancials> {
       .orderBy(
         sql`coalesce(sum(${expenses.amount}::numeric + ${expenses.tax}::numeric), 0) desc`,
       ),
+    db
+      .select({
+        approved: sql<number>`coalesce(sum(${changeOrders.amount}::numeric) filter (where ${changeOrders.status} = 'approved'), 0)`,
+      })
+      .from(changeOrders)
+      .where(eq(changeOrders.bidId, bidId)),
+    db
+      .select({
+        invoiced: sql<number>`coalesce(sum(${invoices.amount}::numeric) filter (where ${invoices.status} in ('invoiced','paid','overdue')), 0)`,
+        paid: sql<number>`coalesce(sum(${invoices.amount}::numeric) filter (where ${invoices.status} = 'paid'), 0)`,
+      })
+      .from(invoices)
+      .where(eq(invoices.bidId, bidId)),
   ]);
 
   const contractValue =
     bidRows[0]?.contractValue != null ? Number(bidRows[0].contractValue) : null;
+  const changeOrdersTotal = Number(coRows[0]?.approved ?? 0);
+  const adjustedContract =
+    contractValue == null ? null : contractValue + changeOrdersTotal;
   const spent = Number(totalRows[0]?.spent ?? 0);
-  const remaining = contractValue == null ? null : contractValue - spent;
+  const remaining = adjustedContract == null ? null : adjustedContract - spent;
   const profit = remaining;
   const pctSpent =
-    contractValue == null || contractValue === 0 ? null : spent / contractValue;
+    adjustedContract == null || adjustedContract === 0
+      ? null
+      : spent / adjustedContract;
+  const invoicedTotal = Number(invRows[0]?.invoiced ?? 0);
+  const paidTotal = Number(invRows[0]?.paid ?? 0);
 
   return {
     contractValue,
+    changeOrdersTotal,
+    adjustedContract,
     spent,
     remaining,
     profit,
     pctSpent,
+    invoicedTotal,
+    paidTotal,
+    outstanding: invoicedTotal - paidTotal,
     byCategory: catRows.map((r) => ({
       category: r.category as ExpenseCategory,
       spent: Number(r.spent),
     })),
     expenseCount: Number(totalRows[0]?.count ?? 0),
   };
+}
+
+// ── Invoices + change orders (Phase 1b) ──
+
+export type Invoice = typeof invoices.$inferSelect;
+export type ChangeOrder = typeof changeOrders.$inferSelect;
+
+export async function getInvoicesForBid(bidId: string): Promise<Invoice[]> {
+  await requireBidOwnership(bidId);
+  return db
+    .select()
+    .from(invoices)
+    .where(eq(invoices.bidId, bidId))
+    .orderBy(asc(invoices.sequence), asc(invoices.createdAt));
+}
+
+export async function createInvoice(data: {
+  bidId: string;
+  type: InvoiceType;
+  amount: number;
+  sequence?: number | null;
+  trigger?: string | null;
+  dueAt?: string | null;
+}): Promise<Invoice> {
+  const user = await requireUser();
+  await requireBidOwnership(data.bidId, user.ownerUserId);
+  const rows = await db
+    .insert(invoices)
+    .values({
+      userId: user.ownerUserId,
+      bidId: data.bidId,
+      type: data.type,
+      amount: String(data.amount),
+      sequence: data.sequence ?? null,
+      trigger: data.trigger ?? null,
+      dueAt: data.dueAt ?? null,
+    })
+    .returning();
+  return rows[0];
+}
+
+export async function setInvoiceStatus(
+  id: string,
+  status: InvoiceStatus,
+): Promise<void> {
+  const user = await requireUser();
+  await db
+    .update(invoices)
+    .set({
+      status,
+      paidAt: status === "paid" ? new Date().toISOString().slice(0, 10) : null,
+      invoicedAt:
+        status === "pending" || status === "cancelled"
+          ? sql`${invoices.invoicedAt}`
+          : sql`coalesce(${invoices.invoicedAt}, current_date)`,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(invoices.id, id), eq(invoices.userId, user.ownerUserId)));
+}
+
+export async function deleteInvoice(id: string): Promise<void> {
+  const user = await requireUser();
+  await db
+    .delete(invoices)
+    .where(and(eq(invoices.id, id), eq(invoices.userId, user.ownerUserId)));
+}
+
+export async function getChangeOrdersForBid(
+  bidId: string,
+): Promise<ChangeOrder[]> {
+  await requireBidOwnership(bidId);
+  return db
+    .select()
+    .from(changeOrders)
+    .where(eq(changeOrders.bidId, bidId))
+    .orderBy(desc(changeOrders.createdAt));
+}
+
+export async function createChangeOrder(data: {
+  bidId: string;
+  description: string;
+  amount: number;
+  reason?: ChangeOrderReason | null;
+  detail?: string | null;
+}): Promise<ChangeOrder> {
+  const user = await requireUser();
+  await requireBidOwnership(data.bidId, user.ownerUserId);
+  const rows = await db
+    .insert(changeOrders)
+    .values({
+      userId: user.ownerUserId,
+      bidId: data.bidId,
+      description: data.description.trim(),
+      detail: (data.detail ?? "").trim(),
+      reason: data.reason ?? null,
+      amount: String(data.amount),
+      createdBy: user.userId,
+    })
+    .returning();
+  return rows[0];
+}
+
+export async function setChangeOrderStatus(
+  id: string,
+  status: ChangeOrderStatus,
+  approvedBy?: string | null,
+): Promise<void> {
+  const user = await requireUser();
+  await db
+    .update(changeOrders)
+    .set({
+      status,
+      approvedBy: status === "approved" ? (approvedBy ?? null) : null,
+      approvedAt: status === "approved" ? new Date() : null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(eq(changeOrders.id, id), eq(changeOrders.userId, user.ownerUserId)),
+    );
+}
+
+export async function deleteChangeOrder(id: string): Promise<void> {
+  const user = await requireUser();
+  await db
+    .delete(changeOrders)
+    .where(
+      and(eq(changeOrders.id, id), eq(changeOrders.userId, user.ownerUserId)),
+    );
 }
 
 /** Resolve tagged unit refs into compact, org-scoped context packs. */
