@@ -52,6 +52,12 @@ import {
   createContact,
   createExpense,
   deleteExpense,
+  createInvoice,
+  setInvoiceStatus,
+  deleteInvoice,
+  createChangeOrder,
+  setChangeOrderStatus,
+  deleteChangeOrder,
 } from "./store";
 import { getOrgContext } from "./org-context";
 import { enrichCompanyFromWebsite } from "./onboarding/enrich-from-website";
@@ -108,6 +114,12 @@ import {
   removeOrgMemberSchema,
   createExpenseSchema,
   deleteExpenseSchema,
+  createInvoiceSchema,
+  setInvoiceStatusSchema,
+  deleteInvoiceSchema,
+  createChangeOrderSchema,
+  setChangeOrderStatusSchema,
+  deleteChangeOrderSchema,
 } from "./validations";
 import { calculateBidPricing } from "./pricing";
 import type { ProposalSnapshot } from "./pdf/types";
@@ -748,6 +760,78 @@ export async function deleteExpenseAction(formData: FormData) {
   const result = deleteExpenseSchema.safeParse(formDataToObject(formData));
   if (!result.success) return;
   await deleteExpense(result.data.id);
+  revalidatePath(`/projects/${result.data.bidId}`);
+}
+
+// ── Invoices (Phase 1b) ──
+
+export async function createInvoiceAction(formData: FormData) {
+  const result = createInvoiceSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    const bidId = (formData.get("bidId") as string) || "";
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/projects/${bidId}?error=${encodeURIComponent(message)}`);
+  }
+  const { bidId, ...rest } = result.data;
+  try {
+    await createInvoice({ bidId, ...rest });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to add invoice";
+    redirect(`/projects/${bidId}?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath(`/projects/${bidId}`);
+  redirect(`/projects/${bidId}`);
+}
+
+export async function setInvoiceStatusAction(formData: FormData) {
+  const result = setInvoiceStatusSchema.safeParse(formDataToObject(formData));
+  if (!result.success) return;
+  await setInvoiceStatus(result.data.id, result.data.status);
+  revalidatePath(`/projects/${result.data.bidId}`);
+}
+
+export async function deleteInvoiceAction(formData: FormData) {
+  const result = deleteInvoiceSchema.safeParse(formDataToObject(formData));
+  if (!result.success) return;
+  await deleteInvoice(result.data.id);
+  revalidatePath(`/projects/${result.data.bidId}`);
+}
+
+// ── Change orders (Phase 1b) ──
+
+export async function createChangeOrderAction(formData: FormData) {
+  const result = createChangeOrderSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    const bidId = (formData.get("bidId") as string) || "";
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/projects/${bidId}?error=${encodeURIComponent(message)}`);
+  }
+  const { bidId, ...rest } = result.data;
+  try {
+    await createChangeOrder({ bidId, ...rest });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to add change order";
+    redirect(`/projects/${bidId}?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath(`/projects/${bidId}`);
+  redirect(`/projects/${bidId}`);
+}
+
+export async function setChangeOrderStatusAction(formData: FormData) {
+  const result = setChangeOrderStatusSchema.safeParse(
+    formDataToObject(formData),
+  );
+  if (!result.success) return;
+  await setChangeOrderStatus(result.data.id, result.data.status);
+  revalidatePath(`/projects/${result.data.bidId}`);
+}
+
+export async function deleteChangeOrderAction(formData: FormData) {
+  const result = deleteChangeOrderSchema.safeParse(formDataToObject(formData));
+  if (!result.success) return;
+  await deleteChangeOrder(result.data.id);
   revalidatePath(`/projects/${result.data.bidId}`);
 }
 

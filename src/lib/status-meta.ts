@@ -200,6 +200,116 @@ export function paymentTypeLabel(value: string): string {
   return PAYMENT_TYPE_LABELS[value as PaymentType] ?? value;
 }
 
+// ── Money layer Phase 1b: invoices + change orders ──
+
+export const INVOICE_TYPES = [
+  "mobilization",
+  "draw",
+  "deposit",
+  "final",
+  "change_order",
+  "other",
+] as const;
+export type InvoiceType = (typeof INVOICE_TYPES)[number];
+
+export const INVOICE_TYPE_LABELS: Record<InvoiceType, string> = {
+  mobilization: "Mobilization",
+  draw: "Draw",
+  deposit: "Deposit",
+  final: "Final",
+  change_order: "Change order",
+  other: "Other",
+};
+
+export function invoiceTypeLabel(value: string): string {
+  return INVOICE_TYPE_LABELS[value as InvoiceType] ?? value;
+}
+
+export const INVOICE_STATUSES = [
+  "pending",
+  "invoiced",
+  "paid",
+  "overdue",
+  "cancelled",
+] as const;
+export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
+
+export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
+  pending: "Pending",
+  invoiced: "Invoiced",
+  paid: "Paid",
+  overdue: "Overdue",
+  cancelled: "Cancelled",
+};
+
+export const INVOICE_STATUS_VARIANTS: Record<InvoiceStatus, BadgeVariant> = {
+  pending: "secondary",
+  invoiced: "outline",
+  paid: "default",
+  overdue: "secondary",
+  cancelled: "secondary",
+};
+
+export function invoiceStatusLabel(value: string): string {
+  return INVOICE_STATUS_LABELS[value as InvoiceStatus] ?? value;
+}
+export function invoiceStatusVariant(value: string): BadgeVariant {
+  return INVOICE_STATUS_VARIANTS[value as InvoiceStatus] ?? "secondary";
+}
+
+export const CHANGE_ORDER_REASONS = [
+  "discovered_during_work",
+  "customer_requested",
+  "scope_correction",
+  "weather",
+  "other",
+] as const;
+export type ChangeOrderReason = (typeof CHANGE_ORDER_REASONS)[number];
+
+export const CHANGE_ORDER_REASON_LABELS: Record<ChangeOrderReason, string> = {
+  discovered_during_work: "Discovered during work",
+  customer_requested: "Customer requested",
+  scope_correction: "Scope correction",
+  weather: "Weather",
+  other: "Other",
+};
+
+export function changeOrderReasonLabel(value: string): string {
+  return CHANGE_ORDER_REASON_LABELS[value as ChangeOrderReason] ?? value;
+}
+
+export const CHANGE_ORDER_STATUSES = [
+  "draft",
+  "sent",
+  "approved",
+  "denied",
+] as const;
+export type ChangeOrderStatus = (typeof CHANGE_ORDER_STATUSES)[number];
+
+export const CHANGE_ORDER_STATUS_LABELS: Record<ChangeOrderStatus, string> = {
+  draft: "Draft",
+  sent: "Sent",
+  approved: "Approved",
+  denied: "Denied",
+};
+
+export const CHANGE_ORDER_STATUS_VARIANTS: Record<
+  ChangeOrderStatus,
+  BadgeVariant
+> = {
+  draft: "secondary",
+  sent: "outline",
+  approved: "default",
+  denied: "secondary",
+};
+
+export function changeOrderStatusLabel(value: string): string {
+  return CHANGE_ORDER_STATUS_LABELS[value as ChangeOrderStatus] ?? value;
+}
+export function changeOrderStatusVariant(value: string): BadgeVariant {
+  return CHANGE_ORDER_STATUS_VARIANTS[value as ChangeOrderStatus] ?? "secondary";
+}
+
 type BadgeVariant = "default" | "secondary" | "outline";
 
 export const BID_STATUS_LABELS: Record<BidStatus, string> = {

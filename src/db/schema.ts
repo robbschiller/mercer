@@ -22,6 +22,10 @@ import {
   ACCESS_TYPES,
   EXPENSE_CATEGORIES,
   PAYMENT_TYPES,
+  INVOICE_TYPES,
+  INVOICE_STATUSES,
+  CHANGE_ORDER_REASONS,
+  CHANGE_ORDER_STATUSES,
 } from "@/lib/status-meta";
 
 export const accounts = pgTable("accounts", {
@@ -473,6 +477,70 @@ export const expenses = pgTable("expenses", {
   invoiceNumber: text("invoice_number"),
   receiptUrl: text("receipt_url"),
   enteredBy: uuid("entered_by"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Change orders: scope additions/credits during a job (Phase 1b). `amount` is
+ * signed (positive adds to the contract, negative credits). Approved change
+ * orders adjust the derived contract baseline. Keyed to the bid spine.
+ */
+export const changeOrders = pgTable("change_orders", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  bidId: uuid("bid_id")
+    .notNull()
+    .references(() => bids.id, { onDelete: "cascade" }),
+  number: text("number"),
+  description: text("description").notNull().default(""),
+  detail: text("detail").notNull().default(""),
+  reason: text("reason", { enum: CHANGE_ORDER_REASONS }),
+  amount: numeric("amount").notNull(),
+  status: text("status", { enum: CHANGE_ORDER_STATUSES })
+    .notNull()
+    .default("draft"),
+  approvedBy: text("approved_by"),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  createdBy: uuid("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Invoices: customer-facing billing against a job (Phase 1b). Large jobs bill
+ * as draws on milestones; small jobs as deposit + final. Keyed to the bid
+ * spine; CO invoices link back to a change order.
+ */
+export const invoices = pgTable("invoices", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  bidId: uuid("bid_id")
+    .notNull()
+    .references(() => bids.id, { onDelete: "cascade" }),
+  number: text("number"),
+  type: text("type", { enum: INVOICE_TYPES }).notNull().default("draw"),
+  sequence: integer("sequence"),
+  amount: numeric("amount").notNull(),
+  status: text("status", { enum: INVOICE_STATUSES })
+    .notNull()
+    .default("pending"),
+  trigger: text("trigger"),
+  invoicedAt: date("invoiced_at"),
+  dueAt: date("due_at"),
+  paidAt: date("paid_at"),
+  changeOrderId: uuid("change_order_id").references(() => changeOrders.id, {
+    onDelete: "set null",
+  }),
+  pdfUrl: text("pdf_url"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
