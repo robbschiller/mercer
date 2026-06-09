@@ -98,6 +98,42 @@ export default async function NewLeadPage({
               />
             </div>
 
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="estValue">Estimated value</Label>
+                <Input
+                  id="estValue"
+                  name="estValue"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="Rough $ before takeoff"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="scopeCategory">Scope tags</Label>
+                <Input
+                  id="scopeCategory"
+                  name="scopeCategory"
+                  placeholder="Full exterior, Breezeways"
+                />
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="isLargeJob"
+                className="size-4 rounded border-input"
+              />
+              <span>
+                Large job{" "}
+                <span className="text-muted-foreground">
+                  (≥ 2 weeks — drives the takeoff &amp; billing template)
+                </span>
+              </span>
+            </label>
+
             <div className="flex flex-col gap-2">
               <Label htmlFor="notes">Notes</Label>
               <Textarea id="notes" name="notes" rows={3} />
