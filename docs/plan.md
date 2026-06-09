@@ -58,6 +58,14 @@ Update this section in the same PR when status changes ([`AGENTS.md`](../AGENTS.
 4. [ ] **Phase A2 — sort leads by estimated bid** — gated on footprint/estimate fields (Phase B1). While B1 is paused, optional: explicit **sort by created date** control if product wants sort without estimates.
 5. **Next strategic bet** — demo landed, now the real unlock per PRD §9 is M1 (capture-first bidding) or M3 (lead qualification agent). Both gated on the decisions in *Decisions blocking Milestone 1 / Phase 1* below. Do not start writing agent code until at least the vision-model + evals-platform + ground-truth decisions are made.
 
+### AQP Operating System reconciliation (captured 2026-06-09)
+
+First customer (Austin/Affordable Quality Painting) shared an alpha "Operating System" spec (PDF summary + `SCHEMA.md` 18 entities + `aqp-alpha.html` 8 screens). It independently validates Mercer's property-rooted spine; Mercer already has the front half. **Mercer is the product, AQP the first customer** — AQP's hardcoded constants become per-org config. Full entity-by-entity + screen-by-screen delta, the config-per-org list, and the phased sequence: [`docs/build-plans/aqp_reconciliation.plan.md`](build-plans/aqp_reconciliation.plan.md).
+
+**Decided 2026-06-09 — Model A:** keep Mercer's collapsed "bid IS the project" spine (do not reintroduce a `jobs` table); add an immutable `bids.contract_value` snapshot at acceptance and hang the money layer (`expenses`/`invoices`/`change_orders`) off `bids`.
+
+Biggest gap = the **money/jobs layer** (Jordan's high-value "ops layer"): expenses + budget-by-category + derived burn/profitability → invoices/draws → change orders. Then temporal refinements (dated property↔mgmt/owner, contact employment, `is_large_job`), then the small-job catalog track. **Next:** start the money layer (Phase 1 in the reconciliation plan).
+
 ### Feature queue (captured 2026-06-09, build out eventually)
 
 Tim-requested future bets — captured now, not in the active priority list above. Each has a build-plan stub.
