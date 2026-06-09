@@ -4,15 +4,21 @@ import {
   getProject,
   getProjectPreStart,
   getProjectUpdates,
+  getJobFinancials,
+  getExpensesForBid,
   allowedProjectStatusTransitions,
   isProjectStartReady,
   type ProjectStatus,
+  type JobFinancials,
+  type Expense,
 } from "@/lib/store";
 import {
   updateProjectStatusAction,
   updateProjectDetailsAction,
   createProjectUpdateAction,
   setProjectNtoAction,
+  createExpenseAction,
+  deleteExpenseAction,
 } from "@/lib/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,8 +39,21 @@ import {
   bidStatusVariant,
   projectStatusLabel,
   projectStatusVariant,
+  expenseCategoryLabel,
+  paymentTypeLabel,
+  EXPENSE_CATEGORIES,
+  PAYMENT_TYPES,
 } from "@/lib/status-meta";
 import type { ProjectPreStart } from "@/lib/store";
+
+const money = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
+function fmtMoney(n: number | null): string {
+  return n == null ? "—" : money.format(n);
+}
 
 const STATUS_DESCRIPTIONS: Record<ProjectStatus, string> = {
   not_started:
@@ -96,9 +115,11 @@ export default async function ProjectPage({
 
   const { project, bid } = data;
   const transitions = allowedProjectStatusTransitions(project.status);
-  const [updates, preStart] = await Promise.all([
+  const [updates, preStart, financials, expenses] = await Promise.all([
     getProjectUpdates(project.id),
     project.status === "not_started" ? getProjectPreStart(project.id) : Promise.resolve(null),
+    getJobFinancials(project.id),
+    getExpensesForBid(project.id),
   ]);
   const startReady = preStart ? isProjectStartReady(preStart) : true;
 
@@ -171,6 +192,12 @@ export default async function ProjectPage({
           </div>
         </CardContent>
       </Card>
+
+      <BudgetCard
+        projectId={project.id}
+        financials={financials}
+        expenses={expenses}
+      />
 
       <Card>
         <CardHeader>
@@ -479,6 +506,252 @@ function PreStartCard({
             Save checklist
           </SubmitButton>
         </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+const SELECT_CLASS =
+  "h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "bad";
+}) {
+  return (
+    <div className="rounded-md border p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p
+        className={
+          "text-lg font-semibold tabular-nums " +
+          (tone === "bad" ? "text-destructive" : "")
+        }
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function BudgetCard({
+  projectId,
+  financials,
+  expenses,
+}: {
+  projectId: string;
+  financials: JobFinancials;
+  expenses: Expense[];
+}) {
+  const { contractValue, spent, remaining, pctSpent, byCategory } = financials;
+  const pct = pctSpent == null ? null : Math.min(100, Math.round(pctSpent * 100));
+  const over = remaining != null && remaining < 0;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Budget</CardTitle>
+        <CardDescription>
+          Real-time spend against the contract baseline. Contract value is
+          snapshotted from the accepted proposal; spent, remaining, and profit
+          derive live from dated expenses.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-5">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Stat label="Contract" value={fmtMoney(contractValue)} />
+          <Stat label="Spent" value={fmtMoney(spent)} />
+          <Stat
+            label={over ? "Over by" : "Remaining"}
+            value={fmtMoney(remaining == null ? null : Math.abs(remaining))}
+            tone={over ? "bad" : undefined}
+          />
+        </div>
+
+        {pct != null ? (
+          <div>
+            <div className="mb-1 flex justify-between text-xs text-muted-foreground">
+              <span>{pct}% of contract spent</span>
+              <span className="tabular-nums">
+                {fmtMoney(spent)} / {fmtMoney(contractValue)}
+              </span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className={
+                  "h-full rounded-full " + (over ? "bg-destructive" : "bg-primary")
+                }
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            No contract value yet — it&apos;s stamped when the proposal is
+            accepted.
+          </p>
+        )}
+
+        {byCategory.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <p className="text-xs font-medium text-muted-foreground">
+              Spent by category
+            </p>
+            {byCategory.map((c) => (
+              <div
+                key={c.category}
+                className="flex justify-between text-sm"
+              >
+                <span>{expenseCategoryLabel(c.category)}</span>
+                <span className="tabular-nums">{fmtMoney(c.spent)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <form
+          action={createExpenseAction}
+          className="grid gap-3 rounded-md border p-3"
+        >
+          <input type="hidden" name="bidId" value={projectId} />
+          <p className="text-sm font-medium">Add expense</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-1.5">
+              <Label htmlFor="exp-date">Date</Label>
+              <Input id="exp-date" name="date" type="date" required />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="exp-amount">Amount</Label>
+              <Input
+                id="exp-amount"
+                name="amount"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                required
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="exp-category">Category</Label>
+              <select
+                id="exp-category"
+                name="category"
+                required
+                defaultValue=""
+                className={SELECT_CLASS}
+              >
+                <option value="" disabled>
+                  — Pick —
+                </option>
+                {EXPENSE_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {expenseCategoryLabel(c)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="exp-payment">Payment</Label>
+              <select
+                id="exp-payment"
+                name="paymentType"
+                defaultValue=""
+                className={SELECT_CLASS}
+              >
+                <option value="">—</option>
+                {PAYMENT_TYPES.map((p) => (
+                  <option key={p} value={p}>
+                    {paymentTypeLabel(p)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="exp-vendor">Vendor</Label>
+              <Input
+                id="exp-vendor"
+                name="vendor"
+                placeholder="Sherwin Williams"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="exp-tax">Tax</Label>
+              <Input
+                id="exp-tax"
+                name="tax"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="exp-desc">Description</Label>
+            <Input
+              id="exp-desc"
+              name="description"
+              placeholder="Optional note"
+            />
+          </div>
+          <div>
+            <SubmitButton size="sm">Add expense</SubmitButton>
+          </div>
+        </form>
+
+        {expenses.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No expenses logged yet.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <p className="text-xs font-medium text-muted-foreground">Ledger</p>
+            <ul className="flex flex-col divide-y">
+              {expenses.map((e) => (
+                <li
+                  key={e.id}
+                  className="flex items-center justify-between gap-3 py-2 text-sm"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate">
+                      {e.vendor || expenseCategoryLabel(e.category)}
+                      <span className="text-muted-foreground">
+                        {" · "}
+                        {expenseCategoryLabel(e.category)}
+                      </span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDate(e.date)}
+                      {e.paymentType ? ` · ${paymentTypeLabel(e.paymentType)}` : ""}
+                      {e.description ? ` · ${e.description}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="tabular-nums">
+                      {fmtMoney(Number(e.amount) + Number(e.tax))}
+                    </span>
+                    <form action={deleteExpenseAction}>
+                      <input type="hidden" name="id" value={e.id} />
+                      <input type="hidden" name="bidId" value={projectId} />
+                      <button
+                        type="submit"
+                        aria-label="Delete expense"
+                        className="rounded p-1 text-xs text-muted-foreground hover:text-destructive"
+                      >
+                        ✕
+                      </button>
+                    </form>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

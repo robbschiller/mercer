@@ -50,6 +50,8 @@ import {
   inviteOrgMember,
   removeOrgMember,
   createContact,
+  createExpense,
+  deleteExpense,
 } from "./store";
 import { getOrgContext } from "./org-context";
 import { enrichCompanyFromWebsite } from "./onboarding/enrich-from-website";
@@ -104,6 +106,8 @@ import {
   updateCompanyProfileSchema,
   inviteOrgMemberSchema,
   removeOrgMemberSchema,
+  createExpenseSchema,
+  deleteExpenseSchema,
 } from "./validations";
 import { calculateBidPricing } from "./pricing";
 import type { ProposalSnapshot } from "./pdf/types";
@@ -717,6 +721,34 @@ export async function createContactAction(formData: FormData) {
   const contact = await createContact(result.data);
   revalidatePath("/contacts");
   redirect(`/contacts/${contact.id}`);
+}
+
+// ── Money layer (AQP reconciliation, Phase 1) ──
+
+export async function createExpenseAction(formData: FormData) {
+  const result = createExpenseSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    const bidId = (formData.get("bidId") as string) || "";
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/projects/${bidId}?error=${encodeURIComponent(message)}`);
+  }
+  const { bidId, ...rest } = result.data;
+  try {
+    await createExpense({ bidId, ...rest });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to add expense";
+    redirect(`/projects/${bidId}?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath(`/projects/${bidId}`);
+  redirect(`/projects/${bidId}`);
+}
+
+export async function deleteExpenseAction(formData: FormData) {
+  const result = deleteExpenseSchema.safeParse(formDataToObject(formData));
+  if (!result.success) return;
+  await deleteExpense(result.data.id);
+  revalidatePath(`/projects/${result.data.bidId}`);
 }
 
 /**

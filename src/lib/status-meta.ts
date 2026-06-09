@@ -118,6 +118,88 @@ export function accessTypeLabel(value: string): string {
   return ACCESS_TYPE_LABELS[value as AccessType] ?? value;
 }
 
+// ── Money layer (AQP reconciliation, Phase 1) ──
+// Canonical expense categories (the 15 large-job buckets + a catch-all). Per
+// the AQP reconciliation these eventually become per-org config; canonical
+// constants for now. See docs/build-plans/aqp_reconciliation.plan.md.
+export const EXPENSE_CATEGORIES = [
+  "staging",
+  "lifts",
+  "primer_sealer",
+  "topcoat",
+  "metal_paint_primer",
+  "floor_paint",
+  "supplies",
+  "caulk",
+  "patch",
+  "cleaners",
+  "misc_supplies",
+  "travel",
+  "repairs",
+  "non_paint_labor",
+  "paint_labor",
+  "other",
+] as const;
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+
+export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
+  staging: "Staging",
+  lifts: "Lifts",
+  primer_sealer: "Primer / sealer",
+  topcoat: "Topcoat",
+  metal_paint_primer: "Metal paint / primer",
+  floor_paint: "Floor paint",
+  supplies: "Supplies",
+  caulk: "Caulk",
+  patch: "Patch",
+  cleaners: "Cleaners",
+  misc_supplies: "Misc supplies",
+  travel: "Travel",
+  repairs: "Repairs",
+  non_paint_labor: "Non-paint labor",
+  paint_labor: "Paint labor",
+  other: "Other",
+};
+
+export function expenseCategoryLabel(value: string): string {
+  return EXPENSE_CATEGORY_LABELS[value as ExpenseCategory] ?? value;
+}
+
+export const PAYMENT_TYPES = [
+  "spark_cc",
+  "amex",
+  "chase",
+  "ach",
+  "check",
+  "sw_charge",
+  "hd_charge",
+  "florida_paints",
+  "lanco",
+  "cash",
+  "refund",
+  "other",
+] as const;
+export type PaymentType = (typeof PAYMENT_TYPES)[number];
+
+export const PAYMENT_TYPE_LABELS: Record<PaymentType, string> = {
+  spark_cc: "Spark CC",
+  amex: "Amex",
+  chase: "Chase",
+  ach: "ACH",
+  check: "Check",
+  sw_charge: "SW charge",
+  hd_charge: "HD charge",
+  florida_paints: "Florida Paints",
+  lanco: "Lanco",
+  cash: "Cash",
+  refund: "Refund",
+  other: "Other",
+};
+
+export function paymentTypeLabel(value: string): string {
+  return PAYMENT_TYPE_LABELS[value as PaymentType] ?? value;
+}
+
 type BadgeVariant = "default" | "secondary" | "outline";
 
 export const BID_STATUS_LABELS: Record<BidStatus, string> = {

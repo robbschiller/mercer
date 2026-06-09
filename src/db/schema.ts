@@ -20,6 +20,8 @@ import {
   PROPERTY_PARTY_ROLES,
   BUILDING_ARCHETYPES,
   ACCESS_TYPES,
+  EXPENSE_CATEGORIES,
+  PAYMENT_TYPES,
 } from "@/lib/status-meta";
 
 export const accounts = pgTable("accounts", {
@@ -187,6 +189,13 @@ export const bids = pgTable("bids", {
   acceptedByName: text("accepted_by_name"),
   acceptedByTitle: text("accepted_by_title"),
   acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  /**
+   * Immutable contract baseline, snapshotted from the accepted proposal total
+   * at acceptance (AQP reconciliation, Model A — the bid row IS the project,
+   * so the money layer hangs off it). All profitability derives from this;
+   * never recomputed. See docs/build-plans/aqp_reconciliation.plan.md.
+   */
+  contractValue: numeric("contract_value"),
   deliveryNotes: text("delivery_notes").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -437,6 +446,37 @@ export const projectUpdates = pgTable("project_updates", {
     .notNull()
     .default(false),
   createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Expenses: every dollar spent against a job, as dated rows (AQP principle #5
+ * — money flows through dated events; job financial state is derived, never
+ * stored). Keyed to the bid spine (the bid IS the project, Model A). `category`
+ * + `paymentType` are canonical enums for clean reporting. See
+ * docs/build-plans/aqp_reconciliation.plan.md.
+ */
+export const expenses = pgTable("expenses", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  bidId: uuid("bid_id")
+    .notNull()
+    .references(() => bids.id, { onDelete: "cascade" }),
+  date: date("date").notNull(),
+  category: text("category", { enum: EXPENSE_CATEGORIES }).notNull(),
+  paymentType: text("payment_type", { enum: PAYMENT_TYPES }),
+  vendor: text("vendor"),
+  description: text("description").notNull().default(""),
+  amount: numeric("amount").notNull(),
+  tax: numeric("tax").notNull().default("0"),
+  invoiceNumber: text("invoice_number"),
+  receiptUrl: text("receipt_url"),
+  enteredBy: uuid("entered_by"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
