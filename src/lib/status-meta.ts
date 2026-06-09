@@ -310,6 +310,82 @@ export function changeOrderStatusVariant(value: string): BadgeVariant {
   return CHANGE_ORDER_STATUS_VARIANTS[value as ChangeOrderStatus] ?? "secondary";
 }
 
+// ── Phase 3: service catalog + supplier pricing ──
+
+export const PRICE_LIST_CATEGORIES = [
+  "painting",
+  "pressure_washing",
+  "wood_repair",
+  "stair_systems",
+  "caulking",
+  "gutters",
+  "other",
+] as const;
+export type PriceListCategory = (typeof PRICE_LIST_CATEGORIES)[number];
+
+export const PRICE_LIST_CATEGORY_LABELS: Record<PriceListCategory, string> = {
+  painting: "Painting",
+  pressure_washing: "Pressure washing",
+  wood_repair: "Wood repair",
+  stair_systems: "Stair systems",
+  caulking: "Caulking",
+  gutters: "Gutters",
+  other: "Other",
+};
+
+export function priceListCategoryLabel(value: string): string {
+  return PRICE_LIST_CATEGORY_LABELS[value as PriceListCategory] ?? value;
+}
+
+export const PRICING_UNITS = [
+  "sf",
+  "lf",
+  "qty",
+  "each",
+  "system",
+  "bldg",
+  "unit",
+] as const;
+export type PricingUnit = (typeof PRICING_UNITS)[number];
+
+export const PRICING_UNIT_LABELS: Record<PricingUnit, string> = {
+  sf: "per sq ft",
+  lf: "per linear ft",
+  qty: "per qty",
+  each: "each",
+  system: "per system",
+  bldg: "per building",
+  unit: "per unit",
+};
+
+export function pricingUnitLabel(value: string): string {
+  return PRICING_UNIT_LABELS[value as PricingUnit] ?? value;
+}
+
+export const SUPPLIER_PRODUCT_TYPES = [
+  "paint",
+  "primer",
+  "caulk",
+  "cleaner",
+  "equipment",
+  "consumable",
+] as const;
+export type SupplierProductType = (typeof SUPPLIER_PRODUCT_TYPES)[number];
+
+export const SUPPLIER_PRODUCT_TYPE_LABELS: Record<SupplierProductType, string> =
+  {
+    paint: "Paint",
+    primer: "Primer",
+    caulk: "Caulk",
+    cleaner: "Cleaner",
+    equipment: "Equipment",
+    consumable: "Consumable",
+  };
+
+export function supplierProductTypeLabel(value: string): string {
+  return SUPPLIER_PRODUCT_TYPE_LABELS[value as SupplierProductType] ?? value;
+}
+
 type BadgeVariant = "default" | "secondary" | "outline";
 
 export const BID_STATUS_LABELS: Record<BidStatus, string> = {

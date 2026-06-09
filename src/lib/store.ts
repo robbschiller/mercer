@@ -25,6 +25,8 @@ import {
   expenses,
   changeOrders,
   invoices,
+  priceListItems,
+  supplierProducts,
   companyProfiles,
   onboardings,
   orgMemberships,
@@ -53,6 +55,9 @@ import type {
   InvoiceStatus,
   ChangeOrderReason,
   ChangeOrderStatus,
+  PriceListCategory,
+  PricingUnit,
+  SupplierProductType,
 } from "@/lib/status-meta";
 
 export type Bid = typeof bids.$inferSelect;
@@ -5456,4 +5461,152 @@ export async function getContactEmploymentHistory(
     )
     .orderBy(desc(contactEmployment.startDate));
   return rows.map((r) => ({ ...r, current: r.endDate == null }));
+}
+
+// ── Service catalog + supplier pricing (Phase 3) ────────────────────────────
+
+export type PriceListItem = typeof priceListItems.$inferSelect;
+export type SupplierProduct = typeof supplierProducts.$inferSelect;
+
+export async function getPriceListItems(
+  opts?: { activeOnly?: boolean },
+): Promise<PriceListItem[]> {
+  const user = await requireUser();
+  const conds = [eq(priceListItems.userId, user.ownerUserId)];
+  if (opts?.activeOnly) conds.push(eq(priceListItems.active, true));
+  return db
+    .select()
+    .from(priceListItems)
+    .where(and(...conds))
+    .orderBy(asc(priceListItems.name));
+}
+
+export async function createPriceListItem(data: {
+  sku: string;
+  name: string;
+  category?: PriceListCategory | null;
+  pricingUnit?: PricingUnit | null;
+  chargePerUnit?: number | null;
+  subCostPerUnit?: number | null;
+  description?: string | null;
+}): Promise<PriceListItem> {
+  const user = await requireUser();
+  const rows = await db
+    .insert(priceListItems)
+    .values({
+      userId: user.ownerUserId,
+      sku: data.sku.trim(),
+      name: data.name.trim(),
+      category: data.category ?? null,
+      pricingUnit: data.pricingUnit ?? null,
+      chargePerUnit: data.chargePerUnit == null ? null : String(data.chargePerUnit),
+      subCostPerUnit: data.subCostPerUnit == null ? null : String(data.subCostPerUnit),
+      description: (data.description ?? "").trim(),
+    })
+    .returning();
+  return rows[0];
+}
+
+export async function setPriceListItemActive(
+  id: string,
+  active: boolean,
+): Promise<void> {
+  const user = await requireUser();
+  await db
+    .update(priceListItems)
+    .set({ active, updatedAt: new Date() })
+    .where(
+      and(eq(priceListItems.id, id), eq(priceListItems.userId, user.ownerUserId)),
+    );
+}
+
+export async function deletePriceListItem(id: string): Promise<void> {
+  const user = await requireUser();
+  await db
+    .delete(priceListItems)
+    .where(
+      and(eq(priceListItems.id, id), eq(priceListItems.userId, user.ownerUserId)),
+    );
+}
+
+export async function getSupplierProducts(
+  opts?: { activeOnly?: boolean },
+): Promise<SupplierProduct[]> {
+  const user = await requireUser();
+  const conds = [eq(supplierProducts.userId, user.ownerUserId)];
+  if (opts?.activeOnly) conds.push(eq(supplierProducts.active, true));
+  return db
+    .select()
+    .from(supplierProducts)
+    .where(and(...conds))
+    .orderBy(asc(supplierProducts.supplier), asc(supplierProducts.productName));
+}
+
+export async function createSupplierProduct(data: {
+  supplier: string;
+  productName: string;
+  productType?: SupplierProductType | null;
+  unit?: string | null;
+  unitPrice?: number | null;
+  spreadRate?: number | null;
+  expenseCategory?: ExpenseCategory | null;
+}): Promise<SupplierProduct> {
+  const user = await requireUser();
+  const rows = await db
+    .insert(supplierProducts)
+    .values({
+      userId: user.ownerUserId,
+      supplier: data.supplier.trim(),
+      productName: data.productName.trim(),
+      productType: data.productType ?? null,
+      unit: data.unit ?? null,
+      unitPrice: data.unitPrice == null ? null : String(data.unitPrice),
+      spreadRate: data.spreadRate == null ? null : String(data.spreadRate),
+      expenseCategory: data.expenseCategory ?? null,
+      lastUpdated: new Date().toISOString().slice(0, 10),
+    })
+    .returning();
+  return rows[0];
+}
+
+export async function deleteSupplierProduct(id: string): Promise<void> {
+  const user = await requireUser();
+  await db
+    .delete(supplierProducts)
+    .where(
+      and(
+        eq(supplierProducts.id, id),
+        eq(supplierProducts.userId, user.ownerUserId),
+      ),
+    );
+}
+
+/**
+ * Small-job pricing: add a catalog SKU to a bid as a line item
+ * (amount = charge_per_unit × quantity). Reuses the line-item path.
+ */
+export async function addCatalogLineItem(
+  bidId: string,
+  priceListItemId: string,
+  quantity: number,
+): Promise<void> {
+  const user = await requireUser();
+  await requireBidOwnership(bidId, user.ownerUserId);
+  const rows = await db
+    .select()
+    .from(priceListItems)
+    .where(
+      and(
+        eq(priceListItems.id, priceListItemId),
+        eq(priceListItems.userId, user.ownerUserId),
+      ),
+    )
+    .limit(1);
+  const item = rows[0];
+  if (!item) throw new Error("Catalog item not found");
+  const charge = item.chargePerUnit == null ? 0 : Number(item.chargePerUnit);
+  const qty = Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+  const amount = charge * qty;
+  const name = qty === 1 ? item.name : `${item.name} ×${qty}`;
+  await createLineItem(bidId, { name, amount: String(amount) });
 }

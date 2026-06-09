@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, CircleDollarSign, FileText } from "lucide-react";
+import { Building2, CircleDollarSign, FileText, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
@@ -12,6 +12,7 @@ const items = [
     icon: CircleDollarSign,
     exact: true,
   },
+  { href: "/settings/catalog", label: "Catalog & suppliers", icon: Package },
   { href: "/settings/company", label: "Company details", icon: FileText },
   { href: "/settings/members", label: "Team", icon: Building2 },
 ];

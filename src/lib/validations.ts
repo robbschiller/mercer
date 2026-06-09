@@ -11,7 +11,24 @@ import {
   INVOICE_STATUSES,
   CHANGE_ORDER_REASONS,
   CHANGE_ORDER_STATUSES,
+  PRICE_LIST_CATEGORIES,
+  PRICING_UNITS,
+  SUPPLIER_PRODUCT_TYPES,
 } from "./status-meta";
+
+/** Optional number from a form field: "" / null → null, else coerced number. */
+const optionalNumber = z.preprocess(
+  (v) => (v === "" || v == null ? null : Number(v)),
+  z.union([z.number().finite(), z.null()]),
+);
+
+/** Optional enum from a form select: "" / null → null. */
+function optionalEnum<T extends readonly [string, ...string[]]>(values: T) {
+  return z.preprocess(
+    (v) => (v === "" || v == null ? null : v),
+    z.union([z.enum(values), z.null()]),
+  );
+}
 
 /** Form select → archetype enum, with empty string / missing → null. */
 const archetypeField = z.preprocess(
@@ -349,6 +366,35 @@ export const setChangeOrderStatusSchema = z.object({
 export const deleteChangeOrderSchema = z.object({
   id: z.string().uuid("Invalid change order ID"),
   bidId: z.string().uuid("Invalid project ID"),
+});
+
+// ── Phase 3: catalog + supplier pricing ──
+export const createPriceListItemSchema = z.object({
+  sku: z.string().trim().min(1, "SKU is required"),
+  name: z.string().trim().min(1, "Name is required"),
+  category: optionalEnum(PRICE_LIST_CATEGORIES),
+  pricingUnit: optionalEnum(PRICING_UNITS),
+  chargePerUnit: optionalNumber,
+  subCostPerUnit: optionalNumber,
+  description: optionalText,
+});
+
+export const idSchema = z.object({ id: z.string().uuid("Invalid ID") });
+
+export const createSupplierProductSchema = z.object({
+  supplier: z.string().trim().min(1, "Supplier is required"),
+  productName: z.string().trim().min(1, "Product name is required"),
+  productType: optionalEnum(SUPPLIER_PRODUCT_TYPES),
+  unit: optionalText,
+  unitPrice: optionalNumber,
+  spreadRate: optionalNumber,
+  expenseCategory: optionalEnum(EXPENSE_CATEGORIES),
+});
+
+export const addCatalogLineItemSchema = z.object({
+  bidId: z.string().uuid("Invalid bid ID"),
+  priceListItemId: z.string().uuid("Pick a catalog item"),
+  quantity: z.coerce.number().positive().default(1),
 });
 
 export const importLeadsSchema = z.object({
