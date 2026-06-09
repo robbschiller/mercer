@@ -4,6 +4,31 @@ Running log of in-flight work on the lead-to-close MVP (docs/plan.md). Chronolog
 
 ---
 
+## 2026-06-09 — Ask tab (entity-scoped AI chat, P1) + dashboard composer write-path
+
+Two things landed, both designed to run **before** the business provisions an `ANTHROPIC_API_KEY** — each falls back to a local stand-in and flips to real Claude automatically once the key is set (no code change).
+
+### Ask tab — entity-scoped AI chat (P1 of the Conversation feature)
+
+New `/ask` route + sidebar item ("Ask", `Sparkles`). The user tags **units** and asks about them; answers are grounded in those records' live data. Plan: [`docs/build-plans/conversation_tab.plan.md`](build-plans/conversation_tab.plan.md).
+
+- **Unit types (5):** lead, bid/project, property, contact, company (account). The bid pack covers the project/delivery facet (the bid row IS the project).
+- **Data layer (`src/lib/store.ts`):** `searchUnits(q)` (bounded type-ahead across the 5 tables) and `buildContextPacks(refs)` → compact, org-scoped `ContextPack[]`. The bid/project pack reuses `getBidPageData` + `calculateBidPricing` (estimated total, stage, buildings + paintable sqft, proposal/accepted amount, delivery dates/crew). Added `AI_UNIT_TYPES`, `UnitRef`, `UnitHit`, `ContextPack` exports.
+- **Server action (`src/lib/actions/ask.ts`):** `searchUnitsAction` (picker) + `askMercer({message, refs})`. With a key → Opus 4.8 (`messages.create`, adaptive thinking) with packs as cached system context; without → an **offline mock** that returns the resolved packs as a grounded, badged answer. Both paths run the *same* real search + context resolution — only the prose generation is mocked.
+- **UI (`src/components/ask-chat.tsx`):** thread, composer, "+ Add context" Popover search, removable context chips that persist across turns, "Offline mode" badge on mock answers. Plain `whitespace-pre-wrap` rendering (no markdown renderer yet).
+
+### Dashboard composer write-path (finished mid-flight stub)
+
+The action-first composer parsed intents but never wrote. Wired the 5 pills to result-returning quick actions (`src/lib/actions/dashboard-quick-actions.ts`): add-contact/create-lead/log-call/set-follow-up create real rows (log-call/set-follow-up create a lead to attach to, since both are lead-scoped); start-draft-bid routes into `/bids/new`. `show-overdue` now renders real data via `getOverdueFollowUps`. Composer falls back to a keyword mock when no key.
+
+### What still needs doing
+
+- **Ask P2:** persistence (`conversations` / `conversation_messages` tables) so threads survive reloads + give the model multi-turn memory.
+- **Ask P3:** **actions in-chat** (currently read-only) — let the model call the quick-actions + bid/project mutators behind the same review boundary as the dashboard command bar; UI/chat parity.
+- **Ask polish:** markdown rendering for answers; streaming the model response; tab-name decision (shipped as "Ask").
+- **Composer:** resolve log-call/set-follow-up free text to an **existing** lead/contact before creating a new one (entity resolution).
+- **Blocked on provisioning:** real answers/parsing need `ANTHROPIC_API_KEY` (deferred per business; mocks cover the gap).
+
 ## 2026-05-12 — Routed entity detail pages + signout fix
 
 **Goal:** The property / account / contact context that had been living in an in-table resizable side panel on `/leads` needed to graduate into routed pages, both so the URLs are shareable and so the Niko table can take the full viewport width. Cross-links between accounts ↔ properties ↔ contacts ↔ leads were also overdue. Same session swept up the broken signout button.

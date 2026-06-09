@@ -8,6 +8,7 @@ import {
   HardHat,
   LayoutDashboard,
   Settings,
+  Sparkles,
   Users,
 } from "lucide-react";
 import {
@@ -19,6 +20,7 @@ import {
 
 const items = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/ask", label: "Ask", icon: Sparkles },
   { href: "/contacts", label: "Contacts", icon: ContactRound },
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/bids", label: "Bids", icon: ClipboardList },
