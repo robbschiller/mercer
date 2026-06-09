@@ -58,6 +58,12 @@ import {
   createChangeOrder,
   setChangeOrderStatus,
   deleteChangeOrder,
+  createPriceListItem,
+  setPriceListItemActive,
+  deletePriceListItem,
+  createSupplierProduct,
+  deleteSupplierProduct,
+  addCatalogLineItem,
 } from "./store";
 import { getOrgContext } from "./org-context";
 import { enrichCompanyFromWebsite } from "./onboarding/enrich-from-website";
@@ -120,6 +126,10 @@ import {
   createChangeOrderSchema,
   setChangeOrderStatusSchema,
   deleteChangeOrderSchema,
+  createPriceListItemSchema,
+  createSupplierProductSchema,
+  addCatalogLineItemSchema,
+  idSchema,
 } from "./validations";
 import { calculateBidPricing } from "./pricing";
 import type { ProposalSnapshot } from "./pdf/types";
@@ -833,6 +843,88 @@ export async function deleteChangeOrderAction(formData: FormData) {
   if (!result.success) return;
   await deleteChangeOrder(result.data.id);
   revalidatePath(`/projects/${result.data.bidId}`);
+}
+
+// ── Catalog + supplier pricing (Phase 3) ──
+
+export async function createPriceListItemAction(formData: FormData) {
+  const result = createPriceListItemSchema.safeParse(
+    formDataToObject(formData),
+  );
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/settings/catalog?error=${encodeURIComponent(message)}`);
+  }
+  try {
+    await createPriceListItem(result.data);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to add catalog item";
+    redirect(`/settings/catalog?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath("/settings/catalog");
+  redirect("/settings/catalog");
+}
+
+export async function setPriceListItemActiveAction(formData: FormData) {
+  const id = formData.get("id");
+  const active = formData.get("active") === "true";
+  if (typeof id === "string" && id) {
+    await setPriceListItemActive(id, active);
+    revalidatePath("/settings/catalog");
+  }
+}
+
+export async function deletePriceListItemAction(formData: FormData) {
+  const result = idSchema.safeParse(formDataToObject(formData));
+  if (!result.success) return;
+  await deletePriceListItem(result.data.id);
+  revalidatePath("/settings/catalog");
+}
+
+export async function createSupplierProductAction(formData: FormData) {
+  const result = createSupplierProductSchema.safeParse(
+    formDataToObject(formData),
+  );
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/settings/catalog?error=${encodeURIComponent(message)}`);
+  }
+  try {
+    await createSupplierProduct(result.data);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to add supplier product";
+    redirect(`/settings/catalog?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath("/settings/catalog");
+  redirect("/settings/catalog");
+}
+
+export async function deleteSupplierProductAction(formData: FormData) {
+  const result = idSchema.safeParse(formDataToObject(formData));
+  if (!result.success) return;
+  await deleteSupplierProduct(result.data.id);
+  revalidatePath("/settings/catalog");
+}
+
+export async function addCatalogLineItemAction(formData: FormData) {
+  const result = addCatalogLineItemSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    const bidId = (formData.get("bidId") as string) || "";
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/bids/${bidId}?error=${encodeURIComponent(message)}`);
+  }
+  const { bidId, priceListItemId, quantity } = result.data;
+  try {
+    await addCatalogLineItem(bidId, priceListItemId, quantity);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to add catalog item";
+    redirect(`/bids/${bidId}?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath(`/bids/${bidId}`);
+  redirect(`/bids/${bidId}`);
 }
 
 /**

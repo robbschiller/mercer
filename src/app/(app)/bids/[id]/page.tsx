@@ -1,12 +1,27 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { getBidPageData, getProjectByBidId } from "@/lib/store";
+import {
+  getBidPageData,
+  getProjectByBidId,
+  getPriceListItems,
+} from "@/lib/store";
+import { addCatalogLineItemAction } from "@/lib/actions";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { SubmitButton } from "@/components/submit-button";
+import { pricingUnitLabel } from "@/lib/status-meta";
 import { getAppOrigin } from "@/lib/env";
 import { calculateBidPricing } from "@/lib/pricing";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { BidSummary } from "@/components/bid-summary";
 import { BidDetailSections } from "@/components/bid-detail-sections";
 import { BreadcrumbLabel } from "@/components/breadcrumb-label";
@@ -26,9 +41,10 @@ export default async function BidPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const [{ id }, { error }] = await Promise.all([params, searchParams]);
-  const [data, project] = await Promise.all([
+  const [data, project, catalog] = await Promise.all([
     getBidPageData(id),
     getProjectByBidId(id),
+    getPriceListItems({ activeOnly: true }),
   ]);
 
   if (!data) {
@@ -141,6 +157,61 @@ export default async function BidPage({
         pricing={pricing}
         siteUrl={siteUrl}
       />
+
+      {catalog.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Add from catalog</CardTitle>
+            <CardDescription>
+              Pull a standardized SKU from your service catalog into this bid as
+              a line item (charge × quantity). Manage the catalog in Settings →
+              Catalog &amp; suppliers.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form
+              action={addCatalogLineItemAction}
+              className="flex flex-wrap items-end gap-3"
+            >
+              <input type="hidden" name="bidId" value={bid.id} />
+              <div className="flex min-w-56 flex-1 flex-col gap-1.5">
+                <Label htmlFor="cat-item">Catalog item</Label>
+                <select
+                  id="cat-item"
+                  name="priceListItemId"
+                  required
+                  defaultValue=""
+                  className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="" disabled>
+                    — Pick a SKU —
+                  </option>
+                  {catalog.map((it) => (
+                    <option key={it.id} value={it.id}>
+                      {it.name}
+                      {it.chargePerUnit != null
+                        ? ` — $${Number(it.chargePerUnit)}${it.pricingUnit ? ` ${pricingUnitLabel(it.pricingUnit)}` : ""}`
+                        : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex w-24 flex-col gap-1.5">
+                <Label htmlFor="cat-qty">Qty</Label>
+                <Input
+                  id="cat-qty"
+                  name="quantity"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  defaultValue="1"
+                />
+              </div>
+              <SubmitButton size="sm">Add</SubmitButton>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="border-destructive/50">
         <CardContent className="flex items-center justify-between pt-6">

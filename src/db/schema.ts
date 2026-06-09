@@ -26,6 +26,9 @@ import {
   INVOICE_STATUSES,
   CHANGE_ORDER_REASONS,
   CHANGE_ORDER_STATUSES,
+  PRICE_LIST_CATEGORIES,
+  PRICING_UNITS,
+  SUPPLIER_PRODUCT_TYPES,
 } from "@/lib/status-meta";
 
 export const accounts = pgTable("accounts", {
@@ -617,6 +620,58 @@ export const invoices = pgTable("invoices", {
     .notNull()
     .defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Service catalog (Phase 3): standardized SKUs for small-job takeoffs and
+ * large-job additional scope. Org-scoped config (per AQP reconciliation,
+ * AQP's hardcoded price list becomes per-org config).
+ */
+export const priceListItems = pgTable("price_list_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  sku: text("sku").notNull(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  shortDescription: text("short_description"),
+  category: text("category", { enum: PRICE_LIST_CATEGORIES }),
+  pricingUnit: text("pricing_unit", { enum: PRICING_UNITS }),
+  chargePerUnit: numeric("charge_per_unit"),
+  subCostPerUnit: numeric("sub_cost_per_unit"),
+  typicalMaterialCost: numeric("typical_material_cost"),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Supplier products (Phase 3): paint/material/equipment pricing sourced from
+ * supplier sheets (Sherwin-Williams etc.). Org-scoped config; `expenseCategory`
+ * maps to the expenses enum so a purchase autofills its category.
+ */
+export const supplierProducts = pgTable("supplier_products", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  supplier: text("supplier").notNull(),
+  productName: text("product_name").notNull(),
+  productType: text("product_type", { enum: SUPPLIER_PRODUCT_TYPES }),
+  unit: text("unit"),
+  unitPrice: numeric("unit_price"),
+  spreadRate: numeric("spread_rate"),
+  expenseCategory: text("expense_category", { enum: EXPENSE_CATEGORIES }),
+  supplierRepContactId: uuid("supplier_rep_contact_id").references(
+    () => contacts.id,
+    { onDelete: "set null" },
+  ),
+  active: boolean("active").notNull().default(true),
+  lastUpdated: date("last_updated"),
+  createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
