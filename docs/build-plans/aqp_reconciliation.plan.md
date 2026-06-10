@@ -1,6 +1,6 @@
 # Build plan — AQP Operating System → Mercer reconciliation
 
-**Status:** Largely shipped (phases 1–5, 2026-06-09/10, migrations `021`–`029`). Remaining: photos, relationship-editing UI, standalone small-job takeoff screen, reports/analytics — see §Shipped below.
+**Status:** Shipped (2026-06-09/10, migrations `021`–`031`). All reconciliation phases landed — see §Shipped below. Open follow-ups are polish, not gaps: proposal addons/revisions/questions on the portal, richer report extensions (photo_ids/viewed_at), QuickBooks push.
 **Source:** AQP "Operating System" alpha handoff (first customer, Austin/Affordable Quality Painting): `AQP-Operating-System-Summary.pdf`, `SCHEMA.md` (18 entities + DDL), `aqp-alpha.html` (8 screens). `BUILD_MAP.md` not yet shared.
 **Relates to:** [[data-model-and-entry-points]], the property-rooted re-model (`docs/plan.md`), [`docs/build-plans/conversation_tab.plan.md`].
 
@@ -77,7 +77,7 @@ Everything AQP hardcodes becomes per-org config (extend `rate_config`/`user_defa
 | 4 — pipeline | `028` | Lead status enum → needs_takeoff/takeoff_scheduled/quoted/won/lost/no_response/on_hold/expired (`quoted`/`won`/`lost` values kept; `new` migrated); `takeoff_scheduled_at`; `/takeoff-queue` dispatch screen. |
 | 5 — schedule | `029` | `weeks_total`/`current_week`, `days_total`/`current_day`, `buildings_done` (total derived from buildings); job-page Schedule card with large/small fork + burn-rate alert; `warranty_watch` delivery status. |
 
-Known data caveat: pre-existing leads all have `is_large_job = false` (the 2a default was never backfilled) — old large jobs show the small-job day strip until the flag is set.
+| 6 — close-out (2026-06-10) | `030`–`031` | `is_large_job` backfill (2+ buildings or ≥$50k → large); relationship-editing UI (add/end dated mgmt/owner/employment, derived FKs synced); polymorphic `photos` table + public storage bucket + gallery card on lead/project/property; small-job takeoff (`/bids/new/small` catalog/SKU one-screen path, takeoff queue forks large→wizard / small→quick); `/reports` derived analytics (win rates, pipeline, delivered margin, sources, 6-month trend). |
 
 ## Phased sequence
 1. **Money layer (Phase 5 equivalent — highest value, biggest gap).** `bids.contract_value` snapshot at acceptance → `expenses` + budget-by-category + derived burn/profitability → `invoices`/draws → `change_orders`. Job-page money UI. Visual language: cream + deep-blue, restrained pills (matches Mercer + AQP).
