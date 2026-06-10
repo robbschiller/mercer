@@ -4,7 +4,7 @@ The AI-native sales platform for commercial multifamily exterior renovation.
 
 Mercer takes a contractor from a trade-show attendee list to a signed deal to a closed-out project on one spine: ingest leads, enrich them, build a bid, send a live proposal the customer can sign on the web, and track the resulting project through punch-out — with a public status page the property manager can keep open.
 
-The deployed product today (Phase 0) is the non-AI substrate of that workflow: lead pipeline, manual bid build, public proposal with accept/decline, project tracking. Phase 1 adds the AI-native operations on top of this same data model. See [`docs/prd.md`](docs/prd.md) for the full product vision and [`docs/plan.md`](docs/plan.md) for what is shipped, in flight, and paused.
+The deployed product today is the full non-AI operating loop: lead pipeline with a takeoff dispatch queue, large- and small-job takeoffs (physical buildings/surfaces or catalog SKUs), public proposal with accept/decline, and a delivery layer with derived job economics (budget/burn/profit against an immutable contract baseline), schedule progress with a burn-rate alert, invoices/draws, change orders, photos, and roll-up reports. Phase 1 adds the AI-native operations on top of this same data model. See [`docs/prd.md`](docs/prd.md) for the full product vision, [`docs/plan.md`](docs/plan.md) for what is shipped, in flight, and paused, and [`docs/worklog.md`](docs/worklog.md) for session-by-session notes (newest at top).
 
 ## Surfaces
 
@@ -12,7 +12,7 @@ The deployed product today (Phase 0) is the non-AI substrate of that workflow: l
 | ----------- | ------- | ------------- |
 | `(marketing)` | Public landing page; redirects to `/dashboard` if signed in | `/` |
 | `(auth)` | Branded sign-in / sign-up shell that mirrors the marketing surface, with the Mercer wordmark linking back to `/` | `/login`, `/signup` |
-| `(app)` | Authenticated app behind a sidebar shell | `/dashboard`, `/leads`, `/leads/[id]`, `/leads/accounts/[id]`, `/leads/properties/[id]`, `/leads/contacts/[id]`, `/leads/import`, `/leads/new`, `/bids`, `/bids/[id]`, `/bids/new`, `/projects`, `/projects/[id]`, `/settings`, `/settings/company`, `/settings/members` |
+| `(app)` | Authenticated app behind a sidebar shell | `/dashboard`, `/ask`, `/leads`, `/leads/[id]`, `/leads/accounts/[id]`, `/leads/properties/[id]`, `/leads/contacts/[id]`, `/leads/import`, `/leads/new`, `/takeoff-queue`, `/bids`, `/bids/[id]`, `/bids/new`, `/bids/new/small`, `/projects`, `/projects/[id]`, `/reports`, `/settings`, `/settings/catalog`, `/settings/company`, `/settings/members` |
 | `(onboarding)` | Post-signup branding wizard with website enrichment and theme confirmation | `/onboarding` |
 | Public sharing | No-auth proposal/status page | `/p/[slug]` (proposal pre-acceptance, project status page post-acceptance) |
 | Auth callback | Supabase OAuth redirect handler | `/auth/callback` |
@@ -28,7 +28,10 @@ The deployed product today (Phase 0) is the non-AI substrate of that workflow: l
 - **Account autocomplete on new-lead entry.** `/leads/new` resolves the company field against existing accounts (suggest-as-you-type) so manually-added leads attach to the existing account graph rather than minting a near-duplicate.
 - **Per-lead outreach state.** `last_contacted_at`, `follow_up_at`, and `contact_attempts` columns drive an Outreach card on the lead detail (one-click "log contact attempt", follow-up date input with overdue indicator). The property table rolls up earliest follow-up across contacts.
 - Lead enrichment via Google Places: the CSV property address is treated as authoritative; Places fills in lat/lng and Place ID, and only resolves a fresh address when the row is `company`-only. Satellite imagery is generated at the bid layer.
-- Lead detail with manual override, status workflow (`new` / `quoted` / `won` / `lost`), and a one-click "Create bid from lead" handoff.
+- Lead detail with manual override, the full pipeline status workflow (`needs_takeoff` → `takeoff_scheduled` → `quoted` → `won` / `lost` / `no_response` / `on_hold` / `expired`), and a one-click "Create bid from lead" handoff. Leads carry a large/small job flag (the 2-week fork), scope tags, an estimated value, and inherit their rep from the management company's account.
+- **Takeoff queue** (`/takeoff-queue`): the dispatch screen — leads needing a takeoff oldest-first with days waiting, booked takeoffs by date, inline scheduling, and a Start-bid button that forks large jobs into the full wizard and small jobs into the quick catalog takeoff.
+- **Dated relationship history, editable.** `property_mgmt` / `property_owner` / `contact_employment` tables record who managed/owned a property and where a contact worked, with start/end dates — owners sell and managers rotate; the property persists. Add/end relationships straight from the property and contact pages; adding a current one ends the previous as of the new start date.
+- **Photos everywhere it matters**: a polymorphic photo archive (`intake` / `takeoff` / `progress` / `completion` / `damage`) with upload + gallery cards on lead, project, and property pages, backed by Supabase Storage.
 
 ### Bids (projects)
 - The bid row **is** the project (delivery fields fold onto the bid; cosmetic table rename skipped — see [`docs/lead-data-model.md`](docs/lead-data-model.md)).
@@ -36,7 +39,8 @@ The deployed product today (Phase 0) is the non-AI substrate of that workflow: l
 - Buildings + surfaces with factor-group dimension entry, presets for common surface names, and live paintable-sqft rollups per building and per bid. Per-building `archetype` (garden / townhome / mid-rise / high-rise) drives access scaling.
 - **Access scope** (lifts / scaffold / swing stage / safety) as a sibling dimension to surfaces — scales by height/archetype, not square footage.
 - Pricing engine (deterministic, never LLM-driven): coverage (sqft/gal), price per gallon, labor rate ($/sqft), margin (%), plus an access total, all computed live. Rates live in `rate_config` (org-scoped) so the AI side can only parse inputs, never invent rates.
-- Per-bid line items (pressure washing, dumpster rental, etc.).
+- Per-bid line items (pressure washing, dumpster rental, etc.), plus an **"Add from catalog"** picker that drops SKU × qty priced lines from the org's service price list.
+- **Small-job takeoff** (`/bids/new/small?leadId=`): the catalog/SKU fast path — one screen, price list grouped by category with quantity inputs, straight to a priced bid with the lead moved to "Quote sent". No buildings or surfaces.
 - Company defaults: pricing inputs auto-save to user defaults; new bids inherit the latest defaults.
 - OpenStreetMap building footprints (Overpass) shown on bid detail when coordinates exist.
 - Proposal PDFs generated with `@react-pdf/renderer`, stored as frozen snapshots in Supabase Storage so subsequent bid edits don't change what was sent. Snapshots include a party block (management / legal owner / owner address / NTO recipient), an access section, and per-building archetype as of generate time.
@@ -49,9 +53,12 @@ The deployed product today (Phase 0) is the non-AI substrate of that workflow: l
 ### Project layer
 - The bid row carries the post-acceptance project (no separate `projects` table since Phase 3 of the property-rooted re-model). Acceptance sets `delivery_status` and `accepted_*` on the bid; the bid id IS the project id, surfaced through a `ProjectView` mapper so pages talk to it as a project.
 - `/projects` list view with status filters and per-status counts.
-- `/projects/[id]` detail page with a state-machine UI (`not_started` → `in_progress` → `punch_out` → `complete`, plus `on_hold` and an explicit reopen from `complete` that clears the actual end date).
+- `/projects/[id]` detail page with a state-machine UI (`not_started` → `in_progress` → `punch_out` → `complete` → `warranty_watch`, plus `on_hold` and an explicit reopen from `complete`/`warranty_watch` that clears the actual end date — moving into warranty watch keeps it).
 - `actual_start_date` and `actual_end_date` auto-stamp on first transition into `in_progress` / `complete`.
 - Editable target dates, assigned subcontractor, crew lead, and notes.
+- **Money layer — all derived, never stored.** An immutable `contract_value` snapshots onto the bid at proposal acceptance; `expenses` (dated, categorized), `invoices` (mobilization / draws / deposit / final), and `change_orders` (approved ones adjust the contract) hang off it. The job page shows Budget (spend vs adjusted contract, by category), Invoices (invoiced / paid / outstanding), and Change-orders cards — budget, burn, and profit computed live on every read.
+- **Schedule card** with the large/small fork: week-by-week progress + "N of M buildings done" for large jobs (buildings total derived from the takeoff), a day-strip for small jobs, and a **burn-rate alert** when budget spent runs more than 10 points ahead of schedule elapsed.
+- Progress/completion **photo gallery** on the job page.
 - Append-only `project_updates` feed (keyed on `bid_id`) with a per-entry `visible_on_public_url` opt-in (internal-by-default).
 
 ### Dashboard
@@ -59,8 +66,12 @@ The deployed product today (Phase 0) is the non-AI substrate of that workflow: l
 - Open vs won pipeline dollars derived from latest proposal totals per bid.
 - Project rollup card (active, overdue, per-status counts) linking into `/projects?status=…`.
 
+### Reports
+- `/reports` — derived analytics over the same rows the rest of the app writes: open-pipeline value (latest proposal totals on open bids), lead and bid win rates, delivered vs in-flight job economics (contracted = contract value + approved change orders, against expenses), the lead funnel with estimated values, source-by-source conversion, and a six-month new-leads / bids-won / contracted-value trend.
+
 ### Settings and multi-user orgs
 - `/settings` — pricing defaults (coverage, $/gal, labor rate, margin) that prefill new bids.
+- `/settings/catalog` — the org's service price list (SKU, category, unit, charge/sub-cost per unit) and supplier products (paint/material pricing). Feeds the bid catalog picker and the small-job takeoff.
 - `/settings/company` — company profile pulled from the onboarding website-enrichment step; editable, will power themed bid surfaces once Phase G slice 3 lands.
 - `/settings/members` — invite teammates by email; pending invites resolve the next time the invitee signs in with that email. One owner per org, plus `admin` and `member` roles. Tenant scoping is `ownerUserId` throughout: existing `user_id` columns semantically hold the org owner's id, and `requireUser()` routes through `getOrgContext()` so members share the owner's bids/leads/projects.
 
@@ -102,10 +113,13 @@ src/
 │   ├── (auth)/                  # /login, /signup with branded shell + wordmark home link
 │   ├── (app)/                   # Authenticated app behind sidebar
 │   │   ├── dashboard/
+│   │   ├── ask/                 # Entity-scoped AI chat (offline mock until API key)
 │   │   ├── leads/               # list, [id], accounts/[id], properties/[id], contacts/[id], import, new
-│   │   ├── bids/                # list, [id], new (wizard)
-│   │   ├── projects/            # list, [id]
-│   │   └── settings/            # pricing defaults, company/, members/
+│   │   ├── takeoff-queue/       # Dispatch screen: needs_takeoff / takeoff_scheduled leads
+│   │   ├── bids/                # list, [id], new (wizard), new/small (catalog takeoff)
+│   │   ├── projects/            # list, [id] (money + schedule + photos cards)
+│   │   ├── reports/             # Derived win-rate / pipeline / margin / trend analytics
+│   │   └── settings/            # pricing defaults, catalog/, company/, members/
 │   ├── (onboarding)/            # /onboarding website/profile/theme wizard
 │   ├── p/[slug]/                # Public proposal → project status page
 │   ├── api/maps/satellite/      # Server-side Maps Static proxy
@@ -147,7 +161,7 @@ src/
 │   └── supabase/                # Client/server helpers + auth cache
 ├── proxy.ts                     # Next.js proxy (replaces middleware.ts)
 drizzle/
-└── manual/                      # Hand-written additive SQL migrations (001 → 020)
+└── manual/                      # Hand-written additive SQL migrations (001 → 031); apply individually
 docs/
 ├── prd.md                       # Product requirements: vision, personas, scope, milestones, AI principles
 ├── plan.md                      # Live execution tracker (shipped / open / paused / decisions)
