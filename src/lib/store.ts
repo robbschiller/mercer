@@ -5635,6 +5635,187 @@ export async function getContactEmploymentHistory(
   return rows.map((r) => ({ ...r, current: r.endDate == null }));
 }
 
+// ── Relationship editing (dated rows; one current per property/contact) ────
+
+const PROPERTY_RELATIONSHIP_TABLES = {
+  management: propertyMgmt,
+  owner: propertyOwner,
+} as const;
+export type PropertyRelationshipKind =
+  keyof typeof PROPERTY_RELATIONSHIP_TABLES;
+
+/**
+ * Start a new dated management/owner relationship: ends the current row (its
+ * end_date becomes the new start_date — the partial-unique index enforces one
+ * current per property) and keeps the derived convenience FK on `properties`
+ * in sync. The account is resolved by name, created if new.
+ */
+export async function startPropertyRelationship(
+  kind: PropertyRelationshipKind,
+  data: { propertyId: string; accountName: string; startDate: string },
+) {
+  const user = await requireUser();
+  const table = PROPERTY_RELATIONSHIP_TABLES[kind];
+  const account = await findOrCreateAccount({
+    userId: user.ownerUserId,
+    name: data.accountName,
+    type: kind === "owner" ? "owner" : "management_company",
+  });
+  if (!account) throw new Error("Account name is required");
+
+  await db
+    .update(table)
+    .set({ endDate: data.startDate })
+    .where(
+      and(
+        eq(table.propertyId, data.propertyId),
+        eq(table.userId, user.ownerUserId),
+        isNull(table.endDate),
+      ),
+    );
+  const rows = await db
+    .insert(table)
+    .values({
+      userId: user.ownerUserId,
+      propertyId: data.propertyId,
+      accountId: account.id,
+      startDate: data.startDate,
+    })
+    .returning();
+  await db
+    .update(properties)
+    .set(
+      kind === "management"
+        ? { managementAccountId: account.id, updatedAt: new Date() }
+        : { ownerAccountId: account.id, updatedAt: new Date() },
+    )
+    .where(
+      and(
+        eq(properties.id, data.propertyId),
+        eq(properties.userId, user.ownerUserId),
+      ),
+    );
+  return rows[0] ?? null;
+}
+
+/** End a dated management/owner relationship; clears the derived FK. */
+export async function endPropertyRelationship(
+  kind: PropertyRelationshipKind,
+  data: { id: string; endDate: string },
+) {
+  const user = await requireUser();
+  const table = PROPERTY_RELATIONSHIP_TABLES[kind];
+  const rows = await db
+    .update(table)
+    .set({ endDate: data.endDate })
+    .where(
+      and(
+        eq(table.id, data.id),
+        eq(table.userId, user.ownerUserId),
+        isNull(table.endDate),
+      ),
+    )
+    .returning();
+  const ended = rows[0] ?? null;
+  if (ended) {
+    await db
+      .update(properties)
+      .set(
+        kind === "management"
+          ? { managementAccountId: null, updatedAt: new Date() }
+          : { ownerAccountId: null, updatedAt: new Date() },
+      )
+      .where(
+        and(
+          eq(properties.id, ended.propertyId),
+          eq(properties.userId, user.ownerUserId),
+        ),
+      );
+  }
+  return ended;
+}
+
+/**
+ * Start a dated employment row: ends any current employment for the contact
+ * and syncs the derived `contacts.account_id` (current employer).
+ */
+export async function startContactEmployment(data: {
+  contactId: string;
+  accountName: string;
+  title: string | null;
+  startDate: string;
+}) {
+  const user = await requireUser();
+  const account = await findOrCreateAccount({
+    userId: user.ownerUserId,
+    name: data.accountName,
+  });
+  if (!account) throw new Error("Account name is required");
+
+  await db
+    .update(contactEmployment)
+    .set({ endDate: data.startDate })
+    .where(
+      and(
+        eq(contactEmployment.contactId, data.contactId),
+        eq(contactEmployment.userId, user.ownerUserId),
+        isNull(contactEmployment.endDate),
+      ),
+    );
+  const rows = await db
+    .insert(contactEmployment)
+    .values({
+      userId: user.ownerUserId,
+      contactId: data.contactId,
+      accountId: account.id,
+      title: data.title,
+      startDate: data.startDate,
+    })
+    .returning();
+  await db
+    .update(contacts)
+    .set({ accountId: account.id, updatedAt: new Date() })
+    .where(
+      and(
+        eq(contacts.id, data.contactId),
+        eq(contacts.userId, user.ownerUserId),
+      ),
+    );
+  return rows[0] ?? null;
+}
+
+/** End an employment row; clears the contact's derived current employer. */
+export async function endContactEmployment(data: {
+  id: string;
+  endDate: string;
+}) {
+  const user = await requireUser();
+  const rows = await db
+    .update(contactEmployment)
+    .set({ endDate: data.endDate })
+    .where(
+      and(
+        eq(contactEmployment.id, data.id),
+        eq(contactEmployment.userId, user.ownerUserId),
+        isNull(contactEmployment.endDate),
+      ),
+    )
+    .returning();
+  const ended = rows[0] ?? null;
+  if (ended) {
+    await db
+      .update(contacts)
+      .set({ accountId: null, updatedAt: new Date() })
+      .where(
+        and(
+          eq(contacts.id, ended.contactId),
+          eq(contacts.userId, user.ownerUserId),
+        ),
+      );
+  }
+  return ended;
+}
+
 // ── Service catalog + supplier pricing (Phase 3) ────────────────────────────
 
 export type PriceListItem = typeof priceListItems.$inferSelect;

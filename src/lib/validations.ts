@@ -470,6 +470,37 @@ export const updateProjectStatusSchema = z.object({
   status: z.enum(PROJECT_STATUSES),
 });
 
+const isoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date");
+
+export const startPropertyRelationshipSchema = z.object({
+  propertyId: z.string().uuid("Invalid property ID"),
+  kind: z.enum(["management", "owner"]),
+  accountName: z.string().trim().min(1, "Account name is required"),
+  startDate: isoDate,
+});
+
+export const endPropertyRelationshipSchema = z.object({
+  propertyId: z.string().uuid("Invalid property ID"),
+  kind: z.enum(["management", "owner"]),
+  id: z.string().uuid("Invalid relationship ID"),
+  endDate: isoDate,
+});
+
+export const startContactEmploymentSchema = z.object({
+  contactId: z.string().uuid("Invalid contact ID"),
+  accountName: z.string().trim().min(1, "Account name is required"),
+  title: optionalText,
+  startDate: isoDate,
+});
+
+export const endContactEmploymentSchema = z.object({
+  contactId: z.string().uuid("Invalid contact ID"),
+  id: z.string().uuid("Invalid employment ID"),
+  endDate: isoDate,
+});
+
 export const updateJobScheduleSchema = z.object({
   id: z.string().uuid("Invalid project ID"),
   weeksTotal: optionalCount,
