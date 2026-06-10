@@ -5819,6 +5819,183 @@ export async function endContactEmployment(data: {
   return ended;
 }
 
+// ── Reports (all derived — AQP principle #5: never store what you can sum) ──
+
+export type ReportJobsSlice = {
+  count: number;
+  /** contract_value + approved change orders. */
+  contracted: number;
+  spent: number;
+  /** contracted − spent. */
+  profit: number;
+};
+
+export type ReportMonthRow = {
+  /** YYYY-MM */
+  month: string;
+  leadsCreated: number;
+  bidsWon: number;
+  wonValue: number;
+};
+
+export type ReportData = {
+  leadFunnel: Array<{ status: LeadStatus; count: number; estValue: number }>;
+  bidFunnel: Array<{ status: BidStatus; count: number }>;
+  /** Top lead sources with closed-won counts. */
+  sources: Array<{ sourceTag: string | null; total: number; won: number }>;
+  pipeline: DashboardPipelineFinances;
+  /** Jobs delivered (complete / warranty_watch) with a contract value. */
+  delivered: ReportJobsSlice;
+  /** Jobs still in flight (any other delivery status). */
+  active: ReportJobsSlice;
+  monthly: ReportMonthRow[];
+};
+
+export async function getReportData(): Promise<ReportData> {
+  const user = await requireUser();
+
+  const jobsSlice = (rows: unknown): ReportJobsSlice => {
+    const r = (rows as Array<Record<string, string>>)[0] ?? {};
+    const contracted = Number(r.base ?? 0) + Number(r.cos ?? 0);
+    const spent = Number(r.spent ?? 0);
+    return {
+      count: Number(r.count ?? 0),
+      contracted,
+      spent,
+      profit: contracted - spent,
+    };
+  };
+
+  const jobsQuery = (statuses: string[]) => sql`
+    SELECT count(*)::int AS count,
+      coalesce(sum(b.contract_value::numeric), 0)::text AS base,
+      coalesce(sum(co.total), 0)::text AS cos,
+      coalesce(sum(e.total), 0)::text AS spent
+    FROM bids b
+    LEFT JOIN LATERAL (
+      SELECT coalesce(sum(amount::numeric), 0) AS total
+      FROM change_orders WHERE bid_id = b.id AND status = 'approved'
+    ) co ON true
+    LEFT JOIN LATERAL (
+      SELECT coalesce(sum(amount::numeric), 0) AS total
+      FROM expenses WHERE bid_id = b.id
+    ) e ON true
+    WHERE b.user_id = ${user.ownerUserId}
+      AND b.contract_value IS NOT NULL
+      AND b.delivery_status = ANY(${statuses})
+  `;
+
+  const [
+    leadFunnelRows,
+    bidFunnelRows,
+    sourceRows,
+    pipeline,
+    deliveredRows,
+    activeRows,
+    monthLeadRows,
+    monthWonRows,
+  ] = await Promise.all([
+    db
+      .select({
+        status: leads.status,
+        count: sql<number>`count(*)::int`,
+        estValue: sql<string>`coalesce(sum(${leads.estValue}::numeric), 0)::text`,
+      })
+      .from(leads)
+      .where(eq(leads.userId, user.ownerUserId))
+      .groupBy(leads.status),
+    db
+      .select({ status: bids.status, count: sql<number>`count(*)::int` })
+      .from(bids)
+      .where(eq(bids.userId, user.ownerUserId))
+      .groupBy(bids.status),
+    db
+      .select({
+        sourceTag: leads.sourceTag,
+        total: sql<number>`count(*)::int`,
+        won: sql<number>`count(*) filter (where ${leads.status} = 'won')::int`,
+      })
+      .from(leads)
+      .where(eq(leads.userId, user.ownerUserId))
+      .groupBy(leads.sourceTag)
+      .orderBy(sql`count(*) desc`)
+      .limit(8),
+    getDashboardPipelineFinances(),
+    db.execute(jobsQuery(["complete", "warranty_watch"])),
+    db.execute(
+      jobsQuery(["not_started", "in_progress", "punch_out", "on_hold"]),
+    ),
+    db.execute(sql`
+      SELECT to_char(date_trunc('month', created_at), 'YYYY-MM') AS month,
+        count(*)::int AS n
+      FROM leads
+      WHERE user_id = ${user.ownerUserId}
+        AND created_at >= date_trunc('month', now()) - interval '5 months'
+      GROUP BY 1
+    `),
+    db.execute(sql`
+      SELECT to_char(date_trunc('month', accepted_at), 'YYYY-MM') AS month,
+        count(*)::int AS n,
+        coalesce(sum(contract_value::numeric), 0)::text AS value
+      FROM bids
+      WHERE user_id = ${user.ownerUserId}
+        AND accepted_at IS NOT NULL
+        AND accepted_at >= date_trunc('month', now()) - interval '5 months'
+      GROUP BY 1
+    `),
+  ]);
+
+  const leadsByMonth = new Map(
+    (monthLeadRows as unknown as Array<{ month: string; n: number }>).map(
+      (r) => [r.month, Number(r.n)],
+    ),
+  );
+  const wonByMonth = new Map(
+    (
+      monthWonRows as unknown as Array<{
+        month: string;
+        n: number;
+        value: string;
+      }>
+    ).map((r) => [r.month, { n: Number(r.n), value: Number(r.value) }]),
+  );
+  // Walk the last 6 calendar months oldest-first so the trend reads forward.
+  const monthly: ReportMonthRow[] = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const won = wonByMonth.get(key);
+    monthly.push({
+      month: key,
+      leadsCreated: leadsByMonth.get(key) ?? 0,
+      bidsWon: won?.n ?? 0,
+      wonValue: won?.value ?? 0,
+    });
+  }
+
+  return {
+    leadFunnel: leadFunnelRows.map((r) => ({
+      status: r.status,
+      count: Number(r.count),
+      estValue: Number(r.estValue),
+    })),
+    bidFunnel: bidFunnelRows.map((r) => ({
+      status: r.status,
+      count: Number(r.count),
+    })),
+    sources: sourceRows.map((r) => ({
+      sourceTag: r.sourceTag,
+      total: Number(r.total),
+      won: Number(r.won),
+    })),
+    pipeline,
+    delivered: jobsSlice(deliveredRows),
+    active: jobsSlice(activeRows),
+    monthly,
+  };
+}
+
 // ── Photos (polymorphic archive) ────────────────────────────────────────────
 
 export type Photo = typeof photos.$inferSelect;

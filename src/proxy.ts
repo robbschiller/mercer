@@ -32,6 +32,7 @@ export const config = {
     "/takeoff-queue/:path*",
     "/bids/:path*",
     "/projects/:path*",
+    "/reports/:path*",
     "/settings/:path*",
     "/onboarding/:path*",
     "/login",

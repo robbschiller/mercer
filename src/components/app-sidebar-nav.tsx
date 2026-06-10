@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BarChart3,
   ClipboardList,
   ContactRound,
   HardHat,
@@ -27,6 +28,7 @@ const items = [
   { href: "/takeoff-queue", label: "Takeoffs", icon: Ruler },
   { href: "/bids", label: "Bids", icon: ClipboardList },
   { href: "/projects", label: "Projects", icon: HardHat },
+  { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
