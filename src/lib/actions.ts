@@ -30,6 +30,10 @@ import {
   updateLead,
   updateLeadStatus,
   scheduleLeadTakeoff,
+  startPropertyRelationship,
+  endPropertyRelationship,
+  startContactEmployment,
+  endContactEmployment,
   logLeadContact,
   setLeadFollowUp,
   setPropertyOwnerContact,
@@ -106,6 +110,10 @@ import {
   importLeadsSchema,
   updateLeadStatusSchema,
   scheduleTakeoffSchema,
+  startPropertyRelationshipSchema,
+  endPropertyRelationshipSchema,
+  startContactEmploymentSchema,
+  endContactEmploymentSchema,
   updateLeadSchema,
   enrichLeadActionSchema,
   logLeadContactSchema,
@@ -1037,6 +1045,109 @@ export async function scheduleTakeoffAction(formData: FormData) {
   revalidatePath("/takeoff-queue");
   revalidatePath("/leads");
   revalidatePath(`/leads/${result.data.id}`);
+}
+
+export async function startPropertyRelationshipAction(formData: FormData) {
+  const result = startPropertyRelationshipSchema.safeParse(
+    formDataToObject(formData),
+  );
+  const propertyId = (formData.get("propertyId") as string) || "";
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/leads/properties/${propertyId}?error=${encodeURIComponent(message)}`);
+  }
+  try {
+    await startPropertyRelationship(result.data.kind, {
+      propertyId: result.data.propertyId,
+      accountName: result.data.accountName,
+      startDate: result.data.startDate,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to add relationship";
+    redirect(
+      `/leads/properties/${result.data.propertyId}?error=${encodeURIComponent(message)}`,
+    );
+  }
+  revalidatePath(`/leads/properties/${result.data.propertyId}`);
+  revalidatePath("/leads");
+}
+
+export async function endPropertyRelationshipAction(formData: FormData) {
+  const result = endPropertyRelationshipSchema.safeParse(
+    formDataToObject(formData),
+  );
+  const propertyId = (formData.get("propertyId") as string) || "";
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/leads/properties/${propertyId}?error=${encodeURIComponent(message)}`);
+  }
+  try {
+    await endPropertyRelationship(result.data.kind, {
+      id: result.data.id,
+      endDate: result.data.endDate,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to end relationship";
+    redirect(
+      `/leads/properties/${result.data.propertyId}?error=${encodeURIComponent(message)}`,
+    );
+  }
+  revalidatePath(`/leads/properties/${result.data.propertyId}`);
+  revalidatePath("/leads");
+}
+
+export async function startContactEmploymentAction(formData: FormData) {
+  const result = startContactEmploymentSchema.safeParse(
+    formDataToObject(formData),
+  );
+  const contactId = (formData.get("contactId") as string) || "";
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/contacts/${contactId}?error=${encodeURIComponent(message)}`);
+  }
+  try {
+    await startContactEmployment({
+      contactId: result.data.contactId,
+      accountName: result.data.accountName,
+      title: result.data.title,
+      startDate: result.data.startDate,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to add employment";
+    redirect(
+      `/contacts/${result.data.contactId}?error=${encodeURIComponent(message)}`,
+    );
+  }
+  revalidatePath(`/contacts/${result.data.contactId}`);
+  revalidatePath("/contacts");
+}
+
+export async function endContactEmploymentAction(formData: FormData) {
+  const result = endContactEmploymentSchema.safeParse(
+    formDataToObject(formData),
+  );
+  const contactId = (formData.get("contactId") as string) || "";
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/contacts/${contactId}?error=${encodeURIComponent(message)}`);
+  }
+  try {
+    await endContactEmployment({
+      id: result.data.id,
+      endDate: result.data.endDate,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to end employment";
+    redirect(
+      `/contacts/${result.data.contactId}?error=${encodeURIComponent(message)}`,
+    );
+  }
+  revalidatePath(`/contacts/${result.data.contactId}`);
+  revalidatePath("/contacts");
 }
 
 export async function updateLeadAction(formData: FormData) {
