@@ -27,6 +27,7 @@ import {
   invoices,
   priceListItems,
   supplierProducts,
+  photos,
   companyProfiles,
   onboardings,
   orgMemberships,
@@ -61,6 +62,8 @@ import {
   type PriceListCategory,
   type PricingUnit,
   type SupplierProductType,
+  type PhotoContextType,
+  type PhotoKind,
 } from "@/lib/status-meta";
 
 export type Bid = typeof bids.$inferSelect;
@@ -5814,6 +5817,62 @@ export async function endContactEmployment(data: {
       );
   }
   return ended;
+}
+
+// ── Photos (polymorphic archive) ────────────────────────────────────────────
+
+export type Photo = typeof photos.$inferSelect;
+
+export async function getPhotos(
+  contextType: PhotoContextType,
+  contextId: string,
+): Promise<Photo[]> {
+  const user = await requireUser();
+  return db
+    .select()
+    .from(photos)
+    .where(
+      and(
+        eq(photos.userId, user.ownerUserId),
+        eq(photos.contextType, contextType),
+        eq(photos.contextId, contextId),
+      ),
+    )
+    .orderBy(desc(photos.createdAt));
+}
+
+export async function createPhoto(data: {
+  contextType: PhotoContextType;
+  contextId: string;
+  kind: PhotoKind;
+  storagePath: string;
+  url: string;
+  caption?: string | null;
+}): Promise<Photo> {
+  const user = await requireUser();
+  const rows = await db
+    .insert(photos)
+    .values({
+      userId: user.ownerUserId,
+      contextType: data.contextType,
+      contextId: data.contextId,
+      kind: data.kind,
+      storagePath: data.storagePath,
+      url: data.url,
+      caption: data.caption ?? null,
+    })
+    .returning();
+  return rows[0];
+}
+
+/** Delete the row; returns it so the caller can remove the storage object. */
+export async function deletePhoto(id: string): Promise<Photo | null> {
+  const user = await requireUser();
+  const rows = await db
+    .delete(photos)
+    .where(and(eq(photos.id, id), eq(photos.userId, user.ownerUserId)))
+    .returning();
+  return rows[0] ?? null;
 }
 
 // ── Service catalog + supplier pricing (Phase 3) ────────────────────────────

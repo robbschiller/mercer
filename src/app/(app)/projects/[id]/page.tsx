@@ -6,6 +6,7 @@ import {
   getProjectUpdates,
   getJobFinancials,
   getJobScheduleContext,
+  getPhotos,
   getExpensesForBid,
   getInvoicesForBid,
   getChangeOrdersForBid,
@@ -47,6 +48,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/submit-button";
+import { PhotosCard } from "@/components/photos-card";
 import { BreadcrumbLabel } from "@/components/breadcrumb-label";
 import {
   bidStatusLabel,
@@ -146,6 +148,7 @@ export default async function ProjectPage({
     preStart,
     financials,
     schedule,
+    photos,
     expenses,
     invoices,
     changeOrders,
@@ -156,6 +159,7 @@ export default async function ProjectPage({
       : Promise.resolve(null),
     getJobFinancials(project.id),
     getJobScheduleContext(project.id),
+    getPhotos("bid", project.id),
     getExpensesForBid(project.id),
     getInvoicesForBid(project.id),
     getChangeOrdersForBid(project.id),
@@ -242,6 +246,15 @@ export default async function ProjectPage({
         projectId={project.id}
         financials={financials}
         expenses={expenses}
+      />
+
+      <PhotosCard
+        contextType="bid"
+        contextId={project.id}
+        returnTo={`/projects/${project.id}`}
+        photos={photos}
+        defaultKind="progress"
+        description="The job's photo record — progress, completion walk, damage found along the way."
       />
 
       <ChangeOrdersCard projectId={project.id} changeOrders={changeOrders} />

@@ -29,6 +29,8 @@ import {
   PRICE_LIST_CATEGORIES,
   PRICING_UNITS,
   SUPPLIER_PRODUCT_TYPES,
+  PHOTO_CONTEXT_TYPES,
+  PHOTO_KINDS,
 } from "@/lib/status-meta";
 
 export const accounts = pgTable("accounts", {
@@ -776,6 +778,26 @@ export const orgMemberships = pgTable("org_memberships", {
     .notNull()
     .defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Polymorphic photo archive: every photo in the system, attached to its
+ * context by (contextType, contextId) — lead intake, bid takeoff, project
+ * progress/completion, damage. Files live in the public `photos` storage
+ * bucket; the row keeps the path (for deletes) and the public URL.
+ */
+export const photos = pgTable("photos", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  contextType: text("context_type", { enum: PHOTO_CONTEXT_TYPES }).notNull(),
+  contextId: uuid("context_id").notNull(),
+  kind: text("kind", { enum: PHOTO_KINDS }).notNull().default("other"),
+  storagePath: text("storage_path").notNull(),
+  url: text("url").notNull(),
+  caption: text("caption"),
+  createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });

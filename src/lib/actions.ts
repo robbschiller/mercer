@@ -34,6 +34,8 @@ import {
   endPropertyRelationship,
   startContactEmployment,
   endContactEmployment,
+  createPhoto,
+  deletePhoto,
   logLeadContact,
   setLeadFollowUp,
   setPropertyOwnerContact,
@@ -114,6 +116,8 @@ import {
   endPropertyRelationshipSchema,
   startContactEmploymentSchema,
   endContactEmploymentSchema,
+  uploadPhotoSchema,
+  deletePhotoSchema,
   updateLeadSchema,
   enrichLeadActionSchema,
   logLeadContactSchema,
@@ -1148,6 +1152,90 @@ export async function endContactEmploymentAction(formData: FormData) {
   }
   revalidatePath(`/contacts/${result.data.contactId}`);
   revalidatePath("/contacts");
+}
+
+const PHOTO_MAX_BYTES = 10 * 1024 * 1024;
+const PHOTO_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
+
+export async function uploadPhotoAction(formData: FormData) {
+  const result = uploadPhotoSchema.safeParse(formDataToObject(formData));
+  const fallback = (formData.get("returnTo") as string) || "/dashboard";
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`${fallback}?error=${encodeURIComponent(message)}`);
+  }
+  const { contextType, contextId, kind, caption, returnTo } = result.data;
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    redirect(`${returnTo}?error=${encodeURIComponent("Pick a photo to upload")}`);
+  }
+  if (!PHOTO_MIME_TYPES.has(file.type)) {
+    redirect(
+      `${returnTo}?error=${encodeURIComponent("Unsupported image type — use JPEG, PNG, WebP, or HEIC")}`,
+    );
+  }
+  if (file.size > PHOTO_MAX_BYTES) {
+    redirect(`${returnTo}?error=${encodeURIComponent("Photo is over 10 MB")}`);
+  }
+
+  try {
+    const supabase = await createClient();
+    const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+    const storagePath = `${contextType}/${contextId}/${Date.now()}.${ext}`;
+    const { error: uploadError } = await supabase.storage
+      .from("photos")
+      .upload(storagePath, Buffer.from(await file.arrayBuffer()), {
+        contentType: file.type,
+        upsert: false,
+      });
+    if (uploadError) throw new Error(uploadError.message);
+    const { data: urlData } = supabase.storage
+      .from("photos")
+      .getPublicUrl(storagePath);
+    await createPhoto({
+      contextType,
+      contextId,
+      kind,
+      storagePath,
+      url: urlData.publicUrl,
+      caption,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to upload photo";
+    redirect(`${returnTo}?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath(returnTo);
+}
+
+export async function deletePhotoAction(formData: FormData) {
+  const result = deletePhotoSchema.safeParse(formDataToObject(formData));
+  const fallback = (formData.get("returnTo") as string) || "/dashboard";
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`${fallback}?error=${encodeURIComponent(message)}`);
+  }
+  try {
+    const photo = await deletePhoto(result.data.id);
+    if (photo) {
+      const supabase = await createClient();
+      // Best-effort: the row is gone either way; an orphaned object is
+      // harmless and invisible.
+      await supabase.storage.from("photos").remove([photo.storagePath]);
+    }
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to delete photo";
+    redirect(`${result.data.returnTo}?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath(result.data.returnTo);
 }
 
 export async function updateLeadAction(formData: FormData) {
