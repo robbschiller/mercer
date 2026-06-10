@@ -14,6 +14,8 @@ import {
   PRICE_LIST_CATEGORIES,
   PRICING_UNITS,
   SUPPLIER_PRODUCT_TYPES,
+  PHOTO_CONTEXT_TYPES,
+  PHOTO_KINDS,
 } from "./status-meta";
 
 /** Optional number from a form field: "" / null → null, else coerced number. */
@@ -499,6 +501,24 @@ export const endContactEmploymentSchema = z.object({
   contactId: z.string().uuid("Invalid contact ID"),
   id: z.string().uuid("Invalid employment ID"),
   endDate: isoDate,
+});
+
+/** Same-app relative path for post-action redirects. */
+const returnToField = z
+  .string()
+  .regex(/^\/(?!\/)/, "Invalid return path");
+
+export const uploadPhotoSchema = z.object({
+  contextType: z.enum(PHOTO_CONTEXT_TYPES),
+  contextId: z.string().uuid("Invalid context ID"),
+  kind: z.enum(PHOTO_KINDS),
+  caption: optionalText,
+  returnTo: returnToField,
+});
+
+export const deletePhotoSchema = z.object({
+  id: z.string().uuid("Invalid photo ID"),
+  returnTo: returnToField,
 });
 
 export const updateJobScheduleSchema = z.object({

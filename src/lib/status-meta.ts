@@ -420,6 +420,34 @@ export function supplierProductTypeLabel(value: string): string {
   return SUPPLIER_PRODUCT_TYPE_LABELS[value as SupplierProductType] ?? value;
 }
 
+// ── Photos (polymorphic archive) ──
+
+export const PHOTO_CONTEXT_TYPES = ["lead", "bid", "property"] as const;
+export type PhotoContextType = (typeof PHOTO_CONTEXT_TYPES)[number];
+
+export const PHOTO_KINDS = [
+  "intake",
+  "takeoff",
+  "progress",
+  "completion",
+  "damage",
+  "other",
+] as const;
+export type PhotoKind = (typeof PHOTO_KINDS)[number];
+
+export const PHOTO_KIND_LABELS: Record<PhotoKind, string> = {
+  intake: "Intake",
+  takeoff: "Takeoff",
+  progress: "Progress",
+  completion: "Completion",
+  damage: "Damage",
+  other: "Other",
+};
+
+export function photoKindLabel(value: string): string {
+  return PHOTO_KIND_LABELS[value as PhotoKind] ?? value;
+}
+
 type BadgeVariant = "default" | "secondary" | "outline";
 
 export const BID_STATUS_LABELS: Record<BidStatus, string> = {

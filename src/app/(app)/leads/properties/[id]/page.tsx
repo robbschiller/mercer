@@ -2,8 +2,10 @@ import { notFound } from "next/navigation";
 import {
   getPropertyDetail,
   getPropertyRelationshipHistory,
+  getPhotos,
   type RelationshipRow,
 } from "@/lib/store";
+import { PhotosCard } from "@/components/photos-card";
 import {
   startPropertyRelationshipAction,
   endPropertyRelationshipAction,
@@ -108,9 +110,10 @@ export default async function PropertyDetailPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const [{ id }, { error }] = await Promise.all([params, searchParams]);
-  const [detail, history] = await Promise.all([
+  const [detail, history, photos] = await Promise.all([
     getPropertyDetail(id),
     getPropertyRelationshipHistory(id),
+    getPhotos("property", id),
   ]);
   if (!detail) notFound();
 
@@ -156,6 +159,13 @@ export default async function PropertyDetailPage({
           />
         </CardContent>
       </Card>
+      <PhotosCard
+        contextType="property"
+        contextId={id}
+        returnTo={`/leads/properties/${id}`}
+        photos={photos}
+        description="The property's standing photo record, independent of any one job."
+      />
     </div>
   );
 }
