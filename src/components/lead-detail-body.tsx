@@ -26,6 +26,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/submit-button";
 import {
+  LEAD_STATUSES,
   enrichmentLabel,
   leadStatusLabel,
   leadStatusVariant,
@@ -192,10 +193,11 @@ export function LeadDetailBody({
                   defaultValue={lead.status}
                   className="h-9 rounded-md border bg-background px-2 text-sm"
                 >
-                  <option value="new">New</option>
-                  <option value="quoted">Quoted</option>
-                  <option value="won">Won</option>
-                  <option value="lost">Lost</option>
+                  {LEAD_STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {leadStatusLabel(status)}
+                    </option>
+                  ))}
                 </select>
                 <SubmitButton size="sm">Save status</SubmitButton>
               </form>

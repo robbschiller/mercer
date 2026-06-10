@@ -259,6 +259,14 @@ export const bids = pgTable("bids", {
   actualEndDate: timestamp("actual_end_date", { withTimezone: true }),
   assignedSub: text("assigned_sub"),
   crewLeadName: text("crew_lead_name"),
+  /* ── Schedule progress (AQP job page): weeks×buildings for large jobs,
+        day strip for small. Totals are planned values; buildings_total is
+        derived from the bid's buildings, never stored. ── */
+  weeksTotal: integer("weeks_total"),
+  currentWeek: integer("current_week"),
+  daysTotal: integer("days_total"),
+  currentDay: integer("current_day"),
+  buildingsDone: integer("buildings_done"),
   acceptedByName: text("accepted_by_name"),
   acceptedByTitle: text("accepted_by_title"),
   acceptedAt: timestamp("accepted_at", { withTimezone: true }),
@@ -394,7 +402,9 @@ export const leads = pgTable("leads", {
   notes: text("notes").notNull().default(""),
   status: text("status", { enum: LEAD_STATUSES })
     .notNull()
-    .default("new"),
+    .default("needs_takeoff"),
+  /** When the takeoff visit is booked (status = takeoff_scheduled). */
+  takeoffScheduledAt: timestamp("takeoff_scheduled_at", { withTimezone: true }),
   /** Drives the large/small takeoff + billing fork (AQP 2-week threshold). */
   isLargeJob: boolean("is_large_job").notNull().default(false),
   /** Scope tags, e.g. ["Full exterior","Breezeways"]. */

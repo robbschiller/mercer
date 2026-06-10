@@ -29,6 +29,7 @@ import {
   searchAccounts,
   updateLead,
   updateLeadStatus,
+  scheduleLeadTakeoff,
   logLeadContact,
   setLeadFollowUp,
   setPropertyOwnerContact,
@@ -39,6 +40,7 @@ import {
   getProject,
   updateProjectStatus,
   updateProjectDetails,
+  updateJobSchedule,
   createProjectUpdate,
   getShareSlugsForBid,
   markOnboardingWebsiteSubmitted,
@@ -103,6 +105,7 @@ import {
   createContactSchema,
   importLeadsSchema,
   updateLeadStatusSchema,
+  scheduleTakeoffSchema,
   updateLeadSchema,
   enrichLeadActionSchema,
   logLeadContactSchema,
@@ -111,6 +114,7 @@ import {
   setProjectNtoSchema,
   updateProjectStatusSchema,
   updateProjectDetailsSchema,
+  updateJobScheduleSchema,
   createProjectUpdateSchema,
   submitWebsiteSchema,
   confirmCompanyProfileSchema,
@@ -1017,6 +1021,24 @@ export async function updateLeadStatusAction(formData: FormData) {
   revalidatePath(`/leads/${result.data.id}`);
 }
 
+export async function scheduleTakeoffAction(formData: FormData) {
+  const result = scheduleTakeoffSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/takeoff-queue?error=${encodeURIComponent(message)}`);
+  }
+  try {
+    await scheduleLeadTakeoff(result.data.id, result.data.scheduledAt);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to schedule takeoff";
+    redirect(`/takeoff-queue?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath("/takeoff-queue");
+  revalidatePath("/leads");
+  revalidatePath(`/leads/${result.data.id}`);
+}
+
 export async function updateLeadAction(formData: FormData) {
   const result = updateLeadSchema.safeParse(formDataToObject(formData));
   if (!result.success) {
@@ -1229,6 +1251,32 @@ export async function updateProjectDetailsAction(formData: FormData) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to save project details";
+    projectErrorRedirect(result.data.id, message);
+  }
+  await revalidateProjectAndShares(result.data.id, projectWithBid.bid.id);
+}
+
+export async function updateJobScheduleAction(formData: FormData) {
+  const result = updateJobScheduleSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    projectErrorRedirect(
+      (formData.get("id") as string) || null,
+      result.error.issues[0]?.message ?? "Invalid input"
+    );
+  }
+  const projectWithBid = await getProject(result.data.id);
+  if (!projectWithBid) projectErrorRedirect(null, "Project not found");
+  try {
+    await updateJobSchedule(result.data.id, {
+      weeksTotal: result.data.weeksTotal,
+      currentWeek: result.data.currentWeek,
+      daysTotal: result.data.daysTotal,
+      currentDay: result.data.currentDay,
+      buildingsDone: result.data.buildingsDone,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to save schedule";
     projectErrorRedirect(result.data.id, message);
   }
   await revalidateProjectAndShares(result.data.id, projectWithBid.bid.id);

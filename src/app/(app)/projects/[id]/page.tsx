@@ -5,13 +5,16 @@ import {
   getProjectPreStart,
   getProjectUpdates,
   getJobFinancials,
+  getJobScheduleContext,
   getExpensesForBid,
   getInvoicesForBid,
   getChangeOrdersForBid,
   allowedProjectStatusTransitions,
   isProjectStartReady,
   type ProjectStatus,
+  type ProjectView,
   type JobFinancials,
+  type JobScheduleContext,
   type Expense,
   type Invoice,
   type ChangeOrder,
@@ -19,6 +22,7 @@ import {
 import {
   updateProjectStatusAction,
   updateProjectDetailsAction,
+  updateJobScheduleAction,
   createProjectUpdateAction,
   setProjectNtoAction,
   createExpenseAction,
@@ -83,6 +87,8 @@ const STATUS_DESCRIPTIONS: Record<ProjectStatus, string> = {
     "Closing out — final walks and remaining items. Mark complete when done.",
   complete:
     "Wrapped. Reopen to punch out or in progress if items resurface — the actual end date will clear and re-stamp on the next complete.",
+  warranty_watch:
+    "Done, under warranty monitoring. A warranty claim reopens the job; the actual end date stands until then.",
   on_hold:
     "Paused (weather, owner, sub availability). Resume by moving back to in progress.",
 };
@@ -92,6 +98,7 @@ const TRANSITION_LABELS: Record<ProjectStatus, string> = {
   in_progress: "Move to in progress",
   punch_out: "Move to punch out",
   complete: "Mark complete",
+  warranty_watch: "Move to warranty watch",
   on_hold: "Put on hold",
 };
 
@@ -99,7 +106,7 @@ function transitionLabel(
   current: ProjectStatus,
   next: ProjectStatus
 ): string {
-  if (current === "complete") {
+  if (current === "complete" || current === "warranty_watch") {
     if (next === "punch_out") return "Reopen to punch out";
     if (next === "in_progress") return "Reopen to in progress";
   }
@@ -134,17 +141,25 @@ export default async function ProjectPage({
 
   const { project, bid } = data;
   const transitions = allowedProjectStatusTransitions(project.status);
-  const [updates, preStart, financials, expenses, invoices, changeOrders] =
-    await Promise.all([
-      getProjectUpdates(project.id),
-      project.status === "not_started"
-        ? getProjectPreStart(project.id)
-        : Promise.resolve(null),
-      getJobFinancials(project.id),
-      getExpensesForBid(project.id),
-      getInvoicesForBid(project.id),
-      getChangeOrdersForBid(project.id),
-    ]);
+  const [
+    updates,
+    preStart,
+    financials,
+    schedule,
+    expenses,
+    invoices,
+    changeOrders,
+  ] = await Promise.all([
+    getProjectUpdates(project.id),
+    project.status === "not_started"
+      ? getProjectPreStart(project.id)
+      : Promise.resolve(null),
+    getJobFinancials(project.id),
+    getJobScheduleContext(project.id),
+    getExpensesForBid(project.id),
+    getInvoicesForBid(project.id),
+    getChangeOrdersForBid(project.id),
+  ]);
   const startReady = preStart ? isProjectStartReady(preStart) : true;
 
   return (
@@ -216,6 +231,12 @@ export default async function ProjectPage({
           </div>
         </CardContent>
       </Card>
+
+      <ScheduleCard
+        project={project}
+        schedule={schedule}
+        financials={financials}
+      />
 
       <BudgetCard
         projectId={project.id}
@@ -562,6 +583,220 @@ function Stat({
       >
         {value}
       </p>
+    </div>
+  );
+}
+
+function ScheduleCard({
+  project,
+  schedule,
+  financials,
+}: {
+  project: ProjectView;
+  schedule: JobScheduleContext;
+  financials: JobFinancials;
+}) {
+  // Fork on the lead's large/small flag; without a lead, infer from which
+  // track has data (day strip set and weeks not → small), defaulting large.
+  const large =
+    schedule.isLargeJob ??
+    !(project.daysTotal != null && project.weeksTotal == null);
+
+  const totalUnits = large ? project.weeksTotal : project.daysTotal;
+  const currentUnit = large ? project.currentWeek : project.currentDay;
+  const schedulePct =
+    totalUnits && totalUnits > 0 && currentUnit != null
+      ? Math.min(1, currentUnit / totalUnits)
+      : null;
+  const buildingsTotal = schedule.buildingsTotal;
+  const buildingsPct =
+    buildingsTotal > 0 && project.buildingsDone != null
+      ? Math.min(1, project.buildingsDone / buildingsTotal)
+      : null;
+
+  // Burn-rate alert: dollars are going out faster than the schedule is
+  // elapsing. 10-point grace before flagging.
+  const burnGap =
+    financials.pctSpent != null && schedulePct != null
+      ? financials.pctSpent - schedulePct
+      : null;
+  const burnHot = burnGap != null && burnGap > 0.1;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Schedule</CardTitle>
+        <CardDescription>
+          {large
+            ? "Week-by-week progress against the plan, with buildings knocked down as crews finish them."
+            : "Day-by-day progress for a short job."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-5">
+        {burnHot && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-2 text-sm text-destructive">
+            Burn rate ahead of schedule:{" "}
+            {Math.round((financials.pctSpent ?? 0) * 100)}% of budget spent vs{" "}
+            {Math.round((schedulePct ?? 0) * 100)}% of schedule elapsed.
+          </div>
+        )}
+
+        {schedulePct != null ? (
+          <div>
+            <div className="mb-1 flex justify-between text-xs text-muted-foreground">
+              <span>
+                {large
+                  ? `Week ${currentUnit} of ${totalUnits}`
+                  : `Day ${currentUnit} of ${totalUnits}`}
+              </span>
+              <span className="tabular-nums">
+                {Math.round(schedulePct * 100)}% elapsed
+              </span>
+            </div>
+            {large ? (
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary"
+                  style={{ width: `${Math.round(schedulePct * 100)}%` }}
+                />
+              </div>
+            ) : (
+              <div className="flex gap-1">
+                {Array.from({ length: totalUnits ?? 0 }, (_, i) => (
+                  <div
+                    key={i}
+                    className={
+                      "h-2 flex-1 rounded-sm " +
+                      (i < (currentUnit ?? 0) ? "bg-primary" : "bg-muted")
+                    }
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            No schedule set yet — fill in the plan below to track pace.
+          </p>
+        )}
+
+        {large && buildingsPct != null && (
+          <div>
+            <div className="mb-1 flex justify-between text-xs text-muted-foreground">
+              <span>
+                {project.buildingsDone} of {buildingsTotal} buildings done
+              </span>
+              <span className="tabular-nums">
+                {Math.round(buildingsPct * 100)}%
+              </span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary"
+                style={{ width: `${Math.round(buildingsPct * 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        <form
+          action={updateJobScheduleAction}
+          className="flex flex-wrap items-end gap-3"
+        >
+          <input type="hidden" name="id" value={project.id} />
+          {large ? (
+            <>
+              {/* Preserve the other track's values — absent fields null out. */}
+              <input
+                type="hidden"
+                name="daysTotal"
+                value={project.daysTotal ?? ""}
+              />
+              <input
+                type="hidden"
+                name="currentDay"
+                value={project.currentDay ?? ""}
+              />
+              <ScheduleField
+                label="Weeks planned"
+                name="weeksTotal"
+                defaultValue={project.weeksTotal}
+              />
+              <ScheduleField
+                label="Current week"
+                name="currentWeek"
+                defaultValue={project.currentWeek}
+              />
+              <ScheduleField
+                label="Buildings done"
+                name="buildingsDone"
+                defaultValue={project.buildingsDone}
+                max={buildingsTotal > 0 ? buildingsTotal : undefined}
+              />
+            </>
+          ) : (
+            <>
+              <input
+                type="hidden"
+                name="weeksTotal"
+                value={project.weeksTotal ?? ""}
+              />
+              <input
+                type="hidden"
+                name="currentWeek"
+                value={project.currentWeek ?? ""}
+              />
+              <input
+                type="hidden"
+                name="buildingsDone"
+                value={project.buildingsDone ?? ""}
+              />
+              <ScheduleField
+                label="Days planned"
+                name="daysTotal"
+                defaultValue={project.daysTotal}
+              />
+              <ScheduleField
+                label="Current day"
+                name="currentDay"
+                defaultValue={project.currentDay}
+              />
+            </>
+          )}
+          <SubmitButton variant="outline" size="sm">
+            Save schedule
+          </SubmitButton>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ScheduleField({
+  label,
+  name,
+  defaultValue,
+  max,
+}: {
+  label: string;
+  name: string;
+  defaultValue: number | null;
+  max?: number;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <Label htmlFor={`schedule-${name}`} className="text-xs">
+        {label}
+      </Label>
+      <Input
+        id={`schedule-${name}`}
+        name={name}
+        type="number"
+        min={0}
+        max={max}
+        defaultValue={defaultValue ?? ""}
+        className="h-8 w-28"
+      />
     </div>
   );
 }
