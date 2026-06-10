@@ -43,6 +43,24 @@ export function calculateBidPricing(input: PricingInput): PricingResult {
     laborRatePerUnit != null;
 
   if (!hasCore || totalSqft === 0) {
+    // No paintable sqft but priced lines exist: a catalog/SKU small job
+    // (or line-items-only bid). The quote IS the lines — no paint math,
+    // and per-sqft rates aren't required to propose it.
+    const linesOnlyTotal = lineItemsTotal + accessTotal;
+    if (totalSqft === 0 && linesOnlyTotal > 0) {
+      return {
+        totalSqft,
+        gallonsNeeded: null,
+        materialCost: null,
+        laborCost: null,
+        subtotal: round2(linesOnlyTotal),
+        lineItemsTotal: round2(lineItemsTotal),
+        accessTotal: round2(accessTotal),
+        marginAmount: null,
+        grandTotal: round2(linesOnlyTotal),
+        complete: true,
+      };
+    }
     return {
       totalSqft,
       gallonsNeeded: null,
