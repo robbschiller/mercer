@@ -4,6 +4,53 @@ Running log of in-flight work on the lead-to-close MVP (docs/plan.md). Chronolog
 
 ---
 
+## 2026-06-09/10 — AQP reconciliation shipped end-to-end (money → takeoffs → photos → reports)
+
+**Goal:** Our first customer (Austin / Affordable Quality Painting) handed over their "Operating System" alpha spec — 18 entities, 8 screens, a full lead→invoice flow for a painting contractor, property at the center. It independently lands on Mercer's exact thesis, which made it the best possible gap map: the front half (leads → takeoff → proposal → portal) was already ours; the back half (money, schedule, photos, reporting) wasn't. Over two days we reconciled the whole spec into Mercer as **per-org product features, not an AQP-specific build**. Full delta + decisions: [`docs/build-plans/aqp_reconciliation.plan.md`](build-plans/aqp_reconciliation.plan.md). Migrations `021`–`031`.
+
+### The one architecture decision (Model A)
+
+AQP separates Takeoff → Proposal → Job as entities; a Job carries an immutable `contract_value` that all profitability derives from. We kept Mercer's collapsed spine — **the bid row IS the project** — and took only the part that matters: `bids.contract_value`, snapshotted at proposal acceptance, never recomputed. The money layer hangs off the bid. No `jobs` table reintroduced.
+
+### Money layer (021–023)
+
+- `expenses` (dated, categorized spend), `invoices` (mobilization/draws/deposit/final), `change_orders` (signed; approved ones adjust the contract).
+- **Everything financial is derived at read time** — budget, burn, remaining, profit (`getJobFinancials`). Nothing stored that can be summed.
+- Job page got Budget / Invoices / Change-orders cards. Pre-existing won jobs backfilled with contract values from their latest proposal totals.
+
+### Pipeline + temporal model (024–026, 028)
+
+- Leads: `is_large_job` (the 2-week large/small fork from AQP, drives different takeoff + billing paths), scope tags, est. value, rep inheritance from the management company.
+- **Dated relationships**: `property_mgmt`, `property_owner`, `contact_employment` — owners sell, managers rotate, contacts change firms; the property persists and the history survives. Backfilled from current FKs; now **editable** from the property/contact pages (adding a current relationship ends the previous one as of the new start date).
+- **Lead statuses expanded** to AQP's operating flow: `needs_takeoff → takeoff_scheduled → quoted → won / lost / no_response / on_hold / expired`. Kept `quoted`/`won`/`lost` values so the bid-create and proposal-accept write paths didn't move; migrated 1,244 `new` rows to `needs_takeoff`.
+- **`/takeoff-queue`** ("Takeoffs" in the sidebar): the dispatcher's morning screen — needs-takeoff leads oldest-first with days-waiting, scheduled takeoffs by booked date, inline date booking, and a Start-bid button that forks large → full wizard, small → quick takeoff.
+
+### Catalog + small-job track (027, small takeoff)
+
+- Org-scoped `price_list_items` (SKU'd services) + `supplier_products` (paint/material pricing) with a Settings → Catalog management page; bids gained an "Add from catalog" picker.
+- **`/bids/new/small?leadId=`** — the standalone small-job takeoff: one screen, price list grouped by category, qty inputs → priced bid + lead to "Quote sent". No buildings/surfaces.
+
+### Schedule + delivery lifecycle (029–030)
+
+- Job-page **Schedule card**: weeks progress + "N of M buildings done" for large jobs (buildings total derived from the takeoff, never stored), a day-strip for small ones, and a **burn-rate alert** when % of budget spent runs more than 10 points ahead of % of schedule elapsed.
+- `warranty_watch` added to the delivery state machine (complete → warranty watch; a claim reopens like a reopen-from-complete, but moving *into* warranty watch keeps the end date).
+- `is_large_job` backfilled heuristically for pre-existing leads (2+ buildings or ≥$50k → large).
+
+### Photos (031)
+
+- Polymorphic `photos` table — one archive for everything, attached by `(context_type, context_id)` with a `kind` (intake / takeoff / progress / completion / damage). Public `photos` storage bucket mirrors the proposals bucket. Gallery + upload card on lead (intake), project (progress), and property (standing record) pages.
+
+### Reports
+
+- **`/reports`**: open-pipeline value, lead + bid win rates, delivered vs in-flight margin (contracted = contract + approved COs, vs expenses), lead funnel with est. values, source conversion, six-month lead/won/contracted trend. All derived live.
+
+### Gotchas worth remembering
+
+- New app routes **must** be added to the middleware matcher in `src/proxy.ts` or they render unauthenticated errors instead of redirecting to login.
+- Apply manual migrations **individually** — bulk `db:apply-manual` still breaks on an old index/drop interaction (see the note in `021`).
+- Authenticated UI click-throughs are still pending a shared dev login; everything is verified at the data layer + typecheck/lint, and the happy path compiles, but a human pass over the new screens is the next QA step.
+- `ANTHROPIC_API_KEY` remains commented out in `.env.local` — all AI surfaces still run on their offline mocks by design.
+
 ## 2026-06-09 — Ask tab (entity-scoped AI chat, P1) + dashboard composer write-path
 
 Two things landed, both designed to run **before** the business provisions an `ANTHROPIC_API_KEY** — each falls back to a local stand-in and flips to real Claude automatically once the key is set (no code change).
