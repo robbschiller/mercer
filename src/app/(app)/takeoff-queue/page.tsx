@@ -172,7 +172,15 @@ function QueueRow({ lead }: { lead: TakeoffQueueRow }) {
             </SubmitButton>
           </form>
           <Button size="sm" variant="amber" asChild>
-            <Link href={`/bids/new?leadId=${lead.id}`}>Start bid</Link>
+            <Link
+              href={
+                lead.isLargeJob
+                  ? `/bids/new?leadId=${lead.id}`
+                  : `/bids/new/small?leadId=${lead.id}`
+              }
+            >
+              {lead.isLargeJob ? "Start bid" : "Quick takeoff"}
+            </Link>
           </Button>
         </div>
       </td>
