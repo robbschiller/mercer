@@ -1,6 +1,6 @@
 # Build plan — AQP Operating System → Mercer reconciliation
 
-**Status:** Blueprint (captured 2026-06-09). Drives the next several phases.
+**Status:** Largely shipped (phases 1–5, 2026-06-09/10, migrations `021`–`029`). Remaining: photos, relationship-editing UI, standalone small-job takeoff screen, reports/analytics — see §Shipped below.
 **Source:** AQP "Operating System" alpha handoff (first customer, Austin/Affordable Quality Painting): `AQP-Operating-System-Summary.pdf`, `SCHEMA.md` (18 entities + DDL), `aqp-alpha.html` (8 screens). `BUILD_MAP.md` not yet shared.
 **Relates to:** [[data-model-and-entry-points]], the property-rooted re-model (`docs/plan.md`), [`docs/build-plans/conversation_tab.plan.md`].
 
@@ -65,6 +65,19 @@ AQP separates **Takeoff → Proposal → Job** as distinct entities; a Job carri
 
 ## Config-per-org (multi-tenant generalization)
 Everything AQP hardcodes becomes per-org config (extend `rate_config`/`user_defaults`): the **2-week large/small threshold**, **admin % (25/30)** and **commission % (4)**, the **15 expense categories** (+ the 3 small-job categories — and resolve AQP open-question #1: unify the vocabularies), **payment types**, **lead sources**, the **SKU price list**, and the **supplier price list**. None of the model resists multi-tenancy.
+
+## Shipped (2026-06-09/10)
+
+| Phase | Migrations | What landed |
+|---|---|---|
+| 1 — money layer | `021`–`023` | `bids.contract_value` stamped at acceptance; `expenses`; derived budget/burn/profit (`getJobFinancials`); `invoices` (draws); `change_orders` (approved adjust contract); job-page money cards. |
+| 2a — lead fields | `024` | `is_large_job`, `scope_category[]`, `est_value`; `accounts.internal_rep_id` inherited onto lead owner. |
+| 2b — temporal | `025`–`026` | Dated `property_mgmt`/`property_owner`/`contact_employment` (one-current partial unique), backfilled; history cards on detail pages (read-only). |
+| 3 — catalog | `027` | `price_list_items` + `supplier_products` org config; Settings → Catalog; bid "Add from catalog" picker. |
+| 4 — pipeline | `028` | Lead status enum → needs_takeoff/takeoff_scheduled/quoted/won/lost/no_response/on_hold/expired (`quoted`/`won`/`lost` values kept; `new` migrated); `takeoff_scheduled_at`; `/takeoff-queue` dispatch screen. |
+| 5 — schedule | `029` | `weeks_total`/`current_week`, `days_total`/`current_day`, `buildings_done` (total derived from buildings); job-page Schedule card with large/small fork + burn-rate alert; `warranty_watch` delivery status. |
+
+Known data caveat: pre-existing leads all have `is_large_job = false` (the 2a default was never backfilled) — old large jobs show the small-job day strip until the flag is set.
 
 ## Phased sequence
 1. **Money layer (Phase 5 equivalent — highest value, biggest gap).** `bids.contract_value` snapshot at acceptance → `expenses` + budget-by-category + derived burn/profitability → `invoices`/draws → `change_orders`. Job-page money UI. Visual language: cream + deep-blue, restrained pills (matches Mercer + AQP).
