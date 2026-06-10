@@ -22,6 +22,12 @@ const optionalNumber = z.preprocess(
   z.union([z.number().finite(), z.null()]),
 );
 
+/** Optional non-negative integer from a form field: "" / null → null. */
+const optionalCount = z.preprocess(
+  (v) => (v === "" || v == null ? null : Number(v)),
+  z.union([z.number().int().min(0), z.null()]),
+);
+
 /** Optional enum from a form select: "" / null → null. */
 function optionalEnum<T extends readonly [string, ...string[]]>(values: T) {
   return z.preprocess(
@@ -406,6 +412,11 @@ export const updateLeadStatusSchema = z.object({
   status: z.enum(LEAD_STATUSES),
 });
 
+export const scheduleTakeoffSchema = z.object({
+  id: z.string().uuid("Invalid lead ID"),
+  scheduledAt: z.coerce.date({ error: "Pick a takeoff date" }),
+});
+
 export const updateLeadSchema = z.object({
   id: z.string().uuid("Invalid lead ID"),
   name: z.string().trim().min(1, "Name is required"),
@@ -457,6 +468,15 @@ const optionalDate = z
 export const updateProjectStatusSchema = z.object({
   id: z.string().uuid("Invalid project ID"),
   status: z.enum(PROJECT_STATUSES),
+});
+
+export const updateJobScheduleSchema = z.object({
+  id: z.string().uuid("Invalid project ID"),
+  weeksTotal: optionalCount,
+  currentWeek: optionalCount,
+  daysTotal: optionalCount,
+  currentDay: optionalCount,
+  buildingsDone: optionalCount,
 });
 
 export const updateProjectDetailsSchema = z.object({

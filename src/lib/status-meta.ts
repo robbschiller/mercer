@@ -10,8 +10,41 @@
 export const BID_STATUSES = ["draft", "sent", "won", "lost"] as const;
 export type BidStatus = (typeof BID_STATUSES)[number];
 
-export const LEAD_STATUSES = ["new", "quoted", "won", "lost"] as const;
+/**
+ * Lead pipeline statuses (AQP reconciliation, Phase 4). The takeoff stages
+ * come from AQP's operating flow; `quoted`/`won`/`lost` keep their original
+ * values so the bid-create and proposal-accept write paths are untouched
+ * (migration 028 maps the retired `new` → `needs_takeoff`).
+ */
+export const LEAD_STATUSES = [
+  "needs_takeoff",
+  "takeoff_scheduled",
+  "quoted",
+  "won",
+  "lost",
+  "no_response",
+  "on_hold",
+  "expired",
+] as const;
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
+
+/** Terminal outcomes — entering one stamps `leads.closed_at`. */
+export const CLOSED_LEAD_STATUSES = [
+  "won",
+  "lost",
+  "no_response",
+  "expired",
+] as const satisfies readonly LeadStatus[];
+
+export function isClosedLeadStatus(status: string): boolean {
+  return (CLOSED_LEAD_STATUSES as readonly string[]).includes(status);
+}
+
+/** Statuses that put a lead on the takeoff queue. */
+export const TAKEOFF_QUEUE_STATUSES = [
+  "needs_takeoff",
+  "takeoff_scheduled",
+] as const satisfies readonly LeadStatus[];
 
 export const ENRICHMENT_STATUSES = [
   "pending",
@@ -26,6 +59,7 @@ export const PROJECT_STATUSES = [
   "in_progress",
   "punch_out",
   "complete",
+  "warranty_watch",
   "on_hold",
 ] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
@@ -403,17 +437,25 @@ export const BID_STATUS_VARIANTS: Record<BidStatus, BadgeVariant> = {
 };
 
 export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
-  new: "New",
-  quoted: "Quoted",
+  needs_takeoff: "Needs takeoff",
+  takeoff_scheduled: "Takeoff scheduled",
+  quoted: "Quote sent",
   won: "Won",
   lost: "Lost",
+  no_response: "No response",
+  on_hold: "On hold",
+  expired: "Expired",
 };
 
 export const LEAD_STATUS_VARIANTS: Record<LeadStatus, BadgeVariant> = {
-  new: "secondary",
+  needs_takeoff: "secondary",
+  takeoff_scheduled: "outline",
   quoted: "outline",
   won: "default",
   lost: "secondary",
+  no_response: "secondary",
+  on_hold: "secondary",
+  expired: "secondary",
 };
 
 export const ENRICHMENT_LABELS: Record<EnrichmentStatus, string> = {
@@ -428,6 +470,7 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   in_progress: "In progress",
   punch_out: "Punch out",
   complete: "Complete",
+  warranty_watch: "Warranty watch",
   on_hold: "On hold",
 };
 
@@ -436,6 +479,7 @@ export const PROJECT_STATUS_VARIANTS: Record<ProjectStatus, BadgeVariant> = {
   in_progress: "default",
   punch_out: "outline",
   complete: "default",
+  warranty_watch: "outline",
   on_hold: "secondary",
 };
 

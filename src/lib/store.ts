@@ -47,17 +47,20 @@ import { getOrgContext } from "@/lib/org-context";
 import { computeTotalSqft } from "@/lib/dimensions";
 import { buildSatelliteProxyPath } from "@/lib/maps/satellite-path";
 import { calculateBidPricing } from "@/lib/pricing";
-import type {
-  AccountType,
-  ExpenseCategory,
-  PaymentType,
-  InvoiceType,
-  InvoiceStatus,
-  ChangeOrderReason,
-  ChangeOrderStatus,
-  PriceListCategory,
-  PricingUnit,
-  SupplierProductType,
+import {
+  LEAD_STATUSES,
+  TAKEOFF_QUEUE_STATUSES,
+  isClosedLeadStatus,
+  type AccountType,
+  type ExpenseCategory,
+  type PaymentType,
+  type InvoiceType,
+  type InvoiceStatus,
+  type ChangeOrderReason,
+  type ChangeOrderStatus,
+  type PriceListCategory,
+  type PricingUnit,
+  type SupplierProductType,
 } from "@/lib/status-meta";
 
 export type Bid = typeof bids.$inferSelect;
@@ -1185,6 +1188,11 @@ export type ProjectView = {
   actualEndDate: Date | null;
   assignedSub: string | null;
   crewLeadName: string | null;
+  weeksTotal: number | null;
+  currentWeek: number | null;
+  daysTotal: number | null;
+  currentDay: number | null;
+  buildingsDone: number | null;
   acceptedByName: string | null;
   acceptedByTitle: string | null;
   acceptedAt: Date | null;
@@ -1207,6 +1215,11 @@ function bidToProjectView(b: Bid): ProjectView | null {
     actualEndDate: b.actualEndDate,
     assignedSub: b.assignedSub,
     crewLeadName: b.crewLeadName,
+    weeksTotal: b.weeksTotal,
+    currentWeek: b.currentWeek,
+    daysTotal: b.daysTotal,
+    currentDay: b.currentDay,
+    buildingsDone: b.buildingsDone,
     acceptedByName: b.acceptedByName,
     acceptedByTitle: b.acceptedByTitle,
     acceptedAt: b.acceptedAt,
@@ -1339,13 +1352,18 @@ export async function getProject(id: string): Promise<ProjectWithBid | null> {
  * walk-list items resurface) or back to `in_progress` (substantive
  * rework). Reopening clears `actual_end_date` so the next `complete`
  * re-stamps it; `actual_start_date` is preserved.
+ *
+ * `warranty_watch` (AQP job lifecycle) follows `complete` — the job is done
+ * but under warranty monitoring; it keeps `actual_end_date`. A warranty
+ * claim reopens to `punch_out`/`in_progress` like a reopen from complete.
  */
 const PROJECT_STATUS_TRANSITIONS: Record<ProjectStatus, ProjectStatus[]> = {
   not_started: ["in_progress", "on_hold"],
   in_progress: ["punch_out", "on_hold"],
   punch_out: ["complete", "on_hold"],
   on_hold: ["in_progress"],
-  complete: ["punch_out", "in_progress"],
+  complete: ["warranty_watch", "punch_out", "in_progress"],
+  warranty_watch: ["punch_out", "in_progress"],
 };
 
 export function allowedProjectStatusTransitions(
@@ -1401,9 +1419,15 @@ export async function updateProjectStatus(
   if (next === "complete" && !current.actualEndDate) {
     patch.actualEndDate = now;
   }
-  // Reopen from complete clears actual_end_date so the next complete
-  // re-stamps it; actual_start_date is preserved through the reopen.
-  if (current.deliveryStatus === "complete" && next !== "complete") {
+  // Reopen from complete/warranty_watch clears actual_end_date so the next
+  // complete re-stamps it; actual_start_date is preserved through the
+  // reopen. Moving complete → warranty_watch is NOT a reopen — the job
+  // stays finished, so the end date stands.
+  if (
+    (current.deliveryStatus === "complete" ||
+      current.deliveryStatus === "warranty_watch") &&
+    (next === "in_progress" || next === "punch_out")
+  ) {
     patch.actualEndDate = null;
   }
 
@@ -1434,6 +1458,64 @@ export async function updateProjectDetails(
       assignedSub: data.assignedSub,
       crewLeadName: data.crewLeadName,
       deliveryNotes: data.notes,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(bids.id, id), eq(bids.userId, user.ownerUserId)))
+    .returning();
+  return rows[0] ? bidToProjectView(rows[0]) : null;
+}
+
+export type JobScheduleContext = {
+  /** Large/small fork, inherited from the originating lead (null = no lead). */
+  isLargeJob: boolean | null;
+  /** Derived from the bid's buildings rows (sum of per-row counts). */
+  buildingsTotal: number;
+};
+
+/** The schedule fork + derived buildings total for the job page. */
+export async function getJobScheduleContext(
+  bidId: string,
+): Promise<JobScheduleContext> {
+  const user = await requireUser();
+  const [bidRows, bldgRows] = await Promise.all([
+    db
+      .select({ isLargeJob: leads.isLargeJob })
+      .from(bids)
+      .leftJoin(leads, eq(bids.leadId, leads.id))
+      .where(and(eq(bids.id, bidId), eq(bids.userId, user.ownerUserId)))
+      .limit(1),
+    db
+      .select({
+        total: sql<number>`coalesce(sum(${buildings.count}), 0)::int`,
+      })
+      .from(buildings)
+      .where(eq(buildings.bidId, bidId)),
+  ]);
+  return {
+    isLargeJob: bidRows[0]?.isLargeJob ?? null,
+    buildingsTotal: Number(bldgRows[0]?.total ?? 0),
+  };
+}
+
+export async function updateJobSchedule(
+  id: string,
+  data: {
+    weeksTotal: number | null;
+    currentWeek: number | null;
+    daysTotal: number | null;
+    currentDay: number | null;
+    buildingsDone: number | null;
+  },
+): Promise<ProjectView | null> {
+  const user = await requireUser();
+  const rows = await db
+    .update(bids)
+    .set({
+      weeksTotal: data.weeksTotal,
+      currentWeek: data.currentWeek,
+      daysTotal: data.daysTotal,
+      currentDay: data.currentDay,
+      buildingsDone: data.buildingsDone,
       updatedAt: new Date(),
     })
     .where(and(eq(bids.id, id), eq(bids.userId, user.ownerUserId)))
@@ -1597,13 +1679,7 @@ export type BidStatusCounts = {
   lost: number;
 };
 
-export type LeadStatusCounts = {
-  total: number;
-  new: number;
-  quoted: number;
-  won: number;
-  lost: number;
-};
+export type LeadStatusCounts = { total: number } & Record<LeadStatus, number>;
 
 export type ProjectStatusCounts = {
   total: number;
@@ -1611,8 +1687,9 @@ export type ProjectStatusCounts = {
   in_progress: number;
   punch_out: number;
   complete: number;
+  warranty_watch: number;
   on_hold: number;
-  /** Anything not in `complete` — the contractor's "still working it" set. */
+  /** Anything not in `complete`/`warranty_watch` — the "still working it" set. */
   active: number;
   /** Active projects whose `target_end_date` is in the past. */
   overdue: number;
@@ -1646,7 +1723,7 @@ export async function getProjectStatusCounts(): Promise<ProjectStatusCounts> {
     .select({
       status: bids.deliveryStatus,
       count: sql<number>`count(*)::int`,
-      overdue: sql<number>`count(*) filter (where ${bids.targetEndDate} is not null and ${bids.targetEndDate} < current_date and ${bids.deliveryStatus} <> 'complete')::int`,
+      overdue: sql<number>`count(*) filter (where ${bids.targetEndDate} is not null and ${bids.targetEndDate} < current_date and ${bids.deliveryStatus} not in ('complete', 'warranty_watch'))::int`,
     })
     .from(bids)
     .where(
@@ -1663,6 +1740,7 @@ export async function getProjectStatusCounts(): Promise<ProjectStatusCounts> {
     in_progress: 0,
     punch_out: 0,
     complete: 0,
+    warranty_watch: 0,
     on_hold: 0,
     active: 0,
     overdue: 0,
@@ -1674,7 +1752,9 @@ export async function getProjectStatusCounts(): Promise<ProjectStatusCounts> {
       counts[row.status as ProjectStatus] = n;
     }
     counts.total += n;
-    if (row.status !== "complete") counts.active += n;
+    if (row.status !== "complete" && row.status !== "warranty_watch") {
+      counts.active += n;
+    }
     counts.overdue += Number(row.overdue);
   }
   return counts;
@@ -1698,7 +1778,10 @@ export async function getLeadStatusCounts(options?: {
     )
     .groupBy(leads.status);
 
-  const counts: LeadStatusCounts = { total: 0, new: 0, quoted: 0, won: 0, lost: 0 };
+  const counts = {
+    total: 0,
+    ...Object.fromEntries(LEAD_STATUSES.map((s) => [s, 0])),
+  } as LeadStatusCounts;
   for (const row of rows) {
     const n = Number(row.count);
     if (row.status in counts) counts[row.status as LeadStatus] = n;
@@ -4314,7 +4397,7 @@ export async function updateLeadStatus(id: string, status: Lead["status"]) {
     .update(leads)
     .set({
       status,
-      closedAt: status === "won" || status === "lost" ? new Date() : null,
+      closedAt: isClosedLeadStatus(status) ? new Date() : null,
       updatedAt: new Date(),
     })
     .where(and(eq(leads.id, id), eq(leads.userId, user.ownerUserId)))
@@ -4342,6 +4425,95 @@ export async function updateLeadStatus(id: string, status: Lead["status"]) {
     });
   }
   return rows[0] ?? null;
+}
+
+/** Book the takeoff visit: status → takeoff_scheduled + the booked time. */
+export async function scheduleLeadTakeoff(id: string, scheduledAt: Date) {
+  const user = await requireUser();
+  const previous = await getLead(id);
+  const rows = await db
+    .update(leads)
+    .set({
+      status: "takeoff_scheduled",
+      takeoffScheduledAt: scheduledAt,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(leads.id, id), eq(leads.userId, user.ownerUserId)))
+    .returning();
+  const lead = rows[0] ?? null;
+  if (lead) {
+    await createActivityEvent({
+      userId: user.ownerUserId,
+      leadId: lead.id,
+      contactId: lead.primaryContactId,
+      propertyId: lead.propertyId,
+      accountId: lead.accountId,
+      type: "status_change",
+      title: "Takeoff scheduled",
+      metadata: {
+        from: previous?.status ?? null,
+        to: "takeoff_scheduled",
+        takeoffScheduledAt: scheduledAt.toISOString(),
+      },
+    });
+    await writeAuditLog({
+      userId: user.ownerUserId,
+      entityType: "lead",
+      entityId: lead.id,
+      action: "update",
+      previousValues: {
+        status: previous?.status ?? null,
+        takeoffScheduledAt: previous?.takeoffScheduledAt ?? null,
+      },
+      newValues: {
+        status: lead.status,
+        takeoffScheduledAt: lead.takeoffScheduledAt,
+      },
+      changedFields: ["status", "takeoff_scheduled_at"],
+    });
+  }
+  return lead;
+}
+
+export type TakeoffQueueRow = Lead & {
+  propertyDisplayName: string | null;
+  propertyAddress: string | null;
+  accountName: string | null;
+};
+
+/**
+ * The takeoff queue (AQP's dispatch screen): open takeoff-stage leads —
+ * needs_takeoff ordered oldest-first, then takeoff_scheduled by booked time.
+ */
+export async function getTakeoffQueue(): Promise<TakeoffQueueRow[]> {
+  const user = await requireUser();
+  const rows = await db
+    .select({
+      lead: leads,
+      propertyDisplayName: properties.name,
+      propertyAddress: properties.address,
+      accountName: accounts.name,
+    })
+    .from(leads)
+    .leftJoin(properties, eq(leads.propertyId, properties.id))
+    .leftJoin(accounts, eq(leads.accountId, accounts.id))
+    .where(
+      and(
+        eq(leads.userId, user.ownerUserId),
+        inArray(leads.status, [...TAKEOFF_QUEUE_STATUSES]),
+      ),
+    )
+    .orderBy(
+      sql`case when ${leads.status} = 'needs_takeoff' then 0 else 1 end`,
+      sql`${leads.takeoffScheduledAt} asc nulls last`,
+      asc(leads.createdAt),
+    );
+  return rows.map((row) => ({
+    ...row.lead,
+    propertyDisplayName: row.propertyDisplayName,
+    propertyAddress: row.propertyAddress,
+    accountName: row.accountName,
+  }));
 }
 
 /** Distinct source_tag values for the current user (for filter dropdown). */
