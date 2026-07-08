@@ -206,6 +206,27 @@ export const updateUserDefaultsSchema = z.object({
 
 // ── Proposals ──
 
+// Quote engine review edits: qty/unitPrice travel together so the server
+// can recompute amount; a human editing either clears the verify flag.
+export const updateQuoteLineSchema = z
+  .object({
+    id: z.string().uuid("Invalid line item ID"),
+    bidId: z.string().uuid("Invalid bid ID"),
+    name: z.string().min(1, "Name is required").max(300).optional(),
+    qty: z.coerce.number().nonnegative("Qty must be ≥ 0").optional(),
+    unitPrice: z.coerce
+      .number()
+      .nonnegative("Unit price must be ≥ 0")
+      .optional(),
+  })
+  .refine((d) => (d.qty == null) === (d.unitPrice == null), {
+    message: "qty and unitPrice must be sent together",
+  });
+
+export const createQuoteLineSchema = z.object({
+  bidId: z.string().uuid("Invalid bid ID"),
+});
+
 export const generateProposalSchema = z.object({
   bidId: z.string().uuid("Invalid bid ID"),
   // Quote engine: AI-written changelog + the scope text the draft came from,

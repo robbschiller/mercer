@@ -1,25 +1,24 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Building2, DollarSign, FileText, ArrowUpDown } from "lucide-react";
+import { Building2, DollarSign, ArrowUpDown } from "lucide-react";
 import { CollapsibleSection } from "@/components/collapsible-section";
 import { BuildingList } from "@/components/building-list";
 import { AccessItemsSection } from "@/components/access-items-section";
 import { PricingSection } from "@/components/pricing-section";
-import { ProposalList } from "@/components/proposal-list";
 import { formatCurrency } from "@/lib/pricing";
 import type {
   Bid,
   Surface,
   LineItem,
   AccessItem,
-  Proposal,
   BuildingWithSqft,
-  ProposalShare,
 } from "@/lib/store";
 import type { PricingResult } from "@/lib/pricing";
 
-type Section = "buildings" | "access" | "pricing" | "proposals";
+// Proposals moved into the quote engine's version-history rail
+// (quote-engine.tsx) — this component keeps the takeoff-detail sections.
+type Section = "buildings" | "access" | "pricing";
 
 interface BidDetailSectionsProps {
   bid: Bid;
@@ -28,10 +27,7 @@ interface BidDetailSectionsProps {
   lineItems: LineItem[];
   accessItems: AccessItem[];
   totalSqft: number;
-  proposals: Proposal[];
-  proposalShares: { proposalId: string; share: ProposalShare }[];
   pricing: PricingResult;
-  siteUrl: string;
 }
 
 export function BidDetailSections({
@@ -41,16 +37,12 @@ export function BidDetailSections({
   lineItems,
   accessItems,
   totalSqft,
-  proposals,
-  proposalShares,
   pricing,
-  siteUrl,
 }: BidDetailSectionsProps) {
   const [open, setOpen] = useState<Set<Section>>(() => {
     const initial = new Set<Section>();
     if (buildings.length === 0) initial.add("buildings");
     if (!pricing.complete) initial.add("pricing");
-    if (proposals.length === 0) initial.add("proposals");
     return initial;
   });
 
@@ -95,11 +87,6 @@ export function BidDetailSections({
     ? `${formatCurrency(pricing.grandTotal)}${lineItemsTotal > 0 ? ` · ${lineItems.length} line item${lineItems.length !== 1 ? "s" : ""}` : ""}`
     : "Set up pricing to calculate your bid";
 
-  const proposalSummary =
-    proposals.length === 0
-      ? "No proposals generated yet"
-      : `${proposals.length} proposal${proposals.length !== 1 ? "s" : ""} · Last sent ${new Date(proposals[0].createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
-
   return (
     <>
       <CollapsibleSection
@@ -141,23 +128,6 @@ export function BidDetailSections({
           lineItems={lineItems}
           totalSqft={totalSqft}
           accessTotal={accessTotal}
-        />
-      </CollapsibleSection>
-
-      <CollapsibleSection
-        icon={FileText}
-        title="Proposals"
-        description="Generate a client-facing PDF proposal from this bid."
-        summary={proposalSummary}
-        open={open.has("proposals")}
-        onToggle={() => toggle("proposals")}
-      >
-        <ProposalList
-          proposals={proposals}
-          proposalShares={proposalShares}
-          bidId={bid.id}
-          pricingComplete={pricing.complete}
-          siteUrl={siteUrl}
         />
       </CollapsibleSection>
     </>

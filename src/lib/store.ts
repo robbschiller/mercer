@@ -320,6 +320,8 @@ export async function updateBid(
       | "latitude"
       | "longitude"
       | "googlePlaceId"
+      | "draftScopeText"
+      | "draftChangeLog"
     >
   >
 ) {
@@ -6368,12 +6370,14 @@ export type DraftLineInsert = {
 
 /**
  * A fresh AI generation replaces the previous AI draft: lines with
- * source='ai' are dropped, catalog/manual lines survive. Returns the bid's
- * full ordered line list after the swap.
+ * source='ai' are dropped, catalog/manual lines survive. Also stamps the
+ * in-flight draft meta (scope + changelog) onto the bid so it survives a
+ * refresh mid-review. Returns the bid's full ordered line list after the swap.
  */
 export async function replaceAiDraftLines(
   bidId: string,
   lines: DraftLineInsert[],
+  meta: { scopeText: string; changeLog: string | null },
 ): Promise<LineItem[]> {
   const user = await requireUser();
   await requireBidOwnership(bidId, user.ownerUserId);
@@ -6401,7 +6405,11 @@ export async function replaceAiDraftLines(
 
   await db
     .update(bids)
-    .set({ updatedAt: new Date() })
+    .set({
+      updatedAt: new Date(),
+      draftScopeText: meta.scopeText,
+      draftChangeLog: meta.changeLog,
+    })
     .where(eq(bids.id, bidId));
 
   return db

@@ -33,6 +33,12 @@ ALTER TABLE proposals ALTER COLUMN version SET NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS proposals_bid_version_idx
   ON proposals (bid_id, version);
 
+-- ── bids: in-flight draft state ──
+-- Set by generateQuoteDraft, stamped onto the proposal (and cleared) at
+-- approval — so the scope/changelog survive a page refresh mid-review.
+ALTER TABLE bids ADD COLUMN IF NOT EXISTS draft_scope_text text;
+ALTER TABLE bids ADD COLUMN IF NOT EXISTS draft_change_log text;
+
 -- ── proposal_shares: view counting ──
 ALTER TABLE proposal_shares ADD COLUMN IF NOT EXISTS view_count integer NOT NULL DEFAULT 0;
 -- Shares that have been accessed at least once count as 1 view

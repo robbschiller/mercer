@@ -5,13 +5,15 @@ import {
   getBidPageData,
   getProjectByBidId,
   getPriceListItems,
+  getPhotos,
+  getJobScheduleContext,
 } from "@/lib/store";
+import { QuoteEngine } from "@/components/quote-engine";
 import { addCatalogLineItemAction } from "@/lib/actions";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/submit-button";
 import { pricingUnitLabel } from "@/lib/status-meta";
-import { getAppOrigin } from "@/lib/env";
 import { calculateBidPricing } from "@/lib/pricing";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -41,11 +43,14 @@ export default async function BidPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const [{ id }, { error }] = await Promise.all([params, searchParams]);
-  const [data, project, catalog] = await Promise.all([
-    getBidPageData(id),
-    getProjectByBidId(id),
-    getPriceListItems({ activeOnly: true }),
-  ]);
+  const [data, project, catalog, bidPhotos, scheduleContext] =
+    await Promise.all([
+      getBidPageData(id),
+      getProjectByBidId(id),
+      getPriceListItems({ activeOnly: true }),
+      getPhotos("bid", id),
+      getJobScheduleContext(id),
+    ]);
 
   if (!data) {
     notFound();
@@ -61,7 +66,6 @@ export default async function BidPage({
     proposals,
     proposalShares,
   } = data;
-  const siteUrl = getAppOrigin();
 
   const pricing = calculateBidPricing({
     totalSqft,
@@ -86,7 +90,7 @@ export default async function BidPage({
   const bidLabel = bid.propertyName || bid.clientName || "Untitled bid";
 
   return (
-    <div className="container mx-auto max-w-2xl px-4 py-8 flex flex-col gap-6">
+    <div className="container mx-auto max-w-5xl px-4 py-8 flex flex-col gap-6">
       <BreadcrumbLabel segment={id} label={bidLabel} />
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" asChild>
@@ -138,6 +142,18 @@ export default async function BidPage({
         </Card>
       )}
 
+      <QuoteEngine
+        bid={bid}
+        lineItems={lineItems}
+        photos={bidPhotos}
+        proposals={proposals}
+        proposalShares={proposalShares}
+        totalSqft={totalSqft}
+        buildingsCount={scheduleContext.buildingsTotal}
+        isLargeJob={scheduleContext.isLargeJob}
+        catalogCount={catalog.length}
+      />
+
       <Suspense fallback={<OsmFootprintsSkeleton />}>
         <OsmFootprintsSection
           latitude={bid.latitude}
@@ -152,10 +168,7 @@ export default async function BidPage({
         lineItems={lineItems}
         accessItems={accessItems}
         totalSqft={totalSqft}
-        proposals={proposals}
-        proposalShares={proposalShares}
         pricing={pricing}
-        siteUrl={siteUrl}
       />
 
       {catalog.length > 0 && (

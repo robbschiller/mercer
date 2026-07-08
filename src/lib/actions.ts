@@ -98,6 +98,8 @@ import {
   updateBidPricingSchema,
   createLineItemSchema,
   updateLineItemSchema,
+  updateQuoteLineSchema,
+  createQuoteLineSchema,
   deleteLineItemSchema,
   createAccessItemSchema,
   updateAccessItemSchema,
@@ -440,6 +442,57 @@ export async function updateLineItemAction(data: {
   return { error: null };
 }
 
+/**
+ * Quote-engine review edit: commit a name and/or qty × unitPrice change.
+ * Amount is recomputed server-side; a human editing qty/price counts as
+ * verification, so the AI's low-confidence flag clears.
+ */
+export async function updateQuoteLineAction(data: {
+  id: string;
+  bidId: string;
+  name?: string;
+  qty?: string | number;
+  unitPrice?: string | number;
+}) {
+  const result = updateQuoteLineSchema.safeParse(data);
+  if (!result.success) {
+    return { error: result.error.issues[0]?.message ?? "Invalid input" };
+  }
+
+  const { id, bidId, name, qty, unitPrice } = result.data;
+  const patch: Parameters<typeof updateLineItem>[1] = {};
+  if (name !== undefined) patch.name = name;
+  if (qty != null && unitPrice != null) {
+    patch.qty = String(qty);
+    patch.unitPrice = String(unitPrice);
+    patch.amount = String(qty * unitPrice);
+    patch.confidence = "high";
+    patch.flagNote = null;
+  }
+  await updateLineItem(id, patch);
+  revalidatePath(`/bids/${bidId}`);
+  return { error: null };
+}
+
+/** Quote-engine "Add line": a blank manual line the user edits in place. */
+export async function createQuoteLineAction(data: { bidId: string }) {
+  const result = createQuoteLineSchema.safeParse(data);
+  if (!result.success) {
+    return { error: result.error.issues[0]?.message ?? "Invalid input", line: null };
+  }
+
+  const line = await createLineItem(result.data.bidId, {
+    name: "New line item",
+    amount: "0",
+    qty: "1",
+    unit: "each",
+    unitPrice: "0",
+    source: "manual",
+  });
+  revalidatePath(`/bids/${result.data.bidId}`);
+  return { error: null, line };
+}
+
 export async function deleteLineItemAction(data: {
   id: string;
   bidId: string;
@@ -633,10 +686,19 @@ export async function generateProposalAction(data: {
     .from("proposals")
     .getPublicUrl(fileName);
 
+  // Draft meta: explicit args win, else whatever generateQuoteDraft stamped
+  // on the bid. Cleared below — it belongs to the proposal now.
+  const changeLog = result.data.changeLog ?? bid.draftChangeLog ?? null;
+  const scopeText = result.data.scopeText ?? bid.draftScopeText ?? null;
+
   const proposal = await createProposal(bid.id, snapshot, urlData.publicUrl, {
-    changeLog: result.data.changeLog ?? null,
-    scopeText: result.data.scopeText ?? null,
+    changeLog,
+    scopeText,
   });
+
+  if (bid.draftChangeLog != null || bid.draftScopeText != null) {
+    await updateBid(bid.id, { draftChangeLog: null, draftScopeText: null });
+  }
 
   if (bid.status === "draft") {
     await updateBid(bid.id, { status: "sent" });
@@ -653,7 +715,13 @@ export async function generateProposalAction(data: {
     revalidatePath(`/leads/${bid.leadId}`);
     revalidatePath("/leads");
   }
-  return { error: null, pdfUrl: proposal.pdfUrl };
+  return {
+    error: null,
+    pdfUrl: proposal.pdfUrl,
+    proposalId: proposal.id,
+    version: proposal.version,
+    changeLog: proposal.changeLog,
+  };
 }
 
 export async function createProposalShareAction(data: { proposalId: string }) {

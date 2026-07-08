@@ -254,6 +254,11 @@ export const bids = pgTable("bids", {
   pricePerGallon: numeric("price_per_gallon"),
   laborRatePerUnit: numeric("labor_rate_per_unit"),
   marginPercent: numeric("margin_percent").default("0"),
+  /* ── Quote engine in-flight draft state: set by generateQuoteDraft,
+        stamped onto the proposal (and cleared) at approval — survives a
+        page refresh mid-review. ── */
+  draftScopeText: text("draft_scope_text"),
+  draftChangeLog: text("draft_change_log"),
   /* ── Delivery phase (the project) — null until won. Folds in what used to
         live on the separate `projects` table; see 018_project_spine.sql. ── */
   deliveryStatus: text("delivery_status", { enum: PROJECT_STATUSES }),
