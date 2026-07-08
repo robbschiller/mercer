@@ -5866,6 +5866,9 @@ export async function getReportData(): Promise<ReportData> {
     };
   };
 
+  // Bind the status list as a single Postgres array literal. Drizzle's `sql`
+  // template spreads a JS array into separate params — `ANY(($1, $2))`, which
+  // is an invalid row expression — so we pass `'{a,b}'::text[]` instead.
   const jobsQuery = (statuses: string[]) => sql`
     SELECT count(*)::int AS count,
       coalesce(sum(b.contract_value::numeric), 0)::text AS base,
@@ -5882,7 +5885,7 @@ export async function getReportData(): Promise<ReportData> {
     ) e ON true
     WHERE b.user_id = ${user.ownerUserId}
       AND b.contract_value IS NOT NULL
-      AND b.delivery_status = ANY(${statuses})
+      AND b.delivery_status = ANY(${`{${statuses.join(",")}}`}::text[])
   `;
 
   const [

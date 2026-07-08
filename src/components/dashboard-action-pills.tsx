@@ -32,7 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { DashboardIntent } from "@/lib/actions/parse-dashboard-intent";
+import type { DashboardIntent } from "@/lib/dashboard-intent";
 import {
   quickAddContact,
   quickCreateLead,

@@ -2,10 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { ArrowUp, Loader2, Plus } from "lucide-react";
-import {
-  parseDashboardIntent,
-  type DashboardIntent,
-} from "@/lib/actions/parse-dashboard-intent";
+import { parseDashboardIntent } from "@/lib/actions/parse-dashboard-intent";
+import type { DashboardIntent } from "@/lib/dashboard-intent";
 
 type DashboardHeroProps = {
   firstName: string | null;

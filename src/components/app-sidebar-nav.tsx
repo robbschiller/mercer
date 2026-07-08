@@ -9,7 +9,6 @@ import {
   HardHat,
   LayoutDashboard,
   Ruler,
-  Settings,
   Sparkles,
   Users,
 } from "lucide-react";
@@ -29,8 +28,9 @@ const items = [
   { href: "/bids", label: "Bids", icon: ClipboardList },
   { href: "/projects", label: "Projects", icon: HardHat },
   { href: "/reports", label: "Reports", icon: BarChart3 },
-  { href: "/settings", label: "Settings", icon: Settings },
 ];
+// Settings lives in the org dropdown (click the company name in the sidebar
+// header — see team-switcher.tsx), so it's intentionally not a nav row here.
 
 export function AppSidebarNav() {
   const pathname = usePathname();
