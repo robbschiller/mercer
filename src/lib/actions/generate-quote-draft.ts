@@ -283,11 +283,25 @@ async function callClaude(
     ],
   );
 
+  const specs = ctx.property;
   const contextText = [
     `Property: ${ctx.bid.propertyName ?? "unknown"}${ctx.bid.address ? ` — ${ctx.bid.address}` : ""}`,
     `Record type: ${ctx.isLargeJob ? "Large Job" : "Small Job"}`,
     `Buildings: ${ctx.buildingsCount || "unknown"}`,
     `Measured square footage: ${ctx.totalSqft > 0 ? `${Math.round(ctx.totalSqft)} sq ft` : "not measured"}`,
+    specs?.attainableSqftNonfloor != null
+      ? `Attainable sq ft — non-floor surfaces: ${Number(specs.attainableSqftNonfloor)}`
+      : null,
+    specs?.attainableSqftFloors != null
+      ? `Attainable sq ft — floors: ${Number(specs.attainableSqftFloors)}`
+      : null,
+    specs?.breezewayCount != null ? `Breezeways: ${specs.breezewayCount}` : null,
+    specs?.stairSystemCount != null
+      ? `Stair systems: ${specs.stairSystemCount}`
+      : null,
+    specs?.maintenanceNotes
+      ? `Property maintenance history / known issues: ${specs.maintenanceNotes}`
+      : null,
     ctx.bid.notes ? `Bid notes: ${ctx.bid.notes}` : null,
     "",
     "PRICE LIST (sku · name · category · charge · description):",

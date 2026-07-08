@@ -30,6 +30,7 @@ import {
   PRICING_UNITS,
   LINE_ITEM_SOURCES,
   LINE_ITEM_CONFIDENCES,
+  CONTACT_METHODS,
   SUPPLIER_PRODUCT_TYPES,
   PHOTO_CONTEXT_TYPES,
   PHOTO_KINDS,
@@ -87,6 +88,15 @@ export const properties = pgTable("properties", {
   sourceTag: text("source_tag"),
   rawSource: jsonb("raw_source").$type<Record<string, string>>(),
   notes: text("notes").notNull().default(""),
+  /* ── AQP field batch (033): what the property could be sold on, split the
+        way AQP prices — non-floor surfaces vs. floors (§3; naming is an open
+        item in Jordan's notes). ── */
+  attainableSqftNonfloor: numeric("attainable_sqft_nonfloor"),
+  attainableSqftFloors: numeric("attainable_sqft_floors"),
+  breezewayCount: integer("breezeway_count"),
+  stairSystemCount: integer("stair_system_count"),
+  /** Things crews should know before arriving (known issues, access quirks). */
+  maintenanceNotes: text("maintenance_notes").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -105,6 +115,10 @@ export const contacts = pgTable("contacts", {
   title: text("title"),
   sourceTag: text("source_tag"),
   relationshipTier: text("relationship_tier"),
+  /** How this contact wants to be reached (AQP §4). */
+  preferredContactMethod: text("preferred_contact_method", {
+    enum: CONTACT_METHODS,
+  }),
   notes: text("notes").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -268,6 +282,11 @@ export const bids = pgTable("bids", {
   actualEndDate: timestamp("actual_end_date", { withTimezone: true }),
   assignedSub: text("assigned_sub"),
   crewLeadName: text("crew_lead_name"),
+  /** Who AP bills — "so AP knows who to bill" (AQP §7). */
+  invoicingContactId: uuid("invoicing_contact_id").references(
+    () => contacts.id,
+    { onDelete: "set null" },
+  ),
   /* ── Schedule progress (AQP job page): weeks×buildings for large jobs,
         day strip for small. Totals are planned values; buildings_total is
         derived from the bid's buildings, never stored. ── */

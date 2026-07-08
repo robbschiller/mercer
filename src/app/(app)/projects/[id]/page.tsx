@@ -10,6 +10,7 @@ import {
   getExpensesForBid,
   getInvoicesForBid,
   getChangeOrdersForBid,
+  getBidContactOptions,
   allowedProjectStatusTransitions,
   isProjectStartReady,
   type ProjectStatus,
@@ -30,6 +31,7 @@ import {
   deleteExpenseAction,
   createInvoiceAction,
   setInvoiceStatusAction,
+  setInvoicingContactAction,
   deleteInvoiceAction,
   createChangeOrderAction,
   setChangeOrderStatusAction,
@@ -152,6 +154,7 @@ export default async function ProjectPage({
     expenses,
     invoices,
     changeOrders,
+    contactOptions,
   ] = await Promise.all([
     getProjectUpdates(project.id),
     project.status === "not_started"
@@ -163,6 +166,7 @@ export default async function ProjectPage({
     getExpensesForBid(project.id),
     getInvoicesForBid(project.id),
     getChangeOrdersForBid(project.id),
+    getBidContactOptions(project.id),
   ]);
   const startReady = preStart ? isProjectStartReady(preStart) : true;
 
@@ -259,7 +263,12 @@ export default async function ProjectPage({
 
       <ChangeOrdersCard projectId={project.id} changeOrders={changeOrders} />
 
-      <InvoicesCard projectId={project.id} invoices={invoices} />
+      <InvoicesCard
+        projectId={project.id}
+        invoices={invoices}
+        contactOptions={contactOptions}
+        invoicingContactId={bid.invoicingContactId}
+      />
 
       <Card>
         <CardHeader>
@@ -844,8 +853,8 @@ function BudgetCard({
         <CardTitle className="text-base">Budget</CardTitle>
         <CardDescription>
           Real-time spend against the contract baseline. Contract value is
-          snapshotted from the accepted proposal; approved change orders adjust
-          it; spent, remaining, and billing derive live.
+          snapshotted from the accepted proposal; approved additional work
+          adjusts it; spent, remaining, and billing derive live.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
@@ -861,7 +870,7 @@ function BudgetCard({
 
         {changeOrdersTotal !== 0 && (
           <p className="-mt-2 text-xs text-muted-foreground">
-            Base {fmtMoney(contractValue)} + approved change orders{" "}
+            Base {fmtMoney(contractValue)} + approved additional work{" "}
             {fmtMoney(changeOrdersTotal)} = {fmtMoney(adjustedContract)}
           </p>
         )}
@@ -1071,11 +1080,14 @@ function ChangeOrdersCard({
 }) {
   return (
     <Card>
+      {/* Customer-facing language is "additional work" — AQP does not do
+          change orders (Jordan, AQP notes §7c). Table/enum names unchanged. */}
       <CardHeader>
-        <CardTitle className="text-base">Change orders</CardTitle>
+        <CardTitle className="text-base">Additional work</CardTitle>
         <CardDescription>
-          Signed scope adjustments (positive adds to the contract, negative
-          credits). Approved change orders adjust the budget baseline above.
+          Signed scope additions (positive adds to the contract, negative
+          credits). Approved additional work adjusts the budget baseline
+          above.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -1084,7 +1096,7 @@ function ChangeOrdersCard({
           className="grid gap-3 rounded-md border p-3"
         >
           <input type="hidden" name="bidId" value={projectId} />
-          <p className="text-sm font-medium">Add change order</p>
+          <p className="text-sm font-medium">Add additional work</p>
           <div className="grid gap-1.5">
             <Label htmlFor="co-desc">Description</Label>
             <Input
@@ -1128,12 +1140,14 @@ function ChangeOrdersCard({
             <Input id="co-detail" name="detail" placeholder="Optional note" />
           </div>
           <div>
-            <SubmitButton size="sm">Add change order</SubmitButton>
+            <SubmitButton size="sm">Add additional work</SubmitButton>
           </div>
         </form>
 
         {changeOrders.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No change orders.</p>
+          <p className="text-sm text-muted-foreground">
+            No additional work recorded.
+          </p>
         ) : (
           <ul className="flex flex-col divide-y">
             {changeOrders.map((co) => {
@@ -1204,9 +1218,13 @@ function ChangeOrdersCard({
 function InvoicesCard({
   projectId,
   invoices,
+  contactOptions,
+  invoicingContactId,
 }: {
   projectId: string;
   invoices: Invoice[];
+  contactOptions: { id: string; name: string; title: string | null }[];
+  invoicingContactId: string | null;
 }) {
   return (
     <Card>
@@ -1218,6 +1236,36 @@ function InvoicesCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        {/* AQP §7: invoicing contact, so AP knows who to bill. */}
+        {contactOptions.length > 0 && (
+          <form
+            action={setInvoicingContactAction}
+            className="flex flex-wrap items-end gap-2"
+          >
+            <input type="hidden" name="bidId" value={projectId} />
+            <div className="grid min-w-52 flex-1 gap-1.5">
+              <Label htmlFor="inv-contact">Invoicing contact</Label>
+              <select
+                id="inv-contact"
+                name="contactId"
+                defaultValue={invoicingContactId ?? ""}
+                className={SELECT_CLASS}
+              >
+                <option value="">— Not set —</option>
+                {contactOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                    {c.title ? ` — ${c.title}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <SubmitButton size="sm" variant="outline">
+              Save
+            </SubmitButton>
+          </form>
+        )}
+
         <form
           action={createInvoiceAction}
           className="grid gap-3 rounded-md border p-3"

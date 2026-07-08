@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createContactAction } from "@/lib/actions";
+import { CONTACT_METHODS, CONTACT_METHOD_LABELS } from "@/lib/status-meta";
 import { AccountAutocomplete } from "@/components/account-autocomplete";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -87,6 +88,25 @@ export default async function NewContactPage({
                   placeholder="Referral, NAA Orlando 2026, etc."
                 />
               </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="preferredContactMethod">
+                Preferred contact method
+              </Label>
+              <select
+                id="preferredContactMethod"
+                name="preferredContactMethod"
+                defaultValue=""
+                className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="">— Not set —</option>
+                {CONTACT_METHODS.map((m) => (
+                  <option key={m} value={m}>
+                    {CONTACT_METHOD_LABELS[m]}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="flex flex-col gap-2">

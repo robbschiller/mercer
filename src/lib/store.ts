@@ -62,6 +62,7 @@ import {
   type PriceListCategory,
   type LineItemSource,
   type LineItemConfidence,
+  type ContactMethod,
   type PricingUnit,
   type SupplierProductType,
   type PhotoContextType,
@@ -1355,6 +1356,7 @@ export type ProjectWithBid = {
     | "clientName"
     | "leadId"
     | "status"
+    | "invoicingContactId"
   >;
 };
 
@@ -1401,6 +1403,7 @@ export async function getProjects(
           clientName: b.clientName,
           leadId: b.leadId,
           status: b.status,
+          invoicingContactId: b.invoicingContactId,
         },
       },
     ];
@@ -1437,6 +1440,7 @@ export async function getProject(id: string): Promise<ProjectWithBid | null> {
       clientName: b.clientName,
       leadId: b.leadId,
       status: b.status,
+      invoicingContactId: b.invoicingContactId,
     },
   };
 }
@@ -2839,6 +2843,8 @@ export type ContactDetail = {
   account: Account | null;
   properties: ContactPropertySummary[];
   leads: LeadSummary[];
+  /** AQP §4 rollup: total contract value ever awarded via this contact. */
+  lifetimeAwarded: number;
 };
 
 export async function getAccountDetail(
@@ -3630,7 +3636,7 @@ export async function getContactDetail(
   const contact = contactRows[0];
   if (!contact) return null;
 
-  const [accountRows, propertyRows, leadRows] = await Promise.all([
+  const [accountRows, propertyRows, leadRows, awardedRows] = await Promise.all([
     contact.accountId
       ? db
           .select()
@@ -3676,6 +3682,20 @@ export async function getContactDetail(
         ),
       )
       .orderBy(desc(leads.createdAt)),
+    // AQP §4 rollup: lifetime awarded = contract baselines stamped at
+    // acceptance on bids where this contact was the primary.
+    db
+      .select({
+        total: sql<string>`coalesce(sum(${bids.contractValue}::numeric), 0)::text`,
+      })
+      .from(bids)
+      .where(
+        and(
+          eq(bids.userId, user.ownerUserId),
+          eq(bids.primaryContactId, contact.id),
+          sql`${bids.contractValue} IS NOT NULL`,
+        ),
+      ),
   ]);
 
   const latestLeadByPropertyId = new Map<
@@ -3717,6 +3737,7 @@ export async function getContactDetail(
         createdAt,
       }),
     ),
+    lifetimeAwarded: Number(awardedRows[0]?.total ?? 0),
   };
 }
 
@@ -3939,6 +3960,7 @@ export async function createContact(data: {
   company?: string | null;
   accountId?: string | null;
   sourceTag?: string | null;
+  preferredContactMethod?: ContactMethod | null;
   notes?: string;
 }): Promise<Contact> {
   const user = await requireUser();
@@ -3976,11 +3998,20 @@ export async function createContact(data: {
     sourceTag: data.sourceTag,
   });
 
+  // find-or-create resolves the identity; notes + preferences land after.
   const notes = cleanText(data.notes);
-  if (notes && contact.notes !== notes) {
+  const patch: { notes?: string; preferredContactMethod?: ContactMethod } = {};
+  if (notes && contact.notes !== notes) patch.notes = notes;
+  if (
+    data.preferredContactMethod &&
+    contact.preferredContactMethod !== data.preferredContactMethod
+  ) {
+    patch.preferredContactMethod = data.preferredContactMethod;
+  }
+  if (Object.keys(patch).length > 0) {
     const updated = await db
       .update(contacts)
-      .set({ notes, updatedAt: new Date() })
+      .set({ ...patch, updatedAt: new Date() })
       .where(
         and(
           eq(contacts.id, contact.id),
@@ -6312,6 +6343,93 @@ export async function addCatalogLineItem(
   });
 }
 
+// ── AQP field batch (033) ────────────────────────────────────────────────────
+
+/**
+ * Contacts that can be billed for a bid's job: everyone linked to the bid's
+ * property, plus the bid's primary contact ("so AP knows who to bill", §7).
+ */
+export async function getBidContactOptions(
+  bidId: string,
+): Promise<{ id: string; name: string; title: string | null }[]> {
+  const user = await requireUser();
+  const bidRows = await db
+    .select({ propertyId: bids.propertyId, primaryContactId: bids.primaryContactId })
+    .from(bids)
+    .where(and(eq(bids.id, bidId), eq(bids.userId, user.ownerUserId)))
+    .limit(1);
+  const bid = bidRows[0];
+  if (!bid) return [];
+
+  const [propertyLinked, primary] = await Promise.all([
+    bid.propertyId
+      ? db
+          .select({ id: contacts.id, name: contacts.name, title: contacts.title })
+          .from(propertyContacts)
+          .innerJoin(contacts, eq(contacts.id, propertyContacts.contactId))
+          .where(
+            and(
+              eq(propertyContacts.propertyId, bid.propertyId),
+              eq(propertyContacts.userId, user.ownerUserId),
+              eq(propertyContacts.active, true),
+            ),
+          )
+          .orderBy(asc(contacts.name))
+      : Promise.resolve([] as { id: string; name: string; title: string | null }[]),
+    bid.primaryContactId
+      ? db
+          .select({ id: contacts.id, name: contacts.name, title: contacts.title })
+          .from(contacts)
+          .where(
+            and(
+              eq(contacts.id, bid.primaryContactId),
+              eq(contacts.userId, user.ownerUserId),
+            ),
+          )
+          .limit(1)
+      : Promise.resolve([] as { id: string; name: string; title: string | null }[]),
+  ]);
+
+  const seen = new Set<string>();
+  return [...primary, ...propertyLinked].filter((c) => {
+    if (seen.has(c.id)) return false;
+    seen.add(c.id);
+    return true;
+  });
+}
+
+/** Set (or clear) who AP bills for this job. */
+export async function setBidInvoicingContact(
+  bidId: string,
+  contactId: string | null,
+): Promise<void> {
+  const user = await requireUser();
+  await db
+    .update(bids)
+    .set({ invoicingContactId: contactId, updatedAt: new Date() })
+    .where(and(eq(bids.id, bidId), eq(bids.userId, user.ownerUserId)));
+}
+
+/** Property spec fields from Jordan's AQP notes §3 (attainable sqft etc.). */
+export async function updatePropertySpecs(
+  propertyId: string,
+  data: {
+    attainableSqftNonfloor: string | null;
+    attainableSqftFloors: string | null;
+    breezewayCount: number | null;
+    stairSystemCount: number | null;
+    maintenanceNotes: string;
+  },
+): Promise<void> {
+  const user = await requireUser();
+  await db
+    .update(properties)
+    .set({ ...data, updatedAt: new Date() })
+    .where(
+      and(eq(properties.id, propertyId), eq(properties.userId, user.ownerUserId)),
+    );
+}
+
 // ── AI Quote Engine (032) ────────────────────────────────────────────────────
 
 export type QuoteDraftContext = {
@@ -6321,6 +6439,15 @@ export type QuoteDraftContext = {
   priceList: PriceListItem[];
   totalSqft: number;
   buildingsCount: number;
+  /** AQP §3 property specs (033) — extra grounding for quantity estimates. */
+  property: Pick<
+    Property,
+    | "attainableSqftNonfloor"
+    | "attainableSqftFloors"
+    | "breezewayCount"
+    | "stairSystemCount"
+    | "maintenanceNotes"
+  > | null;
   latestProposal: {
     version: number;
     changeLog: string | null;
@@ -6343,8 +6470,15 @@ export async function getQuoteDraftContext(
   const bid = bidRows[0];
   if (!bid) return null;
 
-  const [photoRows, priceList, sqftRows, buildingRows, proposalRows, leadRows] =
-    await Promise.all([
+  const [
+    photoRows,
+    priceList,
+    sqftRows,
+    buildingRows,
+    proposalRows,
+    leadRows,
+    propertyRows,
+  ] = await Promise.all([
       db
         .select()
         .from(photos)
@@ -6389,6 +6523,24 @@ export async function getQuoteDraftContext(
             .where(eq(leads.id, bid.leadId))
             .limit(1)
         : Promise.resolve([] as { isLargeJob: boolean }[]),
+      bid.propertyId
+        ? db
+            .select({
+              attainableSqftNonfloor: properties.attainableSqftNonfloor,
+              attainableSqftFloors: properties.attainableSqftFloors,
+              breezewayCount: properties.breezewayCount,
+              stairSystemCount: properties.stairSystemCount,
+              maintenanceNotes: properties.maintenanceNotes,
+            })
+            .from(properties)
+            .where(
+              and(
+                eq(properties.id, bid.propertyId),
+                eq(properties.userId, user.ownerUserId),
+              ),
+            )
+            .limit(1)
+        : Promise.resolve([]),
     ]);
 
   return {
@@ -6398,6 +6550,7 @@ export async function getQuoteDraftContext(
     priceList,
     totalSqft: Number(sqftRows[0]?.total ?? 0),
     buildingsCount: Number(buildingRows[0]?.total ?? 0),
+    property: propertyRows[0] ?? null,
     latestProposal: proposalRows[0] ?? null,
   };
 }
