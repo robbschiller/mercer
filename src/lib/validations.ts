@@ -208,6 +208,10 @@ export const updateUserDefaultsSchema = z.object({
 
 export const generateProposalSchema = z.object({
   bidId: z.string().uuid("Invalid bid ID"),
+  // Quote engine: AI-written changelog + the scope text the draft came from,
+  // stamped onto the versioned proposal at approval.
+  changeLog: z.string().max(2000).nullish(),
+  scopeText: z.string().max(4000).nullish(),
 });
 
 export const createProposalShareSchema = z.object({

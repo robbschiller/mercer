@@ -527,7 +527,11 @@ export async function updateUserDefaultsAction(data: {
 
 // ── Proposals ──
 
-export async function generateProposalAction(data: { bidId: string }) {
+export async function generateProposalAction(data: {
+  bidId: string;
+  changeLog?: string | null;
+  scopeText?: string | null;
+}) {
   const result = generateProposalSchema.safeParse(data);
 
   if (!result.success) {
@@ -629,11 +633,10 @@ export async function generateProposalAction(data: { bidId: string }) {
     .from("proposals")
     .getPublicUrl(fileName);
 
-  const proposal = await createProposal(
-    bid.id,
-    snapshot,
-    urlData.publicUrl
-  );
+  const proposal = await createProposal(bid.id, snapshot, urlData.publicUrl, {
+    changeLog: result.data.changeLog ?? null,
+    scopeText: result.data.scopeText ?? null,
+  });
 
   if (bid.status === "draft") {
     await updateBid(bid.id, { status: "sent" });
