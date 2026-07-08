@@ -60,6 +60,8 @@ import {
   type ChangeOrderReason,
   type ChangeOrderStatus,
   type PriceListCategory,
+  type LineItemSource,
+  type LineItemConfidence,
   type PricingUnit,
   type SupplierProductType,
   type PhotoContextType,
@@ -687,7 +689,21 @@ export async function getLineItemsForBid(bidId: string) {
 
 export async function createLineItem(
   bidId: string,
-  data: { name: string; amount: string }
+  data: {
+    name: string;
+    amount: string;
+    qty?: string | null;
+    unit?: string | null;
+    unitPrice?: string | null;
+    category?: PriceListCategory | null;
+    priceListItemId?: string | null;
+    sku?: string | null;
+    source?: LineItemSource;
+    confidence?: LineItemConfidence | null;
+    evidencePhotoId?: string | null;
+    aiRationale?: string | null;
+    flagNote?: string | null;
+  }
 ) {
   await requireBidOwnership(bidId);
 
@@ -702,6 +718,17 @@ export async function createLineItem(
       bidId,
       name: data.name,
       amount: data.amount,
+      qty: data.qty ?? null,
+      unit: data.unit ?? null,
+      unitPrice: data.unitPrice ?? null,
+      category: data.category ?? null,
+      priceListItemId: data.priceListItemId ?? null,
+      sku: data.sku ?? null,
+      source: data.source ?? "manual",
+      confidence: data.confidence ?? null,
+      evidencePhotoId: data.evidencePhotoId ?? null,
+      aiRationale: data.aiRationale ?? null,
+      flagNote: data.flagNote ?? null,
       sortOrder: (maxOrder[0]?.max ?? -1) + 1,
     })
     .returning();
@@ -975,12 +1002,22 @@ export async function getProposalsForBid(bidId: string) {
 export async function createProposal(
   bidId: string,
   snapshot: unknown,
-  pdfUrl: string
+  pdfUrl: string,
+  opts?: { changeLog?: string | null; scopeText?: string | null },
 ) {
   await requireBidOwnership(bidId);
   const rows = await db
     .insert(proposals)
-    .values({ bidId, snapshot, pdfUrl })
+    .values({
+      bidId,
+      snapshot,
+      pdfUrl,
+      // Next version for this bid; the (bid_id, version) unique index catches
+      // the (unlikely) concurrent-generation race.
+      version: sql`coalesce((SELECT max(version) FROM proposals WHERE bid_id = ${bidId}), 0) + 1`,
+      changeLog: opts?.changeLog ?? null,
+      scopeText: opts?.scopeText ?? null,
+    })
     .returning();
   return rows[0];
 }
@@ -1019,10 +1056,14 @@ export async function getProposalShareBySlug(slug: string) {
 }
 
 export async function markProposalShareAccessed(slug: string) {
+  // Every visit bumps view_count; accessedAt keeps first-view semantics.
   const rows = await db
     .update(proposalShares)
-    .set({ accessedAt: new Date() })
-    .where(and(eq(proposalShares.id, slug), sql`${proposalShares.accessedAt} is null`))
+    .set({
+      accessedAt: sql`coalesce(${proposalShares.accessedAt}, now())`,
+      viewCount: sql`${proposalShares.viewCount} + 1`,
+    })
+    .where(eq(proposalShares.id, slug))
     .returning();
   return rows[0] ?? null;
 }
@@ -6199,6 +6240,15 @@ export async function addCatalogLineItem(
   const charge = item.chargePerUnit == null ? 0 : Number(item.chargePerUnit);
   const qty = Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
   const amount = charge * qty;
-  const name = qty === 1 ? item.name : `${item.name} ×${qty}`;
-  await createLineItem(bidId, { name, amount: String(amount) });
+  await createLineItem(bidId, {
+    name: item.name,
+    amount: String(amount),
+    qty: String(qty),
+    unit: item.pricingUnit,
+    unitPrice: item.chargePerUnit,
+    category: item.category,
+    priceListItemId: item.id,
+    sku: item.sku,
+    source: "catalog",
+  });
 }

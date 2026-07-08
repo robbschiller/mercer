@@ -350,9 +350,12 @@ export const PRICE_LIST_CATEGORIES = [
   "painting",
   "pressure_washing",
   "wood_repair",
+  "stucco",
   "stair_systems",
+  "railings",
   "caulking",
   "gutters",
+  "access",
   "other",
 ] as const;
 export type PriceListCategory = (typeof PRICE_LIST_CATEGORIES)[number];
@@ -361,9 +364,12 @@ export const PRICE_LIST_CATEGORY_LABELS: Record<PriceListCategory, string> = {
   painting: "Painting",
   pressure_washing: "Pressure washing",
   wood_repair: "Wood repair",
+  stucco: "Stucco",
   stair_systems: "Stair systems",
+  railings: "Railings",
   caulking: "Caulking",
   gutters: "Gutters",
+  access: "Staging & access",
   other: "Other",
 };
 
@@ -395,6 +401,16 @@ export const PRICING_UNIT_LABELS: Record<PricingUnit, string> = {
 export function pricingUnitLabel(value: string): string {
   return PRICING_UNIT_LABELS[value as PricingUnit] ?? value;
 }
+
+// ── Quote-line provenance (032, quote engine) ──
+
+/** Who put this line on the bid: AI draft, catalog pick, or typed by hand. */
+export const LINE_ITEM_SOURCES = ["ai", "catalog", "manual"] as const;
+export type LineItemSource = (typeof LINE_ITEM_SOURCES)[number];
+
+/** AI confidence on a drafted line — `low` renders the verify flag. */
+export const LINE_ITEM_CONFIDENCES = ["high", "low"] as const;
+export type LineItemConfidence = (typeof LINE_ITEM_CONFIDENCES)[number];
 
 export const SUPPLIER_PRODUCT_TYPES = [
   "paint",

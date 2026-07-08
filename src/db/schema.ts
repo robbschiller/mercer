@@ -28,6 +28,8 @@ import {
   CHANGE_ORDER_STATUSES,
   PRICE_LIST_CATEGORIES,
   PRICING_UNITS,
+  LINE_ITEM_SOURCES,
+  LINE_ITEM_CONFIDENCES,
   SUPPLIER_PRODUCT_TYPES,
   PHOTO_CONTEXT_TYPES,
   PHOTO_KINDS,
@@ -320,6 +322,13 @@ export const surfaces = pgTable("surfaces", {
     .defaultNow(),
 });
 
+/**
+ * Quote lines (032): `amount` stays the stored total so every existing sum
+ * keeps working — when qty/unitPrice are present the app maintains
+ * amount = qty × unitPrice on every edit; legacy lines stay amount-only.
+ * Provenance columns record who put the line here (AI draft / catalog pick /
+ * manual) and the evidence behind it for the quote-engine review UI.
+ */
 export const lineItems = pgTable("line_items", {
   id: uuid("id").primaryKey().defaultRandom(),
   bidId: uuid("bid_id")
@@ -327,6 +336,24 @@ export const lineItems = pgTable("line_items", {
     .references(() => bids.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   amount: numeric("amount").notNull(),
+  qty: numeric("qty"),
+  unit: text("unit"),
+  unitPrice: numeric("unit_price"),
+  category: text("category", { enum: PRICE_LIST_CATEGORIES }),
+  priceListItemId: uuid("price_list_item_id").references(
+    () => priceListItems.id,
+    { onDelete: "set null" },
+  ),
+  sku: text("sku"),
+  source: text("source", { enum: LINE_ITEM_SOURCES })
+    .notNull()
+    .default("manual"),
+  confidence: text("confidence", { enum: LINE_ITEM_CONFIDENCES }),
+  evidencePhotoId: uuid("evidence_photo_id").references(() => photos.id, {
+    onDelete: "set null",
+  }),
+  aiRationale: text("ai_rationale"),
+  flagNote: text("flag_note"),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -368,6 +395,12 @@ export const proposals = pgTable("proposals", {
     .references(() => bids.id, { onDelete: "cascade" }),
   snapshot: jsonb("snapshot").notNull(),
   pdfUrl: text("pdf_url").notNull(),
+  /** v1/v2/v3 per bid — unique on (bidId, version). */
+  version: integer("version").notNull(),
+  /** What changed vs. the previous version (AI-written at generation). */
+  changeLog: text("change_log"),
+  /** The scope text this version was drafted from (quote engine). */
+  scopeText: text("scope_text"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -382,6 +415,7 @@ export const proposalShares = pgTable("proposal_shares", {
     .notNull()
     .defaultNow(),
   accessedAt: timestamp("accessed_at", { withTimezone: true }),
+  viewCount: integer("view_count").notNull().default(0),
   acceptedAt: timestamp("accepted_at", { withTimezone: true }),
   acceptedByName: text("accepted_by_name"),
   acceptedByTitle: text("accepted_by_title"),
