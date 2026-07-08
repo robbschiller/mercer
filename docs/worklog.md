@@ -4,6 +4,48 @@ Running log of in-flight work on the lead-to-close MVP (docs/plan.md). Chronolog
 
 ---
 
+## 2026-07-08 — AI Quote Engine (Jordan's notes §6) + field batch. ⚠️ RESUME STEPS REQUIRED
+
+**Goal:** Jordan sent the follow-up engineering notes (`AQP-OS-Engineering-Notes.md` — data model + the four AI features). We picked the **AI quote workflow on the opportunity** as the first unit because every dependency already shipped in the June reconciliation: photos (031), catalog (027), proposal PDF + share links, Claude structured-output patterns. Migrations `032`–`033`. UI designed first in Claude Design (project `d3b4b34a-5f94-419f-87ec-c889303b6f35`, `quote-engine/`), then implemented.
+
+### ⚠️ Resume steps (do these first — the app will NOT run against the DB until you do)
+
+1. **Restore the Supabase project** — `mgytgrxpgjhowvvustry` auto-paused from inactivity (pooler says "tenant not found"; db host is NXDOMAIN). supabase.com/dashboard → Restore.
+2. **Apply `032_quote_engine.sql` then `033_aqp_field_batch.sql`, individually and in that order** — bulk `db:apply-manual` is still broken (see the `021` note). One-off runner pattern: copy `scripts/apply-manual-migrations.ts`, point it at the single file. **`src/db/schema.ts` already declares the new columns, so almost every page 500s until both migrations are applied.**
+3. **Uncomment `ANTHROPIC_API_KEY` in `.env.local`** to put real Claude behind the quote engine. Without it, generation falls back to an offline mock that drafts from the org's own catalog (same stopgap convention as the dashboard composer).
+4. **Verify end-to-end** (never runtime-tested — DB was down for all of it; typecheck/lint/build are clean): open a bid → Quote section → scope + photos → Build quote → edit lines in review → Approve & generate (stamps versioned PDF) → Copy customer link → accept at `/p/[slug]` → check version history + the Quote column on `/bids`.
+
+### The architecture decision
+
+**The AI never writes the customer document.** Claude proposes structured line items (SKU-validated against the org catalog, with per-line confidence, evidence-photo citation, and rationale); the salesperson reviews/edits every line; the existing deterministic proposal template stamps the PDF. Jordan's "same format every single time" requirement is satisfied by construction, not prompting. Quote versions are the existing `proposals` rows — now with `version` (unique per bid), an AI-written `change_log`, and the `scope_text` they were drafted from.
+
+### Quote engine (032)
+
+- `line_items` promoted to real quote lines: `qty`/`unit`/`unit_price` alongside `amount` (amount stays the stored total so every existing sum still works), `category`, `price_list_item_id` + `sku` snapshot, and provenance (`source` ai|catalog|manual, `confidence`, `evidence_photo_id`, `ai_rationale`, `flag_note`). The catalog picker now writes rich lines instead of baking "×qty" into the name.
+- `generateQuoteDraft` (`src/lib/actions/generate-quote-draft.ts`): scope text + takeoff photos (vision, URL source) + price list + previous version → Opus structured output (`zodOutputFormat`, schema in `src/lib/quote-draft.ts`). Regeneration replaces only `source='ai'` lines. In-flight draft meta (`bids.draft_scope_text` / `draft_change_log`) survives refresh and is stamped onto the proposal (and cleared) at approve.
+- Bid page: Quote section on top (compose → generating → review → done), totals + version-history rail (absorbed the old Proposals section; `ProposalList` deleted), page widened to `max-w-5xl`. Human edit of qty/price recomputes amount server-side and clears the verify flag. `/bids` list shows `v3 · Sent · Viewed 2×` (`proposal_shares.view_count` now bumps on every portal view).
+- **IA decision:** the quote engine has NO sidebar entry — it's a verb on the bid, per Jordan's spec ("scope input area on the opportunity"). Sidebar unchanged.
+
+### Field batch (033) — the mechanical §3/§4/§7 spec adds
+
+- Properties: attainable sqft (non-floor / floors), breezeway + stair-system counts, maintenance notes — editable card on the property page; also fed into the quote-draft AI context.
+- Contacts: `preferred_contact_method` (+ form/select + detail display) and the two §4 rollups (properties managed, lifetime awarded from `contract_value`) — rollups derived, no schema.
+- Bids: `invoicing_contact_id` ("so AP knows who to bill") — selector on the project page's Invoices & draws card.
+- Expenses: `housing` + `mobilization` categories. Price-list categories gained `stucco`/`railings`/`access`.
+- **"Change orders" → "Additional work"** in all user-facing copy (Jordan is explicit: AQP does not do change orders). Table/enum names unchanged.
+
+### Next up (from Jordan's notes, in rough order)
+
+1. **Additional-work quotes on a live job** — same engine, scoped to a project; the flow is photos + scope → quote in minutes.
+2. **Weekly site updates** — blocked on two missing capabilities: voice-note transcription and outbound email. The composer's dictation button (Web Speech) is the deliberate seed of the voice pattern.
+3. **Closeout packet** — doc-gen from job data (colors, scope, care instructions); reuses the deterministic-template approach.
+4. Load Jordan's price lists into `price_list_items` when he sends them (large-job list + itemized wood rot / stucco / stairs / railings); the cost-breakdown spreadsheet shapes the large-job cost fields.
+
+### Gotchas
+
+- The quote review UI assumes lines have `qty`/`unit_price`; legacy amount-only lines render with "—" in those columns and stay editable by name only. Working as intended.
+- `markProposalShareAccessed` changed semantics: fires on **every** view (was first-view only) to feed `view_count`; `accessed_at` keeps first-view meaning via `coalesce`.
+
 ## 2026-06-09/10 — AQP reconciliation shipped end-to-end (money → takeoffs → photos → reports)
 
 **Goal:** Our first customer (Austin / Affordable Quality Painting) handed over their "Operating System" alpha spec — 18 entities, 8 screens, a full lead→invoice flow for a painting contractor, property at the center. It independently lands on Mercer's exact thesis, which made it the best possible gap map: the front half (leads → takeoff → proposal → portal) was already ours; the back half (money, schedule, photos, reporting) wasn't. Over two days we reconciled the whole spec into Mercer as **per-org product features, not an AQP-specific build**. Full delta + decisions: [`docs/build-plans/aqp_reconciliation.plan.md`](build-plans/aqp_reconciliation.plan.md). Migrations `021`–`031`.
