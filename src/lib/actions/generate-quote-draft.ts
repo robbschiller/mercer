@@ -247,7 +247,11 @@ export async function generateQuoteDraft(data: {
     };
   }
 
-  const lines = await replaceAiDraftLines(data.bidId, draftToInserts(draft, ctx));
+  const lines = await replaceAiDraftLines(
+    data.bidId,
+    draftToInserts(draft, ctx),
+    { scopeText, changeLog: draft.changeLog },
+  );
   revalidatePath(`/bids/${data.bidId}`);
 
   return {
