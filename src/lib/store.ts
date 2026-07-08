@@ -743,7 +743,15 @@ export async function createLineItem(
 
 export async function updateLineItem(
   id: string,
-  data: { name?: string; amount?: string }
+  data: {
+    name?: string;
+    amount?: string;
+    qty?: string | null;
+    unit?: string | null;
+    unitPrice?: string | null;
+    confidence?: LineItemConfidence | null;
+    flagNote?: string | null;
+  }
 ) {
   const user = await requireUser();
   const existing = await db
@@ -6251,4 +6259,154 @@ export async function addCatalogLineItem(
     sku: item.sku,
     source: "catalog",
   });
+}
+
+// ── AI Quote Engine (032) ────────────────────────────────────────────────────
+
+export type QuoteDraftContext = {
+  bid: Bid;
+  isLargeJob: boolean;
+  photos: Photo[];
+  priceList: PriceListItem[];
+  totalSqft: number;
+  buildingsCount: number;
+  latestProposal: {
+    version: number;
+    changeLog: string | null;
+    scopeText: string | null;
+    snapshot: unknown;
+    createdAt: Date;
+  } | null;
+};
+
+/** Everything the quote-draft generation needs, in one ownership-checked load. */
+export async function getQuoteDraftContext(
+  bidId: string,
+): Promise<QuoteDraftContext | null> {
+  const user = await requireUser();
+  const bidRows = await db
+    .select()
+    .from(bids)
+    .where(and(eq(bids.id, bidId), eq(bids.userId, user.ownerUserId)))
+    .limit(1);
+  const bid = bidRows[0];
+  if (!bid) return null;
+
+  const [photoRows, priceList, sqftRows, buildingRows, proposalRows, leadRows] =
+    await Promise.all([
+      db
+        .select()
+        .from(photos)
+        .where(
+          and(
+            eq(photos.userId, user.ownerUserId),
+            eq(photos.contextType, "bid"),
+            eq(photos.contextId, bidId),
+          ),
+        )
+        .orderBy(asc(photos.createdAt)),
+      getPriceListItems({ activeOnly: true }),
+      db
+        .select({
+          total: sql<number>`coalesce(sum(${surfaces.totalSqft}::numeric * ${buildings.count}), 0)`,
+        })
+        .from(surfaces)
+        .innerJoin(buildings, eq(surfaces.buildingId, buildings.id))
+        .where(eq(buildings.bidId, bidId)),
+      db
+        .select({
+          total: sql<number>`coalesce(sum(${buildings.count}), 0)`,
+        })
+        .from(buildings)
+        .where(eq(buildings.bidId, bidId)),
+      db
+        .select({
+          version: proposals.version,
+          changeLog: proposals.changeLog,
+          scopeText: proposals.scopeText,
+          snapshot: proposals.snapshot,
+          createdAt: proposals.createdAt,
+        })
+        .from(proposals)
+        .where(eq(proposals.bidId, bidId))
+        .orderBy(desc(proposals.version))
+        .limit(1),
+      bid.leadId
+        ? db
+            .select({ isLargeJob: leads.isLargeJob })
+            .from(leads)
+            .where(eq(leads.id, bid.leadId))
+            .limit(1)
+        : Promise.resolve([] as { isLargeJob: boolean }[]),
+    ]);
+
+  return {
+    bid,
+    isLargeJob: leadRows[0]?.isLargeJob ?? true,
+    photos: photoRows,
+    priceList,
+    totalSqft: Number(sqftRows[0]?.total ?? 0),
+    buildingsCount: Number(buildingRows[0]?.total ?? 0),
+    latestProposal: proposalRows[0] ?? null,
+  };
+}
+
+export type DraftLineInsert = {
+  name: string;
+  amount: string;
+  qty: string;
+  unit: string;
+  unitPrice: string;
+  category: PriceListCategory;
+  priceListItemId: string | null;
+  sku: string | null;
+  confidence: LineItemConfidence;
+  evidencePhotoId: string | null;
+  aiRationale: string | null;
+  flagNote: string | null;
+};
+
+/**
+ * A fresh AI generation replaces the previous AI draft: lines with
+ * source='ai' are dropped, catalog/manual lines survive. Returns the bid's
+ * full ordered line list after the swap.
+ */
+export async function replaceAiDraftLines(
+  bidId: string,
+  lines: DraftLineInsert[],
+): Promise<LineItem[]> {
+  const user = await requireUser();
+  await requireBidOwnership(bidId, user.ownerUserId);
+
+  await db
+    .delete(lineItems)
+    .where(and(eq(lineItems.bidId, bidId), eq(lineItems.source, "ai")));
+
+  if (lines.length > 0) {
+    const maxOrder = await db
+      .select({ max: sql<number>`coalesce(max(${lineItems.sortOrder}), -1)` })
+      .from(lineItems)
+      .where(eq(lineItems.bidId, bidId));
+    const base = (maxOrder[0]?.max ?? -1) + 1;
+
+    await db.insert(lineItems).values(
+      lines.map((line, i) => ({
+        bidId,
+        source: "ai" as const,
+        sortOrder: base + i,
+        ...line,
+      })),
+    );
+  }
+
+  await db
+    .update(bids)
+    .set({ updatedAt: new Date() })
+    .where(eq(bids.id, bidId));
+
+  return db
+    .select()
+    .from(lineItems)
+    .where(eq(lineItems.bidId, bidId))
+    .orderBy(asc(lineItems.sortOrder), asc(lineItems.createdAt));
 }
