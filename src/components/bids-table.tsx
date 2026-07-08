@@ -38,6 +38,25 @@ const STATUS_OPTIONS = BID_STATUSES.map((status) => ({
   value: status,
 }));
 
+type QuoteStatus = "accepted" | "declined" | "sent" | "ready";
+
+const QUOTE_STATUS_LABELS: Record<QuoteStatus, string> = {
+  accepted: "Accepted",
+  declined: "Declined",
+  sent: "Sent",
+  ready: "Ready",
+};
+
+const QUOTE_STATUS_VARIANTS: Record<
+  QuoteStatus,
+  "default" | "secondary" | "destructive" | "outline"
+> = {
+  accepted: "default",
+  declined: "destructive",
+  sent: "secondary",
+  ready: "outline",
+};
+
 function HeaderLabel({ children }: { children: React.ReactNode }) {
   return (
     <span className="text-xs font-medium uppercase text-muted-foreground">
@@ -193,10 +212,28 @@ export function BidsTable({ bids }: { bids: BidSummary[] }) {
         accessorKey: "lastProposalAt",
         enableSorting: true,
         enableColumnFilter: false,
-        header: () => <HeaderLabel>Proposal</HeaderLabel>,
-        cell: ({ row }) => (
-          <MutedCell>{formatShortDate(row.original.lastProposalAt)}</MutedCell>
-        ),
+        header: () => <HeaderLabel>Quote</HeaderLabel>,
+        cell: ({ row }) => {
+          const quote = row.original.quote;
+          if (!quote) {
+            return <MutedCell>—</MutedCell>;
+          }
+          return (
+            <span className="flex items-center gap-1.5 whitespace-nowrap">
+              <span className="text-xs font-semibold tabular-nums">
+                v{quote.version}
+              </span>
+              <Badge variant={QUOTE_STATUS_VARIANTS[quote.status]}>
+                {QUOTE_STATUS_LABELS[quote.status]}
+              </Badge>
+              <MutedCell>
+                {quote.viewCount > 0
+                  ? `Viewed ${quote.viewCount}×`
+                  : formatShortDate(row.original.lastProposalAt)}
+              </MutedCell>
+            </span>
+          );
+        },
       },
     ],
     [],

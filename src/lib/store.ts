@@ -177,24 +177,73 @@ export async function getBidsWithSummary() {
     .groupBy(proposals.bidId)
     .as("proposal_agg");
 
-  const rows = await db
-    .select({
-      bid: bids,
-      buildingCount: buildingAgg.buildingCount,
-      totalSqft: buildingAgg.totalSqft,
-      lastProposalAt: proposalAgg.lastProposalAt,
-    })
-    .from(bids)
-    .leftJoin(buildingAgg, eq(buildingAgg.bidId, bids.id))
-    .leftJoin(proposalAgg, eq(proposalAgg.bidId, bids.id))
-    .where(eq(bids.userId, user.ownerUserId))
-    .orderBy(desc(bids.updatedAt));
+  const [rows, quoteRows] = await Promise.all([
+    db
+      .select({
+        bid: bids,
+        buildingCount: buildingAgg.buildingCount,
+        totalSqft: buildingAgg.totalSqft,
+        lastProposalAt: proposalAgg.lastProposalAt,
+      })
+      .from(bids)
+      .leftJoin(buildingAgg, eq(buildingAgg.bidId, bids.id))
+      .leftJoin(proposalAgg, eq(proposalAgg.bidId, bids.id))
+      .where(eq(bids.userId, user.ownerUserId))
+      .orderBy(desc(bids.updatedAt)),
+    // Latest stamped quote version per bid + the state of its newest share
+    // ("where is every quote" on the pipeline view — v3 · Sent · Viewed 2×).
+    db.execute(sql`
+      SELECT DISTINCT ON (p.bid_id)
+        p.bid_id AS bid_id,
+        p.version AS version,
+        s.accepted_at IS NOT NULL AS accepted,
+        s.declined_at IS NOT NULL AS declined,
+        s.id IS NOT NULL AS sent,
+        COALESCE(s.view_count, 0)::int AS view_count
+      FROM proposals p
+      INNER JOIN bids b ON b.id = p.bid_id AND b.user_id = ${user.ownerUserId}
+      LEFT JOIN LATERAL (
+        SELECT ps.id, ps.accepted_at, ps.declined_at, ps.view_count
+        FROM proposal_shares ps
+        WHERE ps.proposal_id = p.id
+        ORDER BY ps.created_at DESC
+        LIMIT 1
+      ) s ON true
+      ORDER BY p.bid_id, p.version DESC
+    `),
+  ]);
+
+  type QuoteStatusRow = {
+    bid_id: string;
+    version: number;
+    accepted: boolean;
+    declined: boolean;
+    sent: boolean;
+    view_count: number;
+  };
+  const quoteByBid = new Map(
+    (quoteRows as unknown as QuoteStatusRow[]).map((q) => [
+      q.bid_id,
+      {
+        version: Number(q.version),
+        status: (q.accepted
+          ? "accepted"
+          : q.declined
+            ? "declined"
+            : q.sent
+              ? "sent"
+              : "ready") as "accepted" | "declined" | "sent" | "ready",
+        viewCount: Number(q.view_count),
+      },
+    ]),
+  );
 
   return rows.map((r) => ({
     ...r.bid,
     buildingCount: Number(r.buildingCount ?? 0),
     totalSqft: Number(r.totalSqft ?? 0),
     lastProposalAt: r.lastProposalAt ? new Date(r.lastProposalAt) : null,
+    quote: quoteByBid.get(r.bid.id) ?? null,
   }));
 }
 
