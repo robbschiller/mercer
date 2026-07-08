@@ -172,6 +172,8 @@ export const EXPENSE_CATEGORIES = [
   "repairs",
   "non_paint_labor",
   "paint_labor",
+  "housing",
+  "mobilization",
   "other",
 ] as const;
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
@@ -192,6 +194,8 @@ export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   repairs: "Repairs",
   non_paint_labor: "Non-paint labor",
   paint_labor: "Paint labor",
+  housing: "Housing",
+  mobilization: "Mobilization",
   other: "Other",
 };
 
@@ -251,7 +255,9 @@ export const INVOICE_TYPE_LABELS: Record<InvoiceType, string> = {
   draw: "Draw",
   deposit: "Deposit",
   final: "Final",
-  change_order: "Change order",
+  // Customer-facing language is "additional work" (AQP §7c) — the enum
+  // value keeps its historical name.
+  change_order: "Additional work",
   other: "Other",
 };
 
@@ -400,6 +406,21 @@ export const PRICING_UNIT_LABELS: Record<PricingUnit, string> = {
 
 export function pricingUnitLabel(value: string): string {
   return PRICING_UNIT_LABELS[value as PricingUnit] ?? value;
+}
+
+// ── Contact preferences (033, AQP field batch §4) ──
+
+export const CONTACT_METHODS = ["email", "phone", "text"] as const;
+export type ContactMethod = (typeof CONTACT_METHODS)[number];
+
+export const CONTACT_METHOD_LABELS: Record<ContactMethod, string> = {
+  email: "Email",
+  phone: "Phone",
+  text: "Text",
+};
+
+export function contactMethodLabel(value: string): string {
+  return CONTACT_METHOD_LABELS[value as ContactMethod] ?? value;
 }
 
 // ── Quote-line provenance (032, quote engine) ──

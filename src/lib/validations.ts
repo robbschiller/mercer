@@ -5,6 +5,7 @@ import {
   PROJECT_STATUSES,
   BUILDING_ARCHETYPES,
   ACCESS_TYPES,
+  CONTACT_METHODS,
   EXPENSE_CATEGORIES,
   PAYMENT_TYPES,
   INVOICE_TYPES,
@@ -323,6 +324,10 @@ export const createContactSchema = z.object({
   company: optionalText,
   accountId: formOptionalUuid,
   sourceTag: optionalText,
+  // AQP §4: how this contact wants to be reached ("" from the form = unset).
+  preferredContactMethod: z
+    .union([z.enum(CONTACT_METHODS), z.literal(""), z.undefined()])
+    .transform((v) => (v ? v : null)),
   notes: z
     .union([z.string(), z.undefined()])
     .transform((v) => (v ?? "").trim()),
@@ -513,6 +518,17 @@ export const endPropertyRelationshipSchema = z.object({
   kind: z.enum(["management", "owner"]),
   id: z.string().uuid("Invalid relationship ID"),
   endDate: isoDate,
+});
+
+// AQP field batch (033, §3). Empty strings from the form mean "unset";
+// reuses the shared optionalNumeric / optionalCount form helpers.
+export const updatePropertySpecsSchema = z.object({
+  propertyId: z.string().uuid("Invalid property ID"),
+  attainableSqftNonfloor: optionalNumeric,
+  attainableSqftFloors: optionalNumeric,
+  breezewayCount: optionalCount,
+  stairSystemCount: optionalCount,
+  maintenanceNotes: z.string().trim().max(5000).default(""),
 });
 
 export const startContactEmploymentSchema = z.object({

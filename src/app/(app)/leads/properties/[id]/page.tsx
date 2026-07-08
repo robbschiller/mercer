@@ -9,7 +9,10 @@ import { PhotosCard } from "@/components/photos-card";
 import {
   startPropertyRelationshipAction,
   endPropertyRelationshipAction,
+  updatePropertySpecsAction,
 } from "@/lib/actions";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { PropertyDetailPanel } from "@/components/property-detail-panel";
 import { BreadcrumbLabel } from "@/components/breadcrumb-label";
 import {
@@ -135,6 +138,88 @@ export default async function PropertyDetailPage({
         buildContactHref={(contactId) => `/contacts/${contactId}`}
         buildLeadHref={(leadId) => `/leads/${leadId}`}
       />
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Property specs</CardTitle>
+          <CardDescription>
+            What the property could be sold on, and what crews should know
+            before arriving.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form
+            action={updatePropertySpecsAction}
+            className="flex flex-col gap-4"
+          >
+            <input type="hidden" name="propertyId" value={id} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="spec-sqft-nonfloor">
+                  Attainable sq ft — non-floor surfaces
+                </Label>
+                <Input
+                  id="spec-sqft-nonfloor"
+                  name="attainableSqftNonfloor"
+                  type="number"
+                  min="0"
+                  step="1"
+                  defaultValue={detail.property.attainableSqftNonfloor ?? ""}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="spec-sqft-floors">
+                  Attainable sq ft — floors
+                </Label>
+                <Input
+                  id="spec-sqft-floors"
+                  name="attainableSqftFloors"
+                  type="number"
+                  min="0"
+                  step="1"
+                  defaultValue={detail.property.attainableSqftFloors ?? ""}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="spec-breezeways">Breezeways</Label>
+                <Input
+                  id="spec-breezeways"
+                  name="breezewayCount"
+                  type="number"
+                  min="0"
+                  step="1"
+                  defaultValue={detail.property.breezewayCount ?? ""}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="spec-stairs">Stair systems</Label>
+                <Input
+                  id="spec-stairs"
+                  name="stairSystemCount"
+                  type="number"
+                  min="0"
+                  step="1"
+                  defaultValue={detail.property.stairSystemCount ?? ""}
+                />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="spec-maintenance">
+                Maintenance history / known issues
+              </Label>
+              <Textarea
+                id="spec-maintenance"
+                name="maintenanceNotes"
+                placeholder="Things crews should know before arriving — recurring leaks, fragile landscaping, gate codes handled by the office…"
+                defaultValue={detail.property.maintenanceNotes}
+                className="min-h-20"
+              />
+            </div>
+            <div>
+              <SubmitButton size="sm">Save specs</SubmitButton>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Relationship history</CardTitle>

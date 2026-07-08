@@ -5,6 +5,7 @@ import {
   CalendarClock,
   Mail,
   MapPin,
+  MessageSquare,
   Phone,
   User,
 } from "lucide-react";
@@ -18,9 +19,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  contactMethodLabel,
   leadStatusLabel,
   leadStatusVariant,
 } from "@/lib/status-meta";
+
+const currency = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
 
 export function ContactDetailPanel({
   detail,
@@ -35,7 +43,7 @@ export function ContactDetailPanel({
   buildPropertyHref: (id: string) => string;
   buildLeadHref: (id: string) => string;
 }) {
-  const { contact, account, properties, leads } = detail;
+  const { contact, account, properties, leads, lifetimeAwarded } = detail;
 
   return (
     <div className="flex flex-col gap-4">
@@ -73,11 +81,47 @@ export function ContactDetailPanel({
         </Button>
       </div>
 
+      {/* AQP §4 rollups: reach × book of business at a glance. A PM may
+          manage 1 property; a regional manager 16–20. */}
+      <div className="grid grid-cols-2 gap-3">
+        <Card>
+          <CardContent className="pt-4">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Properties managed
+            </p>
+            <p className="mt-1 text-xl font-semibold tabular-nums">
+              {properties.length}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Lifetime awarded
+            </p>
+            <p className="mt-1 text-xl font-semibold tabular-nums">
+              {lifetimeAwarded > 0
+                ? currency.format(lifetimeAwarded)
+                : "—"}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Reach</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2 text-sm">
+          {contact.preferredContactMethod ? (
+            <span className="inline-flex items-center gap-2">
+              <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+              Prefers{" "}
+              <Badge variant="secondary">
+                {contactMethodLabel(contact.preferredContactMethod)}
+              </Badge>
+            </span>
+          ) : null}
           {contact.email ? (
             <a
               href={`mailto:${contact.email}`}

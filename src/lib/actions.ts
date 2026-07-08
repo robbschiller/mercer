@@ -31,6 +31,8 @@ import {
   updateLeadStatus,
   scheduleLeadTakeoff,
   startPropertyRelationship,
+  updatePropertySpecs,
+  setBidInvoicingContact,
   endPropertyRelationship,
   startContactEmployment,
   endContactEmployment,
@@ -115,6 +117,7 @@ import {
   updateLeadStatusSchema,
   scheduleTakeoffSchema,
   startPropertyRelationshipSchema,
+  updatePropertySpecsSchema,
   endPropertyRelationshipSchema,
   startContactEmploymentSchema,
   endContactEmploymentSchema,
@@ -1120,6 +1123,33 @@ export async function scheduleTakeoffAction(formData: FormData) {
   revalidatePath("/takeoff-queue");
   revalidatePath("/leads");
   revalidatePath(`/leads/${result.data.id}`);
+}
+
+/** AQP field batch (033, §7): who AP bills for a job. */
+export async function setInvoicingContactAction(formData: FormData) {
+  const bidId = (formData.get("bidId") as string) || "";
+  const contactId = (formData.get("contactId") as string) || "";
+  if (!bidId) redirect("/projects");
+  await setBidInvoicingContact(bidId, contactId || null);
+  revalidatePath(`/projects/${bidId}`);
+}
+
+/** AQP field batch (033, §3): attainable sqft, breezeways, stair systems,
+ * maintenance notes on the property. */
+export async function updatePropertySpecsAction(formData: FormData) {
+  const result = updatePropertySpecsSchema.safeParse(
+    formDataToObject(formData),
+  );
+  const propertyId = (formData.get("propertyId") as string) || "";
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(
+      `/leads/properties/${propertyId}?error=${encodeURIComponent(message)}`,
+    );
+  }
+  const { propertyId: id, ...specs } = result.data;
+  await updatePropertySpecs(id, specs);
+  revalidatePath(`/leads/properties/${id}`);
 }
 
 export async function startPropertyRelationshipAction(formData: FormData) {
