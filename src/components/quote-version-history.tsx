@@ -185,7 +185,12 @@ export function QuoteVersionHistory({
   liveTotal: number;
   doneSent: boolean;
 }) {
-  const stamped = [...proposals].sort((a, b) => b.version - a.version);
+  // In the done phase the in-flight row IS the just-stamped version, and the
+  // revalidated proposals list already contains it — drop the duplicate so it
+  // isn't rendered (and counted) twice.
+  const stamped = proposals
+    .filter((p) => phase === "compose" || p.version !== nextVersion)
+    .sort((a, b) => b.version - a.version);
   const count = stamped.length + (phase !== "compose" ? 1 : 0);
 
   return (

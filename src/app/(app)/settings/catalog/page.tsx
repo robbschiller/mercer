@@ -2,6 +2,7 @@ import { getPriceListItems, getSupplierProducts } from "@/lib/store";
 import {
   createPriceListItemAction,
   deletePriceListItemAction,
+  importPriceListItemsAction,
   setPriceListItemActiveAction,
   createSupplierProductAction,
   deleteSupplierProductAction,
@@ -41,9 +42,9 @@ function fmt(n: string | null): string {
 export default async function CatalogSettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; imported?: string; skipped?: string }>;
 }) {
-  const [{ error }, items, suppliers] = await Promise.all([
+  const [{ error, imported, skipped }, items, suppliers] = await Promise.all([
     searchParams,
     getPriceListItems(),
     getSupplierProducts(),
@@ -54,6 +55,15 @@ export default async function CatalogSettingsPage({
       {error && (
         <div className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-2 text-sm text-destructive">
           {error}
+        </div>
+      )}
+      {imported && (
+        <div className="rounded-md border border-emerald-600/40 bg-emerald-600/5 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-400">
+          Imported {imported} catalog item{imported === "1" ? "" : "s"}
+          {skipped
+            ? ` · ${skipped} row${skipped === "1" ? "" : "s"} skipped (missing name or duplicate SKU)`
+            : ""}
+          .
         </div>
       )}
 
@@ -67,6 +77,23 @@ export default async function CatalogSettingsPage({
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
+          <form
+            action={importPriceListItemsAction}
+            className="flex flex-col gap-3 rounded-md border border-dashed p-3 sm:flex-row sm:items-end"
+          >
+            <div className="flex flex-1 flex-col gap-1.5">
+              <Label htmlFor="pli-csv">Import from CSV</Label>
+              <Input id="pli-csv" name="file" type="file" accept=".csv,text/csv" required />
+              <p className="text-xs text-muted-foreground">
+                Columns are matched by header — SKU/code, name/item, category,
+                unit, price/charge, cost. Existing SKUs are left untouched.
+              </p>
+            </div>
+            <SubmitButton size="sm" variant="outline">
+              Import CSV
+            </SubmitButton>
+          </form>
+
           <form
             action={createPriceListItemAction}
             className="grid gap-3 rounded-md border p-3 sm:grid-cols-2"
