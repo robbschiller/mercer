@@ -11,10 +11,16 @@ import { formatCurrency } from "@/lib/pricing";
 import {
   ACCESS_TYPE_LABELS,
   BUILDING_ARCHETYPE_LABELS,
+  priceListCategoryLabel,
+  pricingUnitLabel,
   type AccessType,
   type BuildingArchetype,
 } from "@/lib/status-meta";
-import type { ProposalSnapshot, SnapshotAccessItem } from "./types";
+import type {
+  ProposalSnapshot,
+  SnapshotAccessItem,
+  SnapshotLineItem,
+} from "./types";
 
 const styles = StyleSheet.create({
   page: {
@@ -197,11 +203,77 @@ const styles = StyleSheet.create({
     color: "#444",
     lineHeight: 1.5,
   },
-  lineItemRow: {
-    fontSize: 9,
-    color: "#444",
-    paddingVertical: 1,
+  /* ── Quote line table (032+ snapshots with qty/unit pricing) ── */
+  quoteCategoryHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 10,
+    marginBottom: 2,
     paddingHorizontal: 8,
+  },
+  quoteCategoryLabel: {
+    fontSize: 9,
+    fontFamily: "Helvetica-Bold",
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.5,
+    color: "#666",
+  },
+  quoteCategoryTotal: {
+    fontSize: 9,
+    fontFamily: "Helvetica-Bold",
+    color: "#666",
+  },
+  quoteLineRow: {
+    flexDirection: "row",
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+  },
+  quoteLineRowAlt: {
+    backgroundColor: "#f9f9f9",
+  },
+  quoteLineName: {
+    flex: 1,
+    fontSize: 9,
+    paddingRight: 8,
+  },
+  quoteLineSku: {
+    fontSize: 7,
+    color: "#999",
+  },
+  quoteLineQty: {
+    width: 90,
+    fontSize: 9,
+    color: "#666",
+    textAlign: "right",
+  },
+  quoteLineUnitPrice: {
+    width: 70,
+    fontSize: 9,
+    color: "#666",
+    textAlign: "right",
+  },
+  quoteLineAmount: {
+    width: 80,
+    fontSize: 9,
+    textAlign: "right",
+  },
+  quoteSubtotalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#e5e5e5",
+  },
+  quoteSubtotalLabel: {
+    fontSize: 9,
+    fontFamily: "Helvetica-Bold",
+  },
+  quoteSubtotalValue: {
+    fontSize: 9,
+    fontFamily: "Helvetica-Bold",
+    textAlign: "right",
   },
   priceSection: {
     marginTop: 28,
@@ -249,6 +321,38 @@ function accessMeta(item: SnapshotAccessItem): string {
   return parts.join(" · ");
 }
 
+const fmtQty = new Intl.NumberFormat("en-US");
+
+/**
+ * Group quote lines by category, largest total first — mirrors the review
+ * screen so the customer document matches what the salesperson approved.
+ */
+function groupLinesByCategory(
+  lines: SnapshotLineItem[],
+): Array<{ label: string; total: number; lines: SnapshotLineItem[] }> {
+  const groups = new Map<string, SnapshotLineItem[]>();
+  for (const line of lines) {
+    const key = line.category ?? "other";
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(line);
+    else groups.set(key, [line]);
+  }
+  return [...groups.entries()]
+    .map(([key, groupLines]) => ({
+      label: priceListCategoryLabel(key),
+      total: groupLines.reduce((s, l) => s + l.amount, 0),
+      lines: groupLines,
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
+/** "4,000 sq ft" / "3 each" — empty for legacy amount-only lines. */
+function lineQtyText(line: SnapshotLineItem): string {
+  if (line.qty == null) return "";
+  const unit = line.unit ? ` ${pricingUnitLabel(line.unit)}` : "";
+  return `${fmtQty.format(line.qty)}${unit}`;
+}
+
 export function ProposalDocument({
   snapshot,
 }: {
@@ -276,13 +380,27 @@ export function ProposalDocument({
       parties.ntoRecipientName);
 
   const accessItems = snapshot.accessItems ?? [];
+  const hasBuildings = snapshot.buildings.length > 0;
+  // Quote-engine snapshots carry per-line pricing; legacy ones are name+amount.
+  const hasRichLines = snapshot.lineItems.some(
+    (li) => li.qty != null && li.unitPrice != null,
+  );
+  const lineGroups = hasRichLines
+    ? groupLinesByCategory(snapshot.lineItems)
+    : [];
+  const lineSubtotal = snapshot.lineItems.reduce((s, l) => s + l.amount, 0);
+  const versionSuffix =
+    snapshot.version != null ? ` · v${snapshot.version}` : "";
 
   return (
     <Document>
       <Page size="LETTER" style={styles.page}>
         <View style={styles.header}>
           <Text style={styles.title}>Proposal</Text>
-          <Text style={styles.date}>{formattedDate}</Text>
+          <Text style={styles.date}>
+            {formattedDate}
+            {versionSuffix}
+          </Text>
 
           <View style={styles.propertyBlock}>
             <Text style={styles.propertyLabel}>Property</Text>
@@ -367,7 +485,9 @@ export function ProposalDocument({
           </View>
         ) : null}
 
-        <Text style={styles.sectionTitle}>Building Breakdown</Text>
+        {hasBuildings && (
+          <Text style={styles.sectionTitle}>Building Breakdown</Text>
+        )}
 
         {snapshot.buildings.map((building, bi) => (
           <View key={bi} wrap={false}>
@@ -427,12 +547,14 @@ export function ProposalDocument({
           </View>
         ))}
 
-        <View style={styles.grandTotalRow}>
-          <Text style={styles.grandTotalLabel}>Total Area</Text>
-          <Text style={styles.grandTotalValue}>
-            {snapshot.totalSqft.toLocaleString()} sqft
-          </Text>
-        </View>
+        {hasBuildings && (
+          <View style={styles.grandTotalRow}>
+            <Text style={styles.grandTotalLabel}>Total Area</Text>
+            <Text style={styles.grandTotalValue}>
+              {snapshot.totalSqft.toLocaleString()} sqft
+            </Text>
+          </View>
+        )}
 
         {scopeList && (
           <>
@@ -466,18 +588,79 @@ export function ProposalDocument({
           </>
         )}
 
-        {snapshot.lineItems.length > 0 && (
+        {hasRichLines ? (
+          <>
+            <Text style={styles.sectionTitle}>Scope & Pricing</Text>
+            {lineGroups.map((group) => (
+              <View key={group.label} wrap={false}>
+                <View style={styles.quoteCategoryHeader}>
+                  <Text style={styles.quoteCategoryLabel}>{group.label}</Text>
+                  <Text style={styles.quoteCategoryTotal}>
+                    {formatCurrency(group.total)}
+                  </Text>
+                </View>
+                {group.lines.map((line, i) => (
+                  <View
+                    key={i}
+                    style={
+                      i % 2 === 1
+                        ? [styles.quoteLineRow, styles.quoteLineRowAlt]
+                        : styles.quoteLineRow
+                    }
+                  >
+                    <Text style={styles.quoteLineName}>
+                      {line.name}
+                      {line.sku ? (
+                        <Text style={styles.quoteLineSku}>
+                          {"  "}
+                          {line.sku}
+                        </Text>
+                      ) : null}
+                    </Text>
+                    <Text style={styles.quoteLineQty}>
+                      {lineQtyText(line)}
+                    </Text>
+                    <Text style={styles.quoteLineUnitPrice}>
+                      {line.unitPrice != null
+                        ? formatCurrency(line.unitPrice)
+                        : ""}
+                    </Text>
+                    <Text style={styles.quoteLineAmount}>
+                      {formatCurrency(line.amount)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ))}
+            <View style={styles.quoteSubtotalRow}>
+              <Text style={styles.quoteSubtotalLabel}>Subtotal</Text>
+              <Text style={styles.quoteSubtotalValue}>
+                {formatCurrency(lineSubtotal)}
+              </Text>
+            </View>
+          </>
+        ) : snapshot.lineItems.length > 0 ? (
           <>
             <Text style={styles.sectionTitle}>Additional Items</Text>
             {snapshot.lineItems.map((item, i) => (
-              <Text key={i} style={styles.lineItemRow}>
-                {item.name}
-              </Text>
+              <View
+                key={i}
+                style={
+                  i % 2 === 1
+                    ? [styles.quoteLineRow, styles.quoteLineRowAlt]
+                    : styles.quoteLineRow
+                }
+              >
+                <Text style={styles.quoteLineName}>{item.name}</Text>
+                <Text style={styles.quoteLineAmount}>
+                  {formatCurrency(item.amount)}
+                </Text>
+              </View>
             ))}
           </>
-        )}
+        ) : null}
 
-        <View style={styles.priceSection}>
+        <View style={styles.priceSection} wrap={false}>
           <Text style={styles.priceLabel}>Total Price</Text>
           <Text style={styles.priceValue}>
             {formatCurrency(snapshot.grandTotal)}
@@ -493,6 +676,7 @@ export function ProposalDocument({
 
         <Text style={styles.footer}>
           Generated by Mercer — {formattedDate}
+          {versionSuffix}
         </Text>
       </Page>
     </Document>

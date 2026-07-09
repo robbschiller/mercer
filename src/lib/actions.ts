@@ -24,6 +24,7 @@ import {
   getProposalPartyBlock,
   createProposal,
   createProposalShare,
+  getNextProposalVersion,
   createLead,
   createLeadsBatch,
   searchAccounts,
@@ -69,6 +70,7 @@ import {
   setChangeOrderStatus,
   deleteChangeOrder,
   createPriceListItem,
+  createPriceListItemsBatch,
   setPriceListItemActive,
   deletePriceListItem,
   createSupplierProduct,
@@ -79,6 +81,10 @@ import { getOrgContext } from "./org-context";
 import { enrichCompanyFromWebsite } from "./onboarding/enrich-from-website";
 import { getAppOrigin } from "./env";
 import { parseCsv, autoMapColumns, mapRowsToLeads } from "./leads/csv";
+import {
+  autoMapCatalogColumns,
+  mapRowsToCatalogItems,
+} from "./catalog/csv";
 import {
   runEnrichmentForBatch,
   runEnrichmentForLead,
@@ -632,6 +638,8 @@ export async function generateProposalAction(data: {
     ? await getProposalPartyBlock(bid.propertyId)
     : null;
 
+  const version = await getNextProposalVersion(bid.id);
+
   const snapshot: ProposalSnapshot = {
     propertyName: bid.propertyName,
     address: bid.address,
@@ -651,6 +659,11 @@ export async function generateProposalAction(data: {
     lineItems: lineItems.map((li) => ({
       name: li.name,
       amount: Number(li.amount),
+      qty: li.qty != null ? Number(li.qty) : null,
+      unit: li.unit,
+      unitPrice: li.unitPrice != null ? Number(li.unitPrice) : null,
+      category: li.category,
+      sku: li.sku,
     })),
     accessItems: accessItems.map((a) => ({
       type: a.type,
@@ -662,6 +675,7 @@ export async function generateProposalAction(data: {
     parties: parties ?? undefined,
     totalSqft,
     grandTotal: pricing.grandTotal,
+    version,
     generatedAt: new Date().toISOString(),
   };
 
@@ -954,6 +968,55 @@ export async function createPriceListItemAction(formData: FormData) {
   }
   revalidatePath("/settings/catalog");
   redirect("/settings/catalog");
+}
+
+export async function importPriceListItemsAction(formData: FormData) {
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    redirect(
+      `/settings/catalog?error=${encodeURIComponent("Select a CSV file")}`,
+    );
+  }
+
+  const text = await (file as File).text();
+  const { headers, rows } = parseCsv(text);
+  if (headers.length === 0 || rows.length === 0) {
+    redirect(
+      `/settings/catalog?error=${encodeURIComponent("CSV appears empty or malformed")}`,
+    );
+  }
+
+  const mapping = autoMapCatalogColumns(headers);
+  if (!mapping.name) {
+    redirect(
+      `/settings/catalog?error=${encodeURIComponent(
+        `Could not find a name/item column. Headers seen: ${headers.join(", ")}`,
+      )}`,
+    );
+  }
+
+  const { items, skipped } = mapRowsToCatalogItems(rows, mapping);
+  if (items.length === 0) {
+    redirect(
+      `/settings/catalog?error=${encodeURIComponent("No importable rows (each row needs at least an item name)")}`,
+    );
+  }
+
+  let inserted = 0;
+  let duplicates = 0;
+  try {
+    ({ inserted, duplicates } = await createPriceListItemsBatch(items));
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to import catalog items";
+    redirect(`/settings/catalog?error=${encodeURIComponent(message)}`);
+  }
+
+  revalidatePath("/settings/catalog");
+  const params = new URLSearchParams({ imported: String(inserted) });
+  const skippedTotal = skipped + duplicates;
+  if (skippedTotal > 0) params.set("skipped", String(skippedTotal));
+  redirect(`/settings/catalog?${params.toString()}`);
 }
 
 export async function setPriceListItemActiveAction(formData: FormData) {

@@ -1059,6 +1059,23 @@ export async function getProposalsForBid(bidId: string) {
     .orderBy(desc(proposals.createdAt));
 }
 
+/**
+ * The version the next stamp will get. Read before rendering the PDF so the
+ * document itself can carry the version number; `createProposal` recomputes
+ * it at insert (the unique index catches the concurrent-stamp race, so the
+ * two can't silently disagree).
+ */
+export async function getNextProposalVersion(bidId: string): Promise<number> {
+  await requireBidOwnership(bidId);
+  const rows = await db
+    .select({
+      max: sql<number>`coalesce(max(${proposals.version}), 0)`,
+    })
+    .from(proposals)
+    .where(eq(proposals.bidId, bidId));
+  return Number(rows[0]?.max ?? 0) + 1;
+}
+
 export async function createProposal(
   bidId: string,
   snapshot: unknown,
@@ -6228,6 +6245,46 @@ export async function createPriceListItem(data: {
     })
     .returning();
   return rows[0];
+}
+
+/**
+ * Bulk insert for CSV import. Duplicate SKUs (per org) are skipped, not
+ * updated — an import must never silently reprice existing catalog items.
+ */
+export async function createPriceListItemsBatch(
+  items: Array<{
+    sku: string;
+    name: string;
+    category?: PriceListCategory | null;
+    pricingUnit?: PricingUnit | null;
+    chargePerUnit?: number | null;
+    subCostPerUnit?: number | null;
+    description?: string | null;
+  }>,
+): Promise<{ inserted: number; duplicates: number }> {
+  if (items.length === 0) return { inserted: 0, duplicates: 0 };
+  const user = await requireUser();
+  const rows = await db
+    .insert(priceListItems)
+    .values(
+      items.map((data) => ({
+        userId: user.ownerUserId,
+        sku: data.sku.trim(),
+        name: data.name.trim(),
+        category: data.category ?? null,
+        pricingUnit: data.pricingUnit ?? null,
+        chargePerUnit:
+          data.chargePerUnit == null ? null : String(data.chargePerUnit),
+        subCostPerUnit:
+          data.subCostPerUnit == null ? null : String(data.subCostPerUnit),
+        description: (data.description ?? "").trim(),
+      })),
+    )
+    .onConflictDoNothing({
+      target: [priceListItems.userId, priceListItems.sku],
+    })
+    .returning({ id: priceListItems.id });
+  return { inserted: rows.length, duplicates: items.length - rows.length };
 }
 
 export async function setPriceListItemActive(

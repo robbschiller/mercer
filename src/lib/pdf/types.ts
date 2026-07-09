@@ -16,6 +16,15 @@ export interface SnapshotBuilding {
 export interface SnapshotLineItem {
   name: string;
   amount: number;
+  /* ── Quote-engine lines (032) carry the full pricing breakdown; snapshots
+        stamped before then have name+amount only, so all optional. ── */
+  qty?: number | null;
+  /** Raw unit string as stored on the line; render via pricingUnitLabel. */
+  unit?: string | null;
+  unitPrice?: number | null;
+  /** Raw category enum; render via priceListCategoryLabel. */
+  category?: string | null;
+  sku?: string | null;
 }
 
 /**
@@ -57,6 +66,8 @@ export interface ProposalSnapshot {
   parties?: SnapshotParties;
   totalSqft: number;
   grandTotal: number;
+  /** Quote version stamped on the document. Optional — absent pre-032. */
+  version?: number;
   generatedAt: string;
   /** In-memory only for PDF render; never persist to `proposals.snapshot`. */
   satelliteImageDataUri?: string;
