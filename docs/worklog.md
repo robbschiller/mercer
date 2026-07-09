@@ -4,6 +4,28 @@ Running log of in-flight work on the lead-to-close MVP (docs/plan.md). Chronolog
 
 ---
 
+## 2026-07-09 — Quote engine verified live; PDF now renders the quote lines; catalog CSV import
+
+**Resume steps from 2026-07-08: all done.** Robb restored the Supabase project (and had already uncommented `ANTHROPIC_API_KEY`); 032 and 033 applied individually via the one-off-runner pattern; the quote flow was then verified **end-to-end against the live DB with real Claude** for the first time — scope + takeoff photo → 4 SKU-matched lines with evidence-photo rationale → click-to-edit recompute → versioned PDF → share link → portal acceptance → bid Won with `contract_value` snapshotted → `/bids` Quote column. All under dev user `claude-test+phase-a@mercer.dev` (test bid on Avalon Somerville Station left in place, quote versions v1–v3). The login/drive recipe is persisted in `.claude/skills/verify/SKILL.md`.
+
+### Fixes/features from what verification surfaced
+
+- **Customer PDF now carries the full quote breakdown.** The template previously flattened quote lines into a name-only "Additional Items" list under a "Building Breakdown · Total Area 0 sqft" block. Now: snapshot line items carry `qty`/`unit`/`unitPrice`/`category`/`sku` (all optional — pre-032 snapshots still render via the legacy list, now with amounts), and rich lines render as a category-grouped **Scope & Pricing** table (name + gray SKU, qty × unit, unit price, line total, category subtotals, overall subtotal) mirroring the review screen. The version is stamped on the document (`July 9, 2026 · v2` under the title + in the footer) via `ProposalSnapshot.version`, read with `getNextProposalVersion` before render (`createProposal`'s unique index still owns the race). Building Breakdown/Total Area hide when the bid has no buildings; the Total Price band no longer splits across a page break (`wrap={false}`).
+- **Version rail double-count fixed.** In the done phase the in-flight row *is* the just-stamped version, and the revalidated `proposals` prop already contains it — `QuoteVersionHistory` now drops the duplicate ("2 versions" with v1 twice → correct count).
+- **Settings → Catalog: CSV import** for Jordan's price lists. `src/lib/catalog/csv.ts` maps ad-hoc headers by alias (SKU/code/item #, name/item/service, category/type/trade, unit/UOM, price/charge/rate, cost/sub cost) and normalizes values into the app enums (`SF`/`sqft` → `sf`, `Caulk` → `caulking`, `$8.50` → 8.5, …). Rows without a SKU get one derived from the name; duplicate SKUs (in-file and in-DB, via `onConflictDoNothing` on the per-org unique index) are skipped, never repriced. Banner reports imported/skipped counts.
+
+All three verified live: v2/v3 PDFs stamped with the grouped table (v2 even priced lines from SKUs imported minutes earlier — catalog → engine loop confirmed), rail correct at the just-stamped moment, import of a messy fixture CSV (5 rows + 1 blank → 4 imported, 1 dup skipped).
+
+### Still open (from verification findings)
+
+- Invalid `/p/[slug]` serves the not-found boundary with HTTP 200 in dev — confirm prod returns 404 before anyone points monitoring at it.
+- Regenerating replaces **human-edited** AI lines too (edit keeps `source='ai'`) — by design per "replaces only ai lines", but worth watching in real use: an edited qty silently reverts if the salesperson rebuilds.
+- Line names that wrap can hyphenate awkwardly before the SKU chip in the PDF (react-pdf default hyphenation). Cosmetic.
+
+### Next
+
+Load Jordan's real price lists through the new importer, then Tim tests the flow solo in prod, then with Jordan and Robb. Additional-work quotes on a live job after that.
+
 ## 2026-07-08 — AI Quote Engine (Jordan's notes §6) + field batch. ⚠️ RESUME STEPS REQUIRED
 
 **Goal:** Jordan sent the follow-up engineering notes (`AQP-OS-Engineering-Notes.md` — data model + the four AI features). We picked the **AI quote workflow on the opportunity** as the first unit because every dependency already shipped in the June reconciliation: photos (031), catalog (027), proposal PDF + share links, Claude structured-output patterns. Migrations `032`–`033`. UI designed first in Claude Design (project `d3b4b34a-5f94-419f-87ec-c889303b6f35`, `quote-engine/`), then implemented.
