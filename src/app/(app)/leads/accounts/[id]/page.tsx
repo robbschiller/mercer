@@ -18,7 +18,7 @@ export default async function AccountDetailPage({
       <AccountDetailPanel
         detail={detail}
         closeHref="/leads"
-        buildPropertyHref={(propertyId) => `/leads/properties/${propertyId}`}
+        buildPropertyHref={(propertyId) => `/properties/${propertyId}`}
         buildContactHref={(contactId) => `/contacts/${contactId}`}
       />
     </div>

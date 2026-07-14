@@ -33,12 +33,12 @@ export default async function ProjectsPage({
             <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
               <p className="text-muted-foreground">
                 {initialStatus
-                  ? `No projects in “${projectStatusLabel(initialStatus)}” right now.`
-                  : "No projects yet."}
+                  ? `No jobs in “${projectStatusLabel(initialStatus)}” right now.`
+                  : "No jobs yet."}
               </p>
               <p className="max-w-sm text-sm text-muted-foreground/80">
-                Projects appear here automatically when a property manager
-                accepts a proposal.
+                Jobs appear here automatically when a property manager accepts
+                a proposal.
               </p>
               {initialStatus ? (
                 <Button variant="outline" size="sm" asChild>

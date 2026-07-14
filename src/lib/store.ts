@@ -43,6 +43,7 @@ import {
   or,
   inArray,
   isNull,
+  ne,
   type SQL,
 } from "drizzle-orm";
 import { getOrgContext } from "@/lib/org-context";
@@ -4731,6 +4732,314 @@ export async function getTakeoffQueue(): Promise<TakeoffQueueRow[]> {
     propertyAddress: row.propertyAddress,
     accountName: row.accountName,
   }));
+}
+
+// ── Pipeline (IA rework: one view over every open deal) ─────────────────────
+
+/**
+ * Stage of an open deal. Leads own the pre-quote stages; once a bid exists
+ * the lead flips to `quoted` and the BID row represents the deal (quoting →
+ * sent). Won bids leave the pipeline for Jobs; closed leads/bids drop out.
+ */
+export const PIPELINE_STAGES = [
+  "needs_takeoff",
+  "takeoff_scheduled",
+  "quoting",
+  "sent",
+  "on_hold",
+] as const;
+export type PipelineStage = (typeof PIPELINE_STAGES)[number];
+
+export type PipelineRow = {
+  kind: "lead" | "bid";
+  id: string;
+  href: string;
+  stage: PipelineStage;
+  /** Deal name — lead name, or bid label falling back to property name. */
+  name: string;
+  propertyName: string | null;
+  company: string | null;
+  /** Lead est value or the bid's latest stamped quote total. */
+  value: number | null;
+  quote: {
+    version: number;
+    status: "accepted" | "declined" | "sent" | "ready";
+    viewCount: number;
+  } | null;
+  takeoffScheduledAt: Date | null;
+  followUpAt: string | null;
+  updatedAt: Date;
+};
+
+const OPEN_LEAD_PIPELINE_STATUSES = [
+  "needs_takeoff",
+  "takeoff_scheduled",
+  "on_hold",
+] as const satisfies readonly LeadStatus[];
+
+export async function getPipeline(): Promise<PipelineRow[]> {
+  const user = await requireUser();
+  const [leadRows, bidRows, quoteRows] = await Promise.all([
+    db
+      .select({
+        lead: leads,
+        propertyDisplayName: properties.name,
+        accountName: accounts.name,
+      })
+      .from(leads)
+      .leftJoin(properties, eq(leads.propertyId, properties.id))
+      .leftJoin(accounts, eq(leads.accountId, accounts.id))
+      .where(
+        and(
+          eq(leads.userId, user.ownerUserId),
+          inArray(leads.status, [...OPEN_LEAD_PIPELINE_STATUSES]),
+        ),
+      ),
+    db
+      .select()
+      .from(bids)
+      .where(
+        and(
+          eq(bids.userId, user.ownerUserId),
+          inArray(bids.status, ["draft", "sent"]),
+        ),
+      ),
+    // Latest stamped quote per bid + its newest share state and total —
+    // same shape as getBidsWithSummary's quote map.
+    db.execute(sql`
+      SELECT DISTINCT ON (p.bid_id)
+        p.bid_id AS bid_id,
+        p.version AS version,
+        s.accepted_at IS NOT NULL AS accepted,
+        s.declined_at IS NOT NULL AS declined,
+        s.id IS NOT NULL AS sent,
+        COALESCE(s.view_count, 0)::int AS view_count,
+        COALESCE(p.snapshot->'pricing'->>'grandTotal', p.snapshot->>'grandTotal') AS total
+      FROM proposals p
+      INNER JOIN bids b ON b.id = p.bid_id AND b.user_id = ${user.ownerUserId}
+      LEFT JOIN LATERAL (
+        SELECT ps.id, ps.accepted_at, ps.declined_at, ps.view_count
+        FROM proposal_shares ps
+        WHERE ps.proposal_id = p.id
+        ORDER BY ps.created_at DESC
+        LIMIT 1
+      ) s ON true
+      ORDER BY p.bid_id, p.version DESC
+    `),
+  ]);
+
+  type QuoteRow = {
+    bid_id: string;
+    version: number;
+    accepted: boolean;
+    declined: boolean;
+    sent: boolean;
+    view_count: number;
+    total: string | null;
+  };
+  const quoteByBid = new Map(
+    (quoteRows as unknown as QuoteRow[]).map((q) => [
+      q.bid_id,
+      {
+        version: Number(q.version),
+        status: (q.accepted
+          ? "accepted"
+          : q.declined
+            ? "declined"
+            : q.sent
+              ? "sent"
+              : "ready") as "accepted" | "declined" | "sent" | "ready",
+        viewCount: Number(q.view_count),
+        total: q.total == null ? null : Number(q.total),
+      },
+    ]),
+  );
+
+  const rows: PipelineRow[] = [
+    ...leadRows.map(({ lead, propertyDisplayName, accountName }) => ({
+      kind: "lead" as const,
+      id: lead.id,
+      href: `/leads/${lead.id}`,
+      stage: lead.status as PipelineStage,
+      name: lead.name,
+      propertyName: propertyDisplayName ?? lead.propertyName,
+      company: accountName ?? lead.company,
+      value: lead.estValue == null ? null : Number(lead.estValue),
+      quote: null,
+      takeoffScheduledAt: lead.takeoffScheduledAt,
+      followUpAt: lead.followUpAt,
+      updatedAt: lead.updatedAt,
+    })),
+    ...bidRows.map((bid) => {
+      const quote = quoteByBid.get(bid.id) ?? null;
+      return {
+        kind: "bid" as const,
+        id: bid.id,
+        href: `/bids/${bid.id}`,
+        stage: (bid.status === "sent" ? "sent" : "quoting") as PipelineStage,
+        name: bid.label ?? bid.propertyName,
+        propertyName: bid.propertyName,
+        company: bid.clientName,
+        value: quote?.total ?? null,
+        quote: quote
+          ? {
+              version: quote.version,
+              status: quote.status,
+              viewCount: quote.viewCount,
+            }
+          : null,
+        takeoffScheduledAt: null,
+        followUpAt: null,
+        updatedAt: bid.updatedAt,
+      };
+    }),
+  ];
+
+  const stageOrder = new Map(PIPELINE_STAGES.map((s, i) => [s, i]));
+  return rows.sort(
+    (a, b) =>
+      (stageOrder.get(a.stage) ?? 99) - (stageOrder.get(b.stage) ?? 99) ||
+      b.updatedAt.getTime() - a.updatedAt.getTime(),
+  );
+}
+
+// ── Properties (IA rework: the durable entity, promoted to top level) ───────
+
+export type PropertyIndexRow = {
+  id: string;
+  name: string | null;
+  address: string | null;
+  managementName: string | null;
+  contactCount: number;
+  openDealCount: number;
+  jobCount: number;
+  lastActivityAt: Date;
+};
+
+export async function getPropertiesIndex(): Promise<PropertyIndexRow[]> {
+  const user = await requireUser();
+  const rows = await db.execute(sql`
+    SELECT
+      p.id,
+      p.name,
+      p.address,
+      COALESCE(ma.name, a.name) AS management_name,
+      COALESCE(pc.n, 0)::int AS contact_count,
+      (COALESCE(ol.n, 0) + COALESCE(ob.n, 0))::int AS open_deal_count,
+      COALESCE(jb.n, 0)::int AS job_count,
+      GREATEST(
+        p.updated_at,
+        COALESCE(ol.last_at, p.updated_at),
+        COALESCE(ob.last_at, p.updated_at),
+        COALESCE(jb.last_at, p.updated_at)
+      ) AS last_activity_at
+    FROM properties p
+    LEFT JOIN accounts ma ON ma.id = p.management_account_id
+    LEFT JOIN accounts a ON a.id = p.account_id
+    LEFT JOIN LATERAL (
+      SELECT count(*) AS n FROM property_contacts c
+      WHERE c.property_id = p.id
+    ) pc ON true
+    LEFT JOIN LATERAL (
+      SELECT count(*) AS n, max(l.updated_at) AS last_at FROM leads l
+      WHERE l.property_id = p.id
+        AND l.status IN ('needs_takeoff', 'takeoff_scheduled', 'on_hold')
+    ) ol ON true
+    LEFT JOIN LATERAL (
+      SELECT count(*) AS n, max(b.updated_at) AS last_at FROM bids b
+      WHERE b.property_id = p.id AND b.status IN ('draft', 'sent')
+    ) ob ON true
+    LEFT JOIN LATERAL (
+      SELECT count(*) AS n, max(b.updated_at) AS last_at FROM bids b
+      WHERE b.property_id = p.id AND b.delivery_status IS NOT NULL
+    ) jb ON true
+    WHERE p.user_id = ${user.ownerUserId}
+    ORDER BY last_activity_at DESC
+  `);
+  type Row = {
+    id: string;
+    name: string | null;
+    address: string | null;
+    management_name: string | null;
+    contact_count: number;
+    open_deal_count: number;
+    job_count: number;
+    last_activity_at: string | Date;
+  };
+  return (rows as unknown as Row[]).map((r) => ({
+    id: r.id,
+    name: r.name,
+    address: r.address,
+    managementName: r.management_name,
+    contactCount: Number(r.contact_count),
+    openDealCount: Number(r.open_deal_count),
+    jobCount: Number(r.job_count),
+    lastActivityAt: new Date(r.last_activity_at),
+  }));
+}
+
+/**
+ * Every deal that ever touched a property — the repeat-business story
+ * ("3 past jobs, 1 open bid"). Leads that became bids are represented by
+ * the bid (leads.status = 'quoted' is skipped); won bids with a delivery
+ * status read as jobs.
+ */
+export type PropertyDeal = {
+  kind: "lead" | "bid" | "job";
+  id: string;
+  href: string;
+  name: string;
+  status: string;
+  value: number | null;
+  createdAt: Date;
+};
+
+export async function getPropertyDeals(
+  propertyId: string,
+): Promise<PropertyDeal[]> {
+  const user = await requireUser();
+  const [leadRows, bidRows] = await Promise.all([
+    db
+      .select()
+      .from(leads)
+      .where(
+        and(
+          eq(leads.userId, user.ownerUserId),
+          eq(leads.propertyId, propertyId),
+          ne(leads.status, "quoted"),
+        ),
+      ),
+    db
+      .select()
+      .from(bids)
+      .where(
+        and(
+          eq(bids.userId, user.ownerUserId),
+          eq(bids.propertyId, propertyId),
+        ),
+      ),
+  ]);
+  const deals: PropertyDeal[] = [
+    ...leadRows.map((l) => ({
+      kind: "lead" as const,
+      id: l.id,
+      href: `/leads/${l.id}`,
+      name: l.name,
+      status: l.status,
+      value: l.estValue == null ? null : Number(l.estValue),
+      createdAt: l.createdAt,
+    })),
+    ...bidRows.map((b) => ({
+      kind: (b.deliveryStatus ? "job" : "bid") as "job" | "bid",
+      id: b.id,
+      href: b.deliveryStatus ? `/projects/${b.id}` : `/bids/${b.id}`,
+      name: b.label ?? b.propertyName,
+      status: b.deliveryStatus ?? b.status,
+      value: b.contractValue == null ? null : Number(b.contractValue),
+      createdAt: b.createdAt,
+    })),
+  ];
+  return deals.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
 /** Distinct source_tag values for the current user (for filter dropdown). */

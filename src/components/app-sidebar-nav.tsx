@@ -4,13 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
-  ClipboardList,
+  Building2,
   ContactRound,
+  Filter,
   HardHat,
-  LayoutDashboard,
-  Ruler,
-  Sparkles,
-  Users,
+  House,
 } from "lucide-react";
 import {
   SidebarMenu,
@@ -19,14 +17,16 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
+// IA rework: the nav mirrors the mental model — work the pipeline, run the
+// jobs, know your properties and people. Pipeline stages (leads, takeoffs,
+// bids) are filters inside /pipeline, not destinations; /leads and /bids
+// stay routable for deep links. Ask lives in the Home composer.
 const items = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/ask", label: "Ask", icon: Sparkles },
+  { href: "/dashboard", label: "Home", icon: House },
+  { href: "/pipeline", label: "Pipeline", icon: Filter },
+  { href: "/projects", label: "Jobs", icon: HardHat },
+  { href: "/properties", label: "Properties", icon: Building2 },
   { href: "/contacts", label: "Contacts", icon: ContactRound },
-  { href: "/leads", label: "Leads", icon: Users },
-  { href: "/takeoff-queue", label: "Takeoffs", icon: Ruler },
-  { href: "/bids", label: "Bids", icon: ClipboardList },
-  { href: "/projects", label: "Projects", icon: HardHat },
   { href: "/reports", label: "Reports", icon: BarChart3 },
 ];
 // Settings lives in the org dropdown (click the company name in the sidebar

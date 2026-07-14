@@ -14,11 +14,13 @@ import {
 import { useBreadcrumbLabels } from "@/components/breadcrumb-label";
 
 const SECTION_LABELS: Record<string, string> = {
-  dashboard: "Dashboard",
+  dashboard: "Home",
+  pipeline: "Pipeline",
   contacts: "Contacts",
   leads: "Leads",
   bids: "Bids",
-  projects: "Projects",
+  projects: "Jobs",
+  properties: "Properties",
   settings: "Settings",
   members: "Team",
 };
