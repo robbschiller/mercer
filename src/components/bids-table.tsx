@@ -120,6 +120,11 @@ export function BidsTable({ bids }: { bids: BidSummary[] }) {
             className="font-medium text-foreground"
           >
             {row.original.propertyName || "—"}
+            {row.original.label ? (
+              <span className="block text-xs font-normal text-muted-foreground">
+                {row.original.label}
+              </span>
+            ) : null}
           </Link>
         ),
       },

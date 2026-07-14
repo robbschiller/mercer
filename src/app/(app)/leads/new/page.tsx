@@ -45,7 +45,22 @@ export default async function NewLeadPage({
           <form action={createLeadAction} className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
               <Label htmlFor="name">Name *</Label>
-              <Input id="name" name="name" required autoFocus />
+              <Input
+                id="name"
+                name="name"
+                required
+                autoFocus
+                placeholder="Nona Terrace – Full Exterior Repaint"
+              />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="contactName">Contact name</Label>
+              <Input
+                id="contactName"
+                name="contactName"
+                placeholder="The person — e.g. Robert Strembicki"
+              />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -137,6 +152,21 @@ export default async function NewLeadPage({
             <div className="flex flex-col gap-2">
               <Label htmlFor="notes">Notes</Label>
               <Textarea id="notes" name="notes" rows={3} />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="attachments">Attachments</Label>
+              <Input
+                id="attachments"
+                name="attachments"
+                type="file"
+                multiple
+                accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.eml,.msg,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*,application/pdf"
+              />
+              <p className="text-xs text-muted-foreground">
+                Paint specs, RFPs, referral emails — they land on the lead
+                record.
+              </p>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2">

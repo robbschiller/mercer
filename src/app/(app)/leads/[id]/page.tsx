@@ -1,7 +1,13 @@
 import { notFound } from "next/navigation";
-import { getLead, getLatestBidForLead, getPhotos } from "@/lib/store";
+import {
+  getLead,
+  getLatestBidForLead,
+  getPhotos,
+  getAttachments,
+} from "@/lib/store";
 import { LeadDetailBody } from "@/components/lead-detail-body";
 import { PhotosCard } from "@/components/photos-card";
+import { AttachmentsCard } from "@/components/attachments-card";
 import { BreadcrumbLabel } from "@/components/breadcrumb-label";
 import { leadFullName } from "@/lib/leads/name";
 
@@ -13,10 +19,11 @@ export default async function LeadDetailPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const [{ id }, { error }] = await Promise.all([params, searchParams]);
-  const [lead, linkedBid, photos] = await Promise.all([
+  const [lead, linkedBid, photos, attachments] = await Promise.all([
     getLead(id),
     getLatestBidForLead(id),
     getPhotos("lead", id),
+    getAttachments("lead", id),
   ]);
   if (!lead) notFound();
 
@@ -28,6 +35,13 @@ export default async function LeadDetailPage({
         linkedBid={linkedBid}
         error={error}
         closeHref="/leads"
+      />
+      <AttachmentsCard
+        contextType="lead"
+        contextId={id}
+        returnTo={`/leads/${id}`}
+        attachments={attachments}
+        description="Paint specs, RFPs, referral emails — everything that arrived with this opportunity."
       />
       <PhotosCard
         contextType="lead"

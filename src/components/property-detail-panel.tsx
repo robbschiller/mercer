@@ -9,7 +9,7 @@ import {
   UserCheck,
 } from "lucide-react";
 import type { PropertyDetail } from "@/lib/store";
-import { setPropertyOwnerContactAction } from "@/lib/actions";
+import { OwnershipForm } from "@/components/ownership-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,7 +18,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import {
   leadStatusLabel,
   leadStatusVariant,
@@ -195,44 +194,29 @@ export function PropertyDetailPanel({
         <CardContent className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-2">
             <Metric label="Management" value={managementName ?? "—"} />
-            <Metric label="Owner contact" value={ownerContact?.name ?? "Not set"} />
+            <Metric
+              label="Owner contact"
+              value={
+                ownerParty?.ownershipType === "hoa"
+                  ? "HOA / Association"
+                  : (ownerContact?.name ?? "Not set")
+              }
+            />
           </div>
           <p className="text-xs text-muted-foreground">
             Mark which contact at this property represents the owner. The
             legal owner details and Notice to Owner recipient are captured
             later on the project pre-start checklist, not here.
           </p>
-          <form
-            action={setPropertyOwnerContactAction}
-            className="flex flex-col gap-3"
-          >
-            <input type="hidden" name="propertyId" value={property.id} />
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="contactId">Owner contact</Label>
-              <select
-                id="contactId"
-                name="contactId"
-                defaultValue={ownerParty?.contactId ?? ""}
-                className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                disabled={contacts.length === 0}
-              >
-                <option value="">— None —</option>
-                {contacts.map(({ contact }) => (
-                  <option key={contact.id} value={contact.id}>
-                    {contact.name}
-                  </option>
-                ))}
-              </select>
-              {contacts.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  Add a contact to this property first.
-                </p>
-              ) : null}
-            </div>
-            <Button type="submit" size="sm" className="self-start">
-              Save owner
-            </Button>
-          </form>
+          <OwnershipForm
+            propertyId={property.id}
+            contacts={contacts.map(({ contact }) => ({
+              id: contact.id,
+              name: contact.name,
+            }))}
+            ownerContactId={ownerParty?.contactId ?? null}
+            ownershipType={ownerParty?.ownershipType ?? "individual"}
+          />
         </CardContent>
       </Card>
 

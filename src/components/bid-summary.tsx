@@ -34,6 +34,7 @@ export function BidSummary({ bid }: { bid: Bid }) {
   const [editSession, setEditSession] = useState(0);
 
   const [propertyName, setPropertyName] = useState(bid.propertyName);
+  const [label, setLabel] = useState(bid.label ?? "");
   const [address, setAddress] = useState(bid.address);
   const [latitude, setLatitude] = useState<number | null>(() =>
     toNum(bid.latitude)
@@ -51,6 +52,7 @@ export function BidSummary({ bid }: { bid: Bid }) {
   const isDirty = useMemo(
     () =>
       propertyName !== bid.propertyName ||
+      label !== (bid.label ?? "") ||
       address !== bid.address ||
       toNum(latitude) !== toNum(bid.latitude) ||
       toNum(longitude) !== toNum(bid.longitude) ||
@@ -60,6 +62,7 @@ export function BidSummary({ bid }: { bid: Bid }) {
       status !== bid.status,
     [
       propertyName,
+      label,
       address,
       latitude,
       longitude,
@@ -73,6 +76,7 @@ export function BidSummary({ bid }: { bid: Bid }) {
 
   const resetForm = useCallback(() => {
     setPropertyName(bid.propertyName);
+    setLabel(bid.label ?? "");
     setAddress(bid.address);
     setLatitude(toNum(bid.latitude));
     setLongitude(toNum(bid.longitude));
@@ -140,6 +144,17 @@ export function BidSummary({ bid }: { bid: Bid }) {
                 value={propertyName}
                 onChange={(e) => setPropertyName(e.target.value)}
                 required
+              />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="label">Project / opportunity name</Label>
+              <Input
+                id="label"
+                name="label"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="Full Exterior Repaint"
               />
             </div>
 
@@ -271,6 +286,7 @@ export function BidSummary({ bid }: { bid: Bid }) {
                 </Badge>
               </div>
               <CardDescription>
+                {bid.label ? <>{bid.label} &middot; </> : null}
                 {bid.clientName} &middot; {bid.address}
               </CardDescription>
             </div>
