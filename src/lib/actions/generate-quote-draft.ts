@@ -290,10 +290,10 @@ async function callClaude(
     `Buildings: ${ctx.buildingsCount || "unknown"}`,
     `Measured square footage: ${ctx.totalSqft > 0 ? `${Math.round(ctx.totalSqft)} sq ft` : "not measured"}`,
     specs?.attainableSqftNonfloor != null
-      ? `Attainable sq ft — non-floor surfaces: ${Number(specs.attainableSqftNonfloor)}`
+      ? `Paintable sq ft — non-floor surfaces: ${Number(specs.attainableSqftNonfloor)}`
       : null,
     specs?.attainableSqftFloors != null
-      ? `Attainable sq ft — floors: ${Number(specs.attainableSqftFloors)}`
+      ? `Paintable sq ft — floors: ${Number(specs.attainableSqftFloors)}`
       : null,
     specs?.breezewayCount != null ? `Breezeways: ${specs.breezewayCount}` : null,
     specs?.stairSystemCount != null

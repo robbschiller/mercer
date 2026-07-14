@@ -100,6 +100,13 @@ export const PROPERTY_PARTY_ROLES = [
 ] as const;
 export type PropertyPartyRole = (typeof PROPERTY_PARTY_ROLES)[number];
 
+/** HOA/condo properties have no individual owner (Jordan fix-list #4). */
+export const OWNERSHIP_TYPES = ["individual", "hoa"] as const;
+export type OwnershipType = (typeof OWNERSHIP_TYPES)[number];
+export function ownershipTypeLabel(t: OwnershipType): string {
+  return t === "hoa" ? "HOA / Association" : "Individual contact";
+}
+
 /**
  * Building archetype — drives access scaling (e.g. a seven-story mid-rise
  * needs swing stage; a garden walk-up does not). Captured per building.
@@ -468,6 +475,7 @@ export const PHOTO_KINDS = [
   "progress",
   "completion",
   "damage",
+  "specs",
   "other",
 ] as const;
 export type PhotoKind = (typeof PHOTO_KINDS)[number];
@@ -478,6 +486,7 @@ export const PHOTO_KIND_LABELS: Record<PhotoKind, string> = {
   progress: "Progress",
   completion: "Completion",
   damage: "Damage",
+  specs: "Specs",
   other: "Other",
 };
 

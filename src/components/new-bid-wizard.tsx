@@ -265,6 +265,19 @@ export function NewBidWizard({
           </div>
 
           <div className="flex flex-col gap-2">
+            <Label htmlFor="label">Project / opportunity name (optional)</Label>
+            <Input
+              id="label"
+              name="label"
+              placeholder={`${propertyName.trim() || "Nona Terrace"} – Full Exterior Repaint`}
+            />
+            <p className="text-xs text-muted-foreground">
+              One property can carry multiple bids over time — this names this
+              one.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-2">
               <Label>Property address</Label>
               <Button

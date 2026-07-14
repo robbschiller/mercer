@@ -10,6 +10,7 @@ import {
   startPropertyRelationshipAction,
   endPropertyRelationshipAction,
   updatePropertySpecsAction,
+  uploadPhotoAction,
 } from "@/lib/actions";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -120,6 +121,7 @@ export default async function PropertyDetailPage({
   ]);
   if (!detail) notFound();
 
+  const specPhotos = photos.filter((p) => p.kind === "specs");
   const label =
     detail.property.name ?? detail.property.address ?? "Untitled property";
 
@@ -155,7 +157,7 @@ export default async function PropertyDetailPage({
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="spec-sqft-nonfloor">
-                  Attainable sq ft — non-floor surfaces
+                  Paintable sq ft — non-floor surfaces
                 </Label>
                 <Input
                   id="spec-sqft-nonfloor"
@@ -168,7 +170,7 @@ export default async function PropertyDetailPage({
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="spec-sqft-floors">
-                  Attainable sq ft — floors
+                  Paintable sq ft — floors
                 </Label>
                 <Input
                   id="spec-sqft-floors"
@@ -218,6 +220,64 @@ export default async function PropertyDetailPage({
               <SubmitButton size="sm">Save specs</SubmitButton>
             </div>
           </form>
+
+          <div className="mt-5 flex flex-col gap-3 border-t pt-4">
+            <div>
+              <p className="text-sm font-medium">Spec photos</p>
+              <p className="text-xs text-muted-foreground">
+                Site conditions behind these numbers — breezeway and
+                stair-system shots live with the specs.
+              </p>
+            </div>
+            {specPhotos.length > 0 && (
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {specPhotos.map((photo) => (
+                  <a
+                    key={photo.id}
+                    href={photo.url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photo.url}
+                      alt={photo.caption ?? "Spec photo"}
+                      loading="lazy"
+                      className="aspect-square w-full rounded-md border object-cover"
+                    />
+                  </a>
+                ))}
+              </div>
+            )}
+            <form
+              action={uploadPhotoAction}
+              className="flex flex-wrap items-center gap-2"
+            >
+              <input type="hidden" name="contextType" value="property" />
+              <input type="hidden" name="contextId" value={id} />
+              <input type="hidden" name="kind" value="specs" />
+              <input
+                type="hidden"
+                name="returnTo"
+                value={`/leads/properties/${id}`}
+              />
+              <Input
+                type="file"
+                name="file"
+                accept="image/*"
+                required
+                className="h-8 flex-1 text-xs"
+              />
+              <Input
+                name="caption"
+                placeholder="Caption (optional)"
+                className="h-8 w-44 text-xs"
+              />
+              <SubmitButton variant="outline" size="sm">
+                Upload
+              </SubmitButton>
+            </form>
+          </div>
         </CardContent>
       </Card>
       <Card>

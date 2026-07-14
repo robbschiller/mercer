@@ -39,6 +39,8 @@ import {
   endContactEmployment,
   createPhoto,
   deletePhoto,
+  createAttachment,
+  deleteAttachment,
   logLeadContact,
   setLeadFollowUp,
   setPropertyOwnerContact,
@@ -129,6 +131,8 @@ import {
   endContactEmploymentSchema,
   uploadPhotoSchema,
   deletePhotoSchema,
+  uploadAttachmentSchema,
+  deleteAttachmentSchema,
   updateLeadSchema,
   enrichLeadActionSchema,
   logLeadContactSchema,
@@ -830,7 +834,25 @@ export async function createLeadAction(formData: FormData) {
     redirect(`/leads/new?error=${encodeURIComponent(message)}`);
   }
 
-  await createLead(result.data);
+  const lead = await createLead(result.data);
+  // Specs/RFPs/referral emails arrive with the lead (fix-list #1). A failed
+  // file must not lose the lead itself — surface it on the lead instead.
+  const files = formData
+    .getAll("attachments")
+    .filter((f): f is File => f instanceof File && f.size > 0);
+  for (const file of files) {
+    try {
+      await uploadAttachmentFile({
+        contextType: "lead",
+        contextId: lead.id,
+        file,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to upload file";
+      redirect(`/leads/${lead.id}?error=${encodeURIComponent(message)}`);
+    }
+  }
   revalidatePath("/leads");
   revalidatePath("/dashboard");
   redirect("/leads");
@@ -1402,6 +1424,110 @@ export async function deletePhotoAction(formData: FormData) {
   revalidatePath(result.data.returnTo);
 }
 
+// Documents on a record (paint specs, RFPs, referral emails) — wider than
+// photos but still an allowlist. Jordan fix-list #1.
+const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+const ATTACHMENT_MIME_TYPES = new Set([
+  ...PHOTO_MIME_TYPES,
+  "application/pdf",
+  "text/plain",
+  "text/csv",
+  "message/rfc822",
+  "application/vnd.ms-outlook",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+]);
+
+async function uploadAttachmentFile(input: {
+  contextType: "lead" | "bid" | "property";
+  contextId: string;
+  file: File;
+  caption?: string | null;
+}) {
+  if (!ATTACHMENT_MIME_TYPES.has(input.file.type)) {
+    throw new Error(
+      `Unsupported file type for "${input.file.name}" — use PDF, image, email, Word, Excel, CSV, or text files`,
+    );
+  }
+  if (input.file.size > ATTACHMENT_MAX_BYTES) {
+    throw new Error(`"${input.file.name}" is over 10 MB`);
+  }
+  const supabase = await createClient();
+  const ext = input.file.name.split(".").pop()?.toLowerCase() || "bin";
+  const storagePath = `${input.contextType}/${input.contextId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const { error: uploadError } = await supabase.storage
+    .from("attachments")
+    .upload(storagePath, Buffer.from(await input.file.arrayBuffer()), {
+      contentType: input.file.type,
+      upsert: false,
+    });
+  if (uploadError) throw new Error(uploadError.message);
+  const { data: urlData } = supabase.storage
+    .from("attachments")
+    .getPublicUrl(storagePath);
+  await createAttachment({
+    contextType: input.contextType,
+    contextId: input.contextId,
+    fileName: input.file.name,
+    mimeType: input.file.type,
+    sizeBytes: input.file.size,
+    storagePath,
+    url: urlData.publicUrl,
+    caption: input.caption ?? null,
+  });
+}
+
+export async function uploadAttachmentAction(formData: FormData) {
+  const result = uploadAttachmentSchema.safeParse(formDataToObject(formData));
+  const fallback = (formData.get("returnTo") as string) || "/dashboard";
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`${fallback}?error=${encodeURIComponent(message)}`);
+  }
+  const { contextType, contextId, caption, returnTo } = result.data;
+  const files = formData
+    .getAll("file")
+    .filter((f): f is File => f instanceof File && f.size > 0);
+  if (files.length === 0) {
+    redirect(`${returnTo}?error=${encodeURIComponent("Pick a file to upload")}`);
+  }
+  try {
+    for (const file of files) {
+      await uploadAttachmentFile({ contextType, contextId, file, caption });
+    }
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to upload file";
+    redirect(`${returnTo}?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath(returnTo);
+}
+
+export async function deleteAttachmentAction(formData: FormData) {
+  const result = deleteAttachmentSchema.safeParse(formDataToObject(formData));
+  const fallback = (formData.get("returnTo") as string) || "/dashboard";
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`${fallback}?error=${encodeURIComponent(message)}`);
+  }
+  try {
+    const attachment = await deleteAttachment(result.data.id);
+    if (attachment) {
+      const supabase = await createClient();
+      await supabase.storage
+        .from("attachments")
+        .remove([attachment.storagePath]);
+    }
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to delete file";
+    redirect(`${result.data.returnTo}?error=${encodeURIComponent(message)}`);
+  }
+  revalidatePath(result.data.returnTo);
+}
+
 export async function updateLeadAction(formData: FormData) {
   const result = updateLeadSchema.safeParse(formDataToObject(formData));
   if (!result.success) {
@@ -1484,9 +1610,9 @@ export async function setPropertyOwnerContactAction(formData: FormData) {
       `/leads/properties/${id}?error=${encodeURIComponent(message)}`,
     );
   }
-  const { propertyId, contactId } = result.data;
+  const { propertyId, contactId, ownershipType } = result.data;
   try {
-    await setPropertyOwnerContact({ propertyId, contactId });
+    await setPropertyOwnerContact({ propertyId, contactId, ownershipType });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to save owner contact";

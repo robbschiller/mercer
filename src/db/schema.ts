@@ -18,6 +18,7 @@ import {
   PROJECT_UPDATE_AUTHOR_TYPES,
   ACCOUNT_TYPES,
   PROPERTY_PARTY_ROLES,
+  OWNERSHIP_TYPES,
   BUILDING_ARCHETYPES,
   ACCESS_TYPES,
   EXPENSE_CATEGORIES,
@@ -173,6 +174,11 @@ export const propertyParties = pgTable("property_parties", {
     onDelete: "set null",
   }),
   role: text("role", { enum: PROPERTY_PARTY_ROLES }).notNull(),
+  // Only meaningful on the `owner` row: 'hoa' means the association itself
+  // owns the property and no individual owner contact is expected.
+  ownershipType: text("ownership_type", { enum: OWNERSHIP_TYPES })
+    .notNull()
+    .default("individual"),
   isNtoRecipient: boolean("is_nto_recipient").notNull().default(false),
   legalOwnerName: text("legal_owner_name"),
   legalOwnerAddress: text("legal_owner_address"),
@@ -846,6 +852,27 @@ export const orgMemberships = pgTable("org_memberships", {
  * progress/completion, damage. Files live in the public `photos` storage
  * bucket; the row keeps the path (for deletes) and the public URL.
  */
+/**
+ * Polymorphic document archive (paint specs, RFPs, referral emails) —
+ * same (context_type, context_id) shape as photos. Files live in the
+ * public `attachments` bucket. Jordan fix-list #1.
+ */
+export const attachments = pgTable("attachments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  contextType: text("context_type", { enum: PHOTO_CONTEXT_TYPES }).notNull(),
+  contextId: uuid("context_id").notNull(),
+  fileName: text("file_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  storagePath: text("storage_path").notNull(),
+  url: text("url").notNull(),
+  caption: text("caption"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const photos = pgTable("photos", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull(),

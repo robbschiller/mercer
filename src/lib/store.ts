@@ -28,6 +28,7 @@ import {
   priceListItems,
   supplierProducts,
   photos,
+  attachments,
   companyProfiles,
   onboardings,
   orgMemberships,
@@ -67,6 +68,7 @@ import {
   type SupplierProductType,
   type PhotoContextType,
   type PhotoKind,
+  type OwnershipType,
 } from "@/lib/status-meta";
 
 export type Bid = typeof bids.$inferSelect;
@@ -269,6 +271,7 @@ export async function createBid(
         | "leadId"
         | "propertyId"
         | "primaryContactId"
+        | "label"
       >
     >
 ) {
@@ -325,6 +328,7 @@ export async function createBid(
       propertyId,
       primaryContactId,
       propertyName: data.propertyName,
+      label: data.label ?? null,
       address: data.address,
       clientName: data.clientName,
       notes: data.notes,
@@ -363,6 +367,7 @@ export async function updateBid(
     Pick<
       Bid,
       | "propertyName"
+      | "label"
       | "address"
       | "clientName"
       | "notes"
@@ -2671,7 +2676,7 @@ export async function createLead(
         | "scopeCategory"
         | "estValue"
       >
-    > & { accountId?: string | null }
+    > & { accountId?: string | null; contactName?: string | null }
 ) {
   const user = await requireUser();
   let account: Account | null = null;
@@ -2702,27 +2707,36 @@ export async function createLead(
     address: data.resolvedAddress,
     sourceTag: data.sourceTag ?? null,
   });
-  const contact = await findOrCreateContact({
-    userId: user.ownerUserId,
-    accountId: account?.id ?? null,
-    name: data.name,
-    email: data.email ?? null,
-    phone: data.phone ?? null,
-    sourceTag: data.sourceTag ?? null,
-  });
-  const propertyContact = await upsertPropertyContact({
-    userId: user.ownerUserId,
-    propertyId: property?.id ?? null,
-    contactId: contact.id,
-    sourceTag: data.sourceTag ?? null,
-  });
+  // A contact is a person. Only mint one when we have person fields —
+  // never from the lead name, which is the opportunity title ("Nona
+  // Terrace – Full Exterior Repaint"), not someone's name.
+  const contactName = data.contactName?.trim() || null;
+  const contact =
+    contactName || data.email || data.phone
+      ? await findOrCreateContact({
+          userId: user.ownerUserId,
+          accountId: account?.id ?? null,
+          name: contactName ?? data.email ?? data.phone ?? "Unknown contact",
+          email: data.email ?? null,
+          phone: data.phone ?? null,
+          sourceTag: data.sourceTag ?? null,
+        })
+      : null;
+  const propertyContact = contact
+    ? await upsertPropertyContact({
+        userId: user.ownerUserId,
+        propertyId: property?.id ?? null,
+        contactId: contact.id,
+        sourceTag: data.sourceTag ?? null,
+      })
+    : null;
   const rows = await db
     .insert(leads)
     .values({
       userId: user.ownerUserId,
       accountId: account?.id ?? null,
       propertyId: property?.id ?? null,
-      primaryContactId: contact.id,
+      primaryContactId: contact?.id ?? null,
       name: data.name,
       sourceTag: data.sourceTag ?? null,
       email: data.email ?? null,
@@ -2738,18 +2752,20 @@ export async function createLead(
       ownerId: account?.internalRepId ?? null,
     })
     .returning();
-  await createLeadContactLink({
-    userId: user.ownerUserId,
-    leadId: rows[0].id,
-    contactId: contact.id,
-    propertyContactId: propertyContact?.id ?? null,
-    role: "primary",
-    isPrimary: true,
-  });
+  if (contact) {
+    await createLeadContactLink({
+      userId: user.ownerUserId,
+      leadId: rows[0].id,
+      contactId: contact.id,
+      propertyContactId: propertyContact?.id ?? null,
+      role: "primary",
+      isPrimary: true,
+    });
+  }
   await createActivityEvent({
     userId: user.ownerUserId,
     leadId: rows[0].id,
-    contactId: contact.id,
+    contactId: contact?.id ?? null,
     propertyId: property?.id ?? null,
     accountId: account?.id ?? null,
     type: "note",
@@ -3250,8 +3266,10 @@ export async function getPropertyDetail(
 export async function setPropertyOwnerContact(input: {
   propertyId: string;
   contactId: string | null;
+  ownershipType?: OwnershipType;
 }): Promise<void> {
   const user = await requireUser();
+  const ownershipType = input.ownershipType ?? "individual";
 
   const propRows = await db
     .select({ id: properties.id })
@@ -3265,9 +3283,10 @@ export async function setPropertyOwnerContact(input: {
     .limit(1);
   if (!propRows[0]) throw new Error("Property not found");
 
-  // Contact must already be linked to this property.
+  // Contact must already be linked to this property. HOA ownership never
+  // carries an individual owner contact.
   let contactId: string | null = null;
-  if (input.contactId) {
+  if (input.contactId && ownershipType !== "hoa") {
     const linked = await db
       .select({ id: propertyContacts.id })
       .from(propertyContacts)
@@ -3297,7 +3316,7 @@ export async function setPropertyOwnerContact(input: {
   if (existing[0]) {
     await db
       .update(propertyParties)
-      .set({ contactId, updatedAt: new Date() })
+      .set({ contactId, ownershipType, updatedAt: new Date() })
       .where(eq(propertyParties.id, existing[0].id));
     await writeAuditLog({
       userId: user.ownerUserId,
@@ -3306,7 +3325,7 @@ export async function setPropertyOwnerContact(input: {
       entityId: existing[0].id,
       action: "update",
       previousValues: existing[0],
-      newValues: { contactId },
+      newValues: { contactId, ownershipType },
     });
   } else {
     const inserted = await db
@@ -3316,6 +3335,7 @@ export async function setPropertyOwnerContact(input: {
         propertyId: input.propertyId,
         role: "owner",
         contactId,
+        ownershipType,
       })
       .returning();
     await writeAuditLog({
@@ -4100,7 +4120,15 @@ async function findOrCreateProperty(input: {
       .set(patch)
       .where(eq(properties.id, existing[0].id))
       .returning();
-    return updated[0] ?? existing[0];
+    const result = updated[0] ?? existing[0];
+    if (!existing[0].managementAccountId && result.managementAccountId) {
+      await ensureCurrentMgmtRelationship({
+        userId: input.userId,
+        propertyId: result.id,
+        accountId: result.managementAccountId,
+      });
+    }
+    return result;
   }
 
   const inserted = await db
@@ -4130,7 +4158,45 @@ async function findOrCreateProperty(input: {
     action: "create",
     newValues: inserted[0],
   });
+  if (inserted[0].managementAccountId) {
+    await ensureCurrentMgmtRelationship({
+      userId: input.userId,
+      propertyId: inserted[0].id,
+      accountId: inserted[0].managementAccountId,
+    });
+  }
   return inserted[0];
+}
+
+/**
+ * The derived FK (properties.management_account_id) and the dated
+ * property_mgmt history must move together — a property whose card names a
+ * management company while Relationship History says "None recorded" reads
+ * as data loss (Jordan's fix-list #5).
+ */
+async function ensureCurrentMgmtRelationship(input: {
+  userId: string;
+  propertyId: string;
+  accountId: string;
+}) {
+  const current = await db
+    .select({ id: propertyMgmt.id })
+    .from(propertyMgmt)
+    .where(
+      and(
+        eq(propertyMgmt.userId, input.userId),
+        eq(propertyMgmt.propertyId, input.propertyId),
+        isNull(propertyMgmt.endDate),
+      ),
+    )
+    .limit(1);
+  if (current[0]) return;
+  await db.insert(propertyMgmt).values({
+    userId: input.userId,
+    propertyId: input.propertyId,
+    accountId: input.accountId,
+    startDate: new Date().toISOString().slice(0, 10),
+  });
 }
 
 async function upsertPropertyContact(input: {
@@ -6199,6 +6265,66 @@ export async function deletePhoto(id: string): Promise<Photo | null> {
   const rows = await db
     .delete(photos)
     .where(and(eq(photos.id, id), eq(photos.userId, user.ownerUserId)))
+    .returning();
+  return rows[0] ?? null;
+}
+
+// ── Attachments (documents on leads/bids/properties, Jordan fix-list #1) ────
+
+export type Attachment = typeof attachments.$inferSelect;
+
+export async function getAttachments(
+  contextType: PhotoContextType,
+  contextId: string,
+): Promise<Attachment[]> {
+  const user = await requireUser();
+  return db
+    .select()
+    .from(attachments)
+    .where(
+      and(
+        eq(attachments.userId, user.ownerUserId),
+        eq(attachments.contextType, contextType),
+        eq(attachments.contextId, contextId),
+      ),
+    )
+    .orderBy(desc(attachments.createdAt));
+}
+
+export async function createAttachment(data: {
+  contextType: PhotoContextType;
+  contextId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  storagePath: string;
+  url: string;
+  caption?: string | null;
+}): Promise<Attachment> {
+  const user = await requireUser();
+  const rows = await db
+    .insert(attachments)
+    .values({
+      userId: user.ownerUserId,
+      contextType: data.contextType,
+      contextId: data.contextId,
+      fileName: data.fileName,
+      mimeType: data.mimeType,
+      sizeBytes: data.sizeBytes,
+      storagePath: data.storagePath,
+      url: data.url,
+      caption: data.caption ?? null,
+    })
+    .returning();
+  return rows[0];
+}
+
+/** Delete the row; returns it so the caller can remove the storage object. */
+export async function deleteAttachment(id: string): Promise<Attachment | null> {
+  const user = await requireUser();
+  const rows = await db
+    .delete(attachments)
+    .where(and(eq(attachments.id, id), eq(attachments.userId, user.ownerUserId)))
     .returning();
   return rows[0] ?? null;
 }

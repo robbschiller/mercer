@@ -70,10 +70,8 @@ export async function quickCreateLead(input: {
   const ctx = await getOrgContext();
   if (!ctx) return { ok: false, error: "You're not signed in." };
 
-  // createLead requires a name (it findOrCreates a contact from it). Prefer the
-  // primary contact; fall back to the address so an address-only lead still
-  // lands. (Property-only leads with no contact need a store change — TODO.)
-  const name = clean(input.primaryContact) ?? clean(input.propertyAddress);
+  const contactName = clean(input.primaryContact);
+  const name = contactName ?? clean(input.propertyAddress);
   if (!name) {
     return {
       ok: false,
@@ -85,6 +83,7 @@ export async function quickCreateLead(input: {
     const address = clean(input.propertyAddress);
     await createLead({
       name,
+      contactName,
       propertyName: address,
       resolvedAddress: address,
       sourceTag: clean(input.source) ?? SOURCE_TAG,
@@ -116,6 +115,7 @@ export async function quickLogCall(input: {
     );
     const lead = await createLead({
       name,
+      contactName: name,
       notes: noteParts.join("\n"),
       sourceTag: SOURCE_TAG,
     });

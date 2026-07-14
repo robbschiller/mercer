@@ -17,6 +17,7 @@ import {
   SUPPLIER_PRODUCT_TYPES,
   PHOTO_CONTEXT_TYPES,
   PHOTO_KINDS,
+  OWNERSHIP_TYPES,
 } from "./status-meta";
 
 /** Optional number from a form field: "" / null → null, else coerced number. */
@@ -88,8 +89,17 @@ const formOptionalUuid = z.preprocess((val: unknown) => {
   return String(val);
 }, z.union([z.string().uuid("Invalid ID"), z.null()]));
 
+const optionalText = z
+  .union([z.string(), z.null(), z.undefined()])
+  .transform((v) => {
+    if (v == null) return null;
+    const trimmed = v.trim();
+    return trimmed === "" ? null : trimmed;
+  });
+
 export const createBidSchema = z.object({
   propertyName: z.string().min(1, "Property name is required"),
+  label: optionalText,
   address: z.string().min(1, "Address is required"),
   clientName: z.string().min(1, "Client name is required"),
   notes: z.string().default(""),
@@ -102,6 +112,7 @@ export const createBidSchema = z.object({
 export const updateBidSchema = z.object({
   id: z.string().uuid("Invalid bid ID"),
   propertyName: z.string().min(1, "Property name is required"),
+  label: optionalText,
   address: z.string().min(1, "Address is required"),
   clientName: z.string().min(1, "Client name is required"),
   notes: z.string().default(""),
@@ -265,14 +276,6 @@ export const declineProposalShareSchema = z.object({
 
 // ── Leads ──
 
-const optionalText = z
-  .union([z.string(), z.null(), z.undefined()])
-  .transform((v) => {
-    if (v == null) return null;
-    const trimmed = v.trim();
-    return trimmed === "" ? null : trimmed;
-  });
-
 const optionalEmail = z
   .union([z.string(), z.null(), z.undefined()])
   .transform((v) => (v == null ? "" : v.trim()))
@@ -283,6 +286,7 @@ const optionalEmail = z
 
 export const createLeadSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
+  contactName: optionalText,
   sourceTag: optionalText,
   email: optionalEmail,
   phone: optionalText,
@@ -562,6 +566,18 @@ export const deletePhotoSchema = z.object({
   returnTo: returnToField,
 });
 
+export const uploadAttachmentSchema = z.object({
+  contextType: z.enum(PHOTO_CONTEXT_TYPES),
+  contextId: z.string().uuid("Invalid context ID"),
+  caption: optionalText,
+  returnTo: returnToField,
+});
+
+export const deleteAttachmentSchema = z.object({
+  id: z.string().uuid("Invalid attachment ID"),
+  returnTo: returnToField,
+});
+
 export const updateJobScheduleSchema = z.object({
   id: z.string().uuid("Invalid project ID"),
   weeksTotal: optionalCount,
@@ -698,6 +714,7 @@ const nullableContactId = z.preprocess((val: unknown) => {
 export const setPropertyOwnerContactSchema = z.object({
   propertyId: z.string().uuid("Invalid property ID"),
   contactId: nullableContactId,
+  ownershipType: z.enum(OWNERSHIP_TYPES).default("individual"),
 });
 
 export const setProjectNtoSchema = z.object({
