@@ -31,7 +31,7 @@ export function DashboardRecents({
           Jump back in
         </span>
         <Link
-          href="/leads"
+          href="/pipeline"
           className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
         >
           View all

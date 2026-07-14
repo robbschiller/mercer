@@ -82,7 +82,7 @@ function buildLeadHref(id: string): string {
 }
 
 function buildPropertyHref(id: string): string {
-  return `/leads/properties/${id}`;
+  return `/properties/${id}`;
 }
 
 function buildAccountHref(id: string): string {

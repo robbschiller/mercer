@@ -42,7 +42,7 @@ export default async function ContactDetailPage({
         detail={detail}
         closeHref="/contacts"
         buildAccountHref={(accountId) => `/leads/accounts/${accountId}`}
-        buildPropertyHref={(propertyId) => `/leads/properties/${propertyId}`}
+        buildPropertyHref={(propertyId) => `/properties/${propertyId}`}
         buildLeadHref={(leadId) => `/leads/${leadId}`}
       />
       <Card>

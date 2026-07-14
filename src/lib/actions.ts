@@ -1196,16 +1196,16 @@ export async function scheduleTakeoffAction(formData: FormData) {
   const result = scheduleTakeoffSchema.safeParse(formDataToObject(formData));
   if (!result.success) {
     const message = result.error.issues[0]?.message ?? "Invalid input";
-    redirect(`/takeoff-queue?error=${encodeURIComponent(message)}`);
+    redirect(`/pipeline?error=${encodeURIComponent(message)}`);
   }
   try {
     await scheduleLeadTakeoff(result.data.id, result.data.scheduledAt);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to schedule takeoff";
-    redirect(`/takeoff-queue?error=${encodeURIComponent(message)}`);
+    redirect(`/pipeline?error=${encodeURIComponent(message)}`);
   }
-  revalidatePath("/takeoff-queue");
+  revalidatePath("/pipeline");
   revalidatePath("/leads");
   revalidatePath(`/leads/${result.data.id}`);
 }
@@ -1229,12 +1229,12 @@ export async function updatePropertySpecsAction(formData: FormData) {
   if (!result.success) {
     const message = result.error.issues[0]?.message ?? "Invalid input";
     redirect(
-      `/leads/properties/${propertyId}?error=${encodeURIComponent(message)}`,
+      `/properties/${propertyId}?error=${encodeURIComponent(message)}`,
     );
   }
   const { propertyId: id, ...specs } = result.data;
   await updatePropertySpecs(id, specs);
-  revalidatePath(`/leads/properties/${id}`);
+  revalidatePath(`/properties/${id}`);
 }
 
 export async function startPropertyRelationshipAction(formData: FormData) {
@@ -1244,7 +1244,7 @@ export async function startPropertyRelationshipAction(formData: FormData) {
   const propertyId = (formData.get("propertyId") as string) || "";
   if (!result.success) {
     const message = result.error.issues[0]?.message ?? "Invalid input";
-    redirect(`/leads/properties/${propertyId}?error=${encodeURIComponent(message)}`);
+    redirect(`/properties/${propertyId}?error=${encodeURIComponent(message)}`);
   }
   try {
     await startPropertyRelationship(result.data.kind, {
@@ -1256,10 +1256,10 @@ export async function startPropertyRelationshipAction(formData: FormData) {
     const message =
       error instanceof Error ? error.message : "Failed to add relationship";
     redirect(
-      `/leads/properties/${result.data.propertyId}?error=${encodeURIComponent(message)}`,
+      `/properties/${result.data.propertyId}?error=${encodeURIComponent(message)}`,
     );
   }
-  revalidatePath(`/leads/properties/${result.data.propertyId}`);
+  revalidatePath(`/properties/${result.data.propertyId}`);
   revalidatePath("/leads");
 }
 
@@ -1270,7 +1270,7 @@ export async function endPropertyRelationshipAction(formData: FormData) {
   const propertyId = (formData.get("propertyId") as string) || "";
   if (!result.success) {
     const message = result.error.issues[0]?.message ?? "Invalid input";
-    redirect(`/leads/properties/${propertyId}?error=${encodeURIComponent(message)}`);
+    redirect(`/properties/${propertyId}?error=${encodeURIComponent(message)}`);
   }
   try {
     await endPropertyRelationship(result.data.kind, {
@@ -1281,10 +1281,10 @@ export async function endPropertyRelationshipAction(formData: FormData) {
     const message =
       error instanceof Error ? error.message : "Failed to end relationship";
     redirect(
-      `/leads/properties/${result.data.propertyId}?error=${encodeURIComponent(message)}`,
+      `/properties/${result.data.propertyId}?error=${encodeURIComponent(message)}`,
     );
   }
-  revalidatePath(`/leads/properties/${result.data.propertyId}`);
+  revalidatePath(`/properties/${result.data.propertyId}`);
   revalidatePath("/leads");
 }
 
@@ -1607,7 +1607,7 @@ export async function setPropertyOwnerContactAction(formData: FormData) {
     const id = (formData.get("propertyId") as string) || "";
     const message = result.error.issues[0]?.message ?? "Invalid input";
     redirect(
-      `/leads/properties/${id}?error=${encodeURIComponent(message)}`,
+      `/properties/${id}?error=${encodeURIComponent(message)}`,
     );
   }
   const { propertyId, contactId, ownershipType } = result.data;
@@ -1617,11 +1617,11 @@ export async function setPropertyOwnerContactAction(formData: FormData) {
     const message =
       error instanceof Error ? error.message : "Failed to save owner contact";
     redirect(
-      `/leads/properties/${propertyId}?error=${encodeURIComponent(message)}`,
+      `/properties/${propertyId}?error=${encodeURIComponent(message)}`,
     );
   }
-  revalidatePath(`/leads/properties/${propertyId}`);
-  redirect(`/leads/properties/${propertyId}?saved=1`);
+  revalidatePath(`/properties/${propertyId}`);
+  redirect(`/properties/${propertyId}?saved=1`);
 }
 
 export async function setProjectNtoAction(formData: FormData) {
