@@ -1,5 +1,7 @@
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
+import type { Metadata } from "next";
 import {
   Card,
   CardContent,
@@ -40,13 +42,37 @@ function getSnapshot(snapshot: unknown): ProposalSnapshot | null {
   return value as ProposalSnapshot;
 }
 
+// Deduped across generateMetadata + the page render (one query per request).
+const getShare = cache(getProposalShareBySlug);
+
+/**
+ * Resolving the share here — before the body streams — is what makes an
+ * invalid link an actual HTTP 404: the root loading.tsx suspense boundary
+ * otherwise commits a 200 shell before the page's notFound() can run.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const record = await getShare(slug);
+  if (!record) notFound();
+  const snapshot = getSnapshot(record.proposal.snapshot);
+  return {
+    title: snapshot
+      ? `Proposal — ${snapshot.propertyName}`
+      : "Proposal — Mercer",
+  };
+}
+
 export default async function SharedProposalPage({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const record = await getProposalShareBySlug(slug);
+  const record = await getShare(slug);
   if (!record) notFound();
 
   // Every view: bump view_count (accessedAt keeps first-view semantics).
@@ -102,7 +128,16 @@ export default async function SharedProposalPage({
           <h1 className="text-2xl font-semibold">{snapshot.propertyName}</h1>
           <p className="text-sm text-muted-foreground">{snapshot.address}</p>
         </div>
-        <Badge variant="secondary">{record.bid.status.toUpperCase()}</Badge>
+        {/* This badge is about THIS quote link, not the bid — a customer
+            opening a fresh v4 link must not see the bid's internal WON/DRAFT
+            state. */}
+        <Badge variant="secondary">
+          {isAccepted
+            ? "ACCEPTED"
+            : isDeclined
+              ? "DECLINED"
+              : `QUOTE V${record.proposal.version}`}
+        </Badge>
       </div>
 
       <Card>
@@ -115,12 +150,14 @@ export default async function SharedProposalPage({
               <p className="text-xs text-muted-foreground">Client</p>
               <p className="text-sm font-medium">{snapshot.clientName}</p>
             </div>
-            <div className="rounded-md border p-3">
-              <p className="text-xs text-muted-foreground">Total area</p>
-              <p className="text-sm font-medium">
-                {snapshot.totalSqft.toLocaleString()} sqft
-              </p>
-            </div>
+            {snapshot.totalSqft > 0 && (
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">Total area</p>
+                <p className="text-sm font-medium">
+                  {snapshot.totalSqft.toLocaleString()} sqft
+                </p>
+              </div>
+            )}
           </div>
           {archetypeBuildings.length > 0 && (
             <div className="rounded-md border p-3">
@@ -140,11 +177,57 @@ export default async function SharedProposalPage({
               </ul>
             </div>
           )}
+          {snapshot.lineItems.length > 0 && (
+            <div className="rounded-md border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs text-muted-foreground">
+                    <th className="p-3 font-medium">Line item</th>
+                    <th className="p-3 text-right font-medium">Qty</th>
+                    <th className="p-3 text-right font-medium">Unit price</th>
+                    <th className="p-3 text-right font-medium">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {snapshot.lineItems.map((li, i) => (
+                    <tr key={i} className="border-b last:border-0">
+                      <td className="p-3">{li.name}</td>
+                      <td className="p-3 text-right tabular-nums">
+                        {li.qty != null ? li.qty.toLocaleString() : "—"}
+                      </td>
+                      <td className="p-3 text-right tabular-nums">
+                        {li.unitPrice != null
+                          ? formatCurrency(li.unitPrice)
+                          : "—"}
+                      </td>
+                      <td className="p-3 text-right font-medium tabular-nums">
+                        {formatCurrency(li.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           <div className="rounded-md border p-3">
-            <p className="text-xs text-muted-foreground">Bid total</p>
-            <p className="text-2xl font-semibold">
-              {formatCurrency(snapshot.grandTotal)}
-            </p>
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Bid total</p>
+                <p className="text-2xl font-semibold">
+                  {formatCurrency(snapshot.grandTotal)}
+                </p>
+              </div>
+              {record.proposal.pdfUrl && (
+                <a
+                  href={record.proposal.pdfUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  Download PDF
+                </a>
+              )}
+            </div>
           </div>
           {snapshot.notes && (
             <div className="rounded-md border p-3">

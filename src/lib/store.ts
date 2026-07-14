@@ -1116,6 +1116,23 @@ export async function createProposalShare(proposalId: string) {
   const proposalRow = proposalRows[0];
   if (!proposalRow) throw new Error("Proposal not found");
 
+  // One live link per version: copying the link again must return the SAME
+  // url (view counts and acceptance state live on the share row). Only a
+  // responded (declined) share warrants a fresh link.
+  const existing = await db
+    .select()
+    .from(proposalShares)
+    .where(
+      and(
+        eq(proposalShares.proposalId, proposalId),
+        isNull(proposalShares.acceptedAt),
+        isNull(proposalShares.declinedAt),
+      ),
+    )
+    .orderBy(desc(proposalShares.createdAt))
+    .limit(1);
+  if (existing[0]) return { ...existing[0], bidId: proposalRow.bidId };
+
   const rows = await db
     .insert(proposalShares)
     .values({ proposalId })
@@ -1173,6 +1190,7 @@ async function respondToProposalShare(
         share: proposalShares,
         bidId: proposals.bidId,
         bidUserId: bids.userId,
+        bidStatus: bids.status,
         leadId: bids.leadId,
         propertyId: bids.propertyId,
         primaryContactId: bids.primaryContactId,
@@ -1198,6 +1216,18 @@ async function respondToProposalShare(
       .where(eq(proposalShares.id, slug))
       .returning();
 
+    // A declined share must never clobber a won bid: declining a revision
+    // quote on a live job leaves the job — and its accepted contract —
+    // standing. The decline still records on the share itself above.
+    if (outcome === "lost" && existing.bidStatus === "won") {
+      return {
+        share: updatedShare,
+        bidId: existing.bidId,
+        leadId: existing.leadId ?? null,
+        projectId: null,
+      };
+    }
+
     // The bid row IS the project (property-rooted re-model, Phase 3). On
     // accept we enter the delivery phase on the same row instead of creating
     // a separate projects record. delivery_status is set only if not already
@@ -1214,10 +1244,12 @@ async function respondToProposalShare(
               acceptedByName: updatedShare.acceptedByName,
               acceptedByTitle: updatedShare.acceptedByTitle,
               acceptedAt: updatedShare.acceptedAt,
-              // Snapshot the contract baseline once (immutable); a re-accept
-              // under any race keeps the original via the ?? guard.
+              // The accepted version's total IS the contract. When a revised
+              // version is accepted on an already-won bid (re-quote before or
+              // during delivery), the contract follows it — keeping value,
+              // acceptor, and the customer-facing status page consistent.
               contractValue:
-                existing.contractValue ?? snapshotTotal(existing.snapshot),
+                snapshotTotal(existing.snapshot) ?? existing.contractValue,
             }
           : { status: outcome, updatedAt: now },
       )

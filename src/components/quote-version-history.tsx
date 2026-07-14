@@ -1,6 +1,14 @@
 "use client";
 
-import { FileText, History, Loader2, Check, PencilLine } from "lucide-react";
+import { useState, useTransition } from "react";
+import {
+  FileText,
+  History,
+  Loader2,
+  Check,
+  Link2,
+  PencilLine,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -8,6 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { createProposalShareAction } from "@/lib/actions";
 import { formatCurrency } from "@/lib/pricing";
 import { priceListCategoryLabel } from "@/lib/status-meta";
 import type { LineItem, Proposal, ProposalShare } from "@/lib/store";
@@ -321,6 +330,7 @@ export function QuoteVersionHistory({
                   </span>
                 )}
               </div>
+              <VersionActions proposal={p} status={status} />
             </VersionRow>
           );
         })}
@@ -332,6 +342,76 @@ export function QuoteVersionHistory({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Per-version actions: the customer link and the PDF stay reachable after
+ * the post-stamp panel is gone (the link was previously only mintable in
+ * that transient state). Copy reuses the version's live share, so the URL —
+ * and its view/acceptance state — is stable across copies.
+ */
+function VersionActions({
+  proposal,
+  status,
+}: {
+  proposal: Proposal;
+  status: "accepted" | "declined" | "sent" | "ready";
+}) {
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, startCopy] = useTransition();
+
+  const onCopy = () => {
+    startCopy(async () => {
+      setError(null);
+      const result = await createProposalShareAction({
+        proposalId: proposal.id,
+      });
+      if (!result.shareUrl) {
+        setError(result.error ?? "Failed to create link");
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(result.shareUrl);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch {
+        window.prompt("Copy the customer link:", result.shareUrl);
+      }
+    });
+  };
+
+  // A declined version's link is spent; the next step is a new version, not
+  // re-sharing this one.
+  const showCopy = status !== "declined";
+
+  return (
+    <div className="mt-1.5 flex items-center gap-3 text-[11px]">
+      {showCopy && (
+        <button
+          type="button"
+          onClick={onCopy}
+          disabled={busy}
+          className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
+        >
+          <Link2 className="size-3" />
+          {copied ? "Link copied" : "Copy customer link"}
+        </button>
+      )}
+      {proposal.pdfUrl && (
+        <a
+          href={proposal.pdfUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+        >
+          <FileText className="size-3" />
+          PDF
+        </a>
+      )}
+      {error && <span className="text-destructive">{error}</span>}
+    </div>
   );
 }
 
