@@ -494,6 +494,7 @@ export function ProposalDocument({
         {snapshot.satelliteImageDataUri ? (
           <View style={styles.satelliteSection}>
             <Text style={styles.sectionTitle}>Property location</Text>
+            {/* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image, not a DOM img */}
             <Image
               src={snapshot.satelliteImageDataUri}
               style={styles.satelliteImage}

@@ -1,15 +1,26 @@
 import { notFound } from "next/navigation";
+import { CalendarClock } from "lucide-react";
 import {
   getLead,
   getLatestBidForLead,
   getPhotos,
   getAttachments,
 } from "@/lib/store";
+import { scheduleTakeoffAction } from "@/lib/actions";
 import { LeadDetailBody } from "@/components/lead-detail-body";
 import { PhotosCard } from "@/components/photos-card";
 import { AttachmentsCard } from "@/components/attachments-card";
 import { BreadcrumbLabel } from "@/components/breadcrumb-label";
 import { leadFullName } from "@/lib/leads/name";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { SubmitButton } from "@/components/submit-button";
 
 export default async function LeadDetailPage({
   params,
@@ -36,6 +47,50 @@ export default async function LeadDetailPage({
         error={error}
         closeHref="/leads"
       />
+      {(lead.status === "needs_takeoff" ||
+        lead.status === "takeoff_scheduled") && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <CalendarClock className="size-4" />
+              {lead.status === "takeoff_scheduled"
+                ? "Takeoff scheduled"
+                : "Schedule the takeoff"}
+            </CardTitle>
+            <CardDescription>
+              {lead.status === "takeoff_scheduled" && lead.takeoffScheduledAt
+                ? `On the books for ${new Date(lead.takeoffScheduledAt).toLocaleString("en-US", { weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} — reschedule below if it moves.`
+                : "Put the site walk on the calendar — the lead moves to the takeoff stage."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form
+              action={scheduleTakeoffAction}
+              className="flex flex-wrap items-center gap-2"
+            >
+              <input type="hidden" name="id" value={lead.id} />
+              <Input
+                type="datetime-local"
+                name="scheduledAt"
+                required
+                defaultValue={
+                  lead.takeoffScheduledAt
+                    ? new Date(lead.takeoffScheduledAt)
+                        .toISOString()
+                        .slice(0, 16)
+                    : ""
+                }
+                className="h-9 w-56"
+              />
+              <SubmitButton size="sm">
+                {lead.status === "takeoff_scheduled"
+                  ? "Reschedule"
+                  : "Schedule takeoff"}
+              </SubmitButton>
+            </form>
+          </CardContent>
+        </Card>
+      )}
       <AttachmentsCard
         contextType="lead"
         contextId={id}
