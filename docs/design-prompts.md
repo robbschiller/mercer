@@ -1,4 +1,4 @@
-# Design prompts — Home · Pipeline · Jobs · Properties · Reports
+# Design prompts — Home · Pipeline · Jobs · Properties · Reports · Contacts
 
 *2026-07-14. Paste the SYSTEM block plus ONE page block per Claude Design session
 (same project as the sidebar: `mercer`, d3b4b34a). Grounded in Jordan's AQP canon
@@ -214,6 +214,57 @@ checking the business is healthy.
   margin %; totals row. Amber any job under 20%.
 - Everything dated "derived live" — no date-range pickers in v1, just a quiet
   "last 6 months" scope note where relevant.
+
+---
+
+## 6 — CONTACTS
+
+*Starter: build on `Sidebar Redesign - Direction A Final.html` — its sidebar
+is the left column of every frame, with **Contacts** active.
+Save as `Contacts Redesign - Direction A.html` (data in `contacts-data.js`,
+render logic in `contacts.js`, 5a/5b frame switcher top-right like the
+Properties file).*
+
+The people register — the counterpart to Properties. Buildings are the durable
+asset; people are the portable one: a PM who says yes moves between management
+companies and takes their trust along ("the rep follows the firm"). The page
+answers: who says yes, what have they been worth, and who's going cold?
+
+Two frames:
+
+**6a — Contacts index.** Rich rows, not a data table: name + title, company
+chip, relationship tag when earned (**Decision maker** / **Champion** for
+multiple wins / **New**), preferred-contact-method icon chip (call/text/email —
+AQP tracks this). Right rail: lifetime awarded as the big mono figure (default
+sort: highest lifetime first), last-touch line (amber when they have open work
+and >14d silence), and the ONE next action ([Log a call] / [Open deal] /
+[Open contact]). Sparks: N properties touched · N deals · win rate when ≥2
+decided. Filters: All / Decision makers / Going cold / By company (grouped
+mode with per-company rollups, like Properties). Sample data: ~10 contacts
+across the Properties file's fictional companies (Halloran, Oakmont, Cushing &
+Vale, Redpoint, Sterling, Vanta); make Yvonne Alvarez the star row (Halloran,
+decision maker, $1.49M lifetime) and give one contact a company rotation
+("at Halloran since 2019 · previously Pinnacle Living") so portability shows.
+
+**6b — Contact detail.** Two-column like the property hub. Hero: avatar
+initials, name + title + relationship tag, employment line ("Halloran since
+2019, previously Pinnacle Living"), contact-method row with preferred badge;
+right ledger: first met · deals won with them · **lifetime awarded** (big
+mono) · win rate. Left column: **deals timeline through this person** (same
+timeline vocabulary as the property hub — node icons, outcome pills, values,
+linked), then **properties they touch** (rows with their role at each:
+Decision maker / Site access / AP contact, plus that property's status pill).
+Right column: channels & preferences panel, relationship notes ("prefers
+texts, hates voicemail; golf on Fridays"), and a one-track employment-history
+band chart (same visual as the property hub's rotation bands). Next-action
+banner variant when they have an open deal and have gone quiet: amber,
+"Yvonne hasn't been contacted in 16 days while a $128k quote sits open —
+[Draft follow-up] [Log call]".
+
+Implementation notes (for Claude Code, not the designer): everything maps to
+real data except "previously at X" — we track current `accountId`, not
+employment history, so render tenure only when known; days-since-touch derives
+from `contact_attempts`. Neither blocks the design.
 
 ---
 
