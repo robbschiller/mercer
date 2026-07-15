@@ -3,6 +3,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { getOrgContext } from "@/lib/org-context";
+import { resolveAnthropicKey } from "@/lib/integrations";
 import {
   buildContextPacks,
   searchUnits,
@@ -77,8 +78,10 @@ export async function askMercer(input: {
     return { ok: false, error: `Couldn't load tagged records: ${m}` };
   }
 
-  // No key yet → offline mock so the flow is fully exercisable.
-  if (!process.env.ANTHROPIC_API_KEY) {
+  // Org key first, platform env key second, offline mock last — so the
+  // flow is fully exercisable without any key.
+  const apiKey = await resolveAnthropicKey(ctx.ownerUserId);
+  if (!apiKey) {
     return {
       ok: true,
       usedModel: false,
@@ -87,7 +90,7 @@ export async function askMercer(input: {
     };
   }
 
-  const client = new Anthropic();
+  const client = new Anthropic({ apiKey });
   try {
     const response = await client.messages.create({
       model: "claude-opus-4-8",

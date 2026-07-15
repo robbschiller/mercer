@@ -41,7 +41,7 @@ import type {
   Bid,
   LineItem,
   Photo,
-  Proposal,
+  ProposalSummary,
   ProposalShare,
 } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -714,7 +714,7 @@ export function QuoteEngine({
   lineItems: LineItem[];
   photos: Photo[];
   attachments: Attachment[];
-  proposals: Proposal[];
+  proposals: ProposalSummary[];
   proposalShares: { proposalId: string; share: ProposalShare }[];
   totalSqft: number;
   buildingsCount: number;

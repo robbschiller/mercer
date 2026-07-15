@@ -27,6 +27,47 @@ const PUBLIC_ROUTES = [
 ];
 const PUBLIC_ROUTE_PREFIXES = ["/p/"];
 
+/**
+ * Short-TTL verification cache: `auth.getUser()` is a network round-trip to
+ * Supabase's auth server (~300–900ms observed) and it ran on EVERY matched
+ * navigation. The same signed token re-verifying within a minute is pure
+ * waste — cache the verified identity keyed by the session cookies.
+ *
+ * Trade-offs, deliberately accepted:
+ * - Revocation lag ≤ TTL (a signed-out-elsewhere token stays valid here for
+ *   up to 60s — same order as the RSC render it would have served anyway).
+ * - Token refresh happens on the first request after a cache miss; access
+ *   tokens live ~1h, so a 60s cache never blocks rotation.
+ * - Only positive results are cached; sign-out changes the cookies and
+ *   therefore the key.
+ */
+const AUTH_CACHE_TTL_MS = 60_000;
+const AUTH_CACHE_MAX = 500;
+type CachedUser = {
+  id: string;
+  email: string | null;
+  name: string;
+  expires: number;
+};
+const authCache = new Map<string, CachedUser>();
+
+function authCacheKey(request: NextRequest): string | null {
+  const parts = request.cookies
+    .getAll()
+    .filter((c) => c.name.startsWith("sb-"))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((c) => `${c.name}=${c.value}`);
+  return parts.length > 0 ? parts.join(";") : null;
+}
+
+function displayName(meta: Record<string, unknown>): string {
+  return typeof meta.full_name === "string" && meta.full_name.trim()
+    ? meta.full_name.trim()
+    : typeof meta.name === "string" && meta.name.trim()
+      ? meta.name.trim()
+      : "";
+}
+
 export async function updateSession(request: NextRequest) {
   /**
    * Captured cookie mutations from Supabase's session-refresh path. We
@@ -45,27 +86,60 @@ export async function updateSession(request: NextRequest) {
     >[2];
   }> = [];
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          refreshedCookies = cookiesToSet;
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value),
-          );
+  const cacheKey = authCacheKey(request);
+  const cached = cacheKey ? authCache.get(cacheKey) : undefined;
+  let identity: { id: string; email: string | null; name: string } | null =
+    null;
+
+  if (cached && cached.expires > Date.now()) {
+    identity = cached;
+  } else {
+    if (cached) authCache.delete(cacheKey!);
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            refreshedCookies = cookiesToSet;
+            cookiesToSet.forEach(({ name, value }) =>
+              request.cookies.set(name, value),
+            );
+          },
         },
       },
-    },
-  );
+    );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      identity = {
+        id: user.id,
+        email: user.email ?? null,
+        name: displayName(
+          (user.user_metadata ?? {}) as Record<string, unknown>,
+        ),
+      };
+      // Key by the POST-refresh cookies so the next request (which carries
+      // the rotated token) hits the cache.
+      const postRefreshKey =
+        refreshedCookies.length > 0 ? authCacheKey(request) : cacheKey;
+      if (postRefreshKey) {
+        if (authCache.size >= AUTH_CACHE_MAX) {
+          const oldest = authCache.keys().next().value;
+          if (oldest) authCache.delete(oldest);
+        }
+        authCache.set(postRefreshKey, {
+          ...identity,
+          expires: Date.now() + AUTH_CACHE_TTL_MS,
+        });
+      }
+    }
+  }
 
   const { pathname } = request.nextUrl;
 
@@ -73,13 +147,13 @@ export async function updateSession(request: NextRequest) {
     PUBLIC_ROUTES.includes(pathname) ||
     PUBLIC_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 
-  if (!user && !isPublicRoute) {
+  if (!identity && !isPublicRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
-  if (user && (pathname === "/login" || pathname === "/signup")) {
+  if (identity && (pathname === "/login" || pathname === "/signup")) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
@@ -98,17 +172,14 @@ export async function updateSession(request: NextRequest) {
   forwardedHeaders.delete(AUTH_HEADER_USER_ID);
   forwardedHeaders.delete(AUTH_HEADER_USER_EMAIL);
   forwardedHeaders.delete(AUTH_HEADER_USER_NAME);
-  if (user) {
-    forwardedHeaders.set(AUTH_HEADER_USER_ID, user.id);
-    if (user.email) forwardedHeaders.set(AUTH_HEADER_USER_EMAIL, user.email);
-    const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
-    const name =
-      typeof meta.full_name === "string" && meta.full_name.trim()
-        ? meta.full_name.trim()
-        : typeof meta.name === "string" && meta.name.trim()
-          ? meta.name.trim()
-          : "";
-    if (name) forwardedHeaders.set(AUTH_HEADER_USER_NAME, name);
+  if (identity) {
+    forwardedHeaders.set(AUTH_HEADER_USER_ID, identity.id);
+    if (identity.email) {
+      forwardedHeaders.set(AUTH_HEADER_USER_EMAIL, identity.email);
+    }
+    if (identity.name) {
+      forwardedHeaders.set(AUTH_HEADER_USER_NAME, identity.name);
+    }
   }
 
   const response = NextResponse.next({

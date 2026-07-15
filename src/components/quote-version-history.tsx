@@ -19,7 +19,7 @@ import {
 import { createProposalShareAction } from "@/lib/actions";
 import { formatCurrency } from "@/lib/pricing";
 import { priceListCategoryLabel } from "@/lib/status-meta";
-import type { LineItem, Proposal, ProposalShare } from "@/lib/store";
+import type { LineItem, ProposalSummary, ProposalShare } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 /** Derived status of a stamped version, from its latest share. */
@@ -66,14 +66,6 @@ function shareMeta(share: ProposalShare | null): string | null {
     parts.push(`Declined — ${share.declineReason}`);
   }
   return parts.join(" · ");
-}
-
-function snapshotTotal(snapshot: unknown): number | null {
-  const s = snapshot as
-    | { pricing?: { grandTotal?: number }; grandTotal?: number }
-    | null;
-  const total = s?.grandTotal ?? s?.pricing?.grandTotal;
-  return typeof total === "number" ? total : null;
 }
 
 export function QuoteTotalsCard({
@@ -192,7 +184,7 @@ export function QuoteVersionHistory({
   doneSent,
 }: {
   phase: QuotePhase;
-  proposals: Proposal[];
+  proposals: ProposalSummary[];
   sharesByProposal: Map<string, ProposalShare>;
   nextVersion: number;
   draftChangeLog: string | null;
@@ -305,7 +297,7 @@ export function QuoteVersionHistory({
         {stamped.map((p) => {
           const share = sharesByProposal.get(p.id) ?? null;
           const status = versionStatus(share);
-          const total = snapshotTotal(p.snapshot);
+          const total = p.total;
           const meta = shareMeta(share);
           return (
             <VersionRow
@@ -373,7 +365,7 @@ function VersionActions({
   proposal,
   status,
 }: {
-  proposal: Proposal;
+  proposal: ProposalSummary;
   status: "accepted" | "declined" | "sent" | "ready";
 }) {
   const [copied, setCopied] = useState(false);

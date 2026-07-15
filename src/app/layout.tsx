@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
-import { Fraunces, Geist, JetBrains_Mono } from "next/font/google";
+import {
+  Fraunces,
+  Geist,
+  Instrument_Serif,
+  JetBrains_Mono,
+} from "next/font/google";
 import "./globals.css";
 import { AnalyticsLoader } from "@/components/analytics-loader";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -23,6 +28,14 @@ const fraunces = Fraunces({
   variable: "--font-fraunces",
   display: "swap",
   axes: ["SOFT", "WONK", "opsz"],
+});
+
+/** Sidebar wordmark (Direction A). */
+const instrumentSerif = Instrument_Serif({
+  subsets: ["latin"],
+  weight: "400",
+  variable: "--font-instrument",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -67,7 +80,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geist.variable} ${jetbrainsMono.variable} ${fraunces.variable} font-sans antialiased`}
+        className={`${geist.variable} ${jetbrainsMono.variable} ${fraunces.variable} ${instrumentSerif.variable} font-sans antialiased`}
       >
         <ThemeProvider
           attribute="class"

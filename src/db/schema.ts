@@ -909,6 +909,22 @@ export const photos = pgTable("photos", {
  * Existence of a row with completedAt or skipped=true releases the
  * (app)/layout gate. See docs/plan.md → Phase G.
  */
+/**
+ * Bring-your-own AI keys (Settings → Integrations). The Anthropic key is
+ * AES-256-GCM encrypted at rest; only its last 4 chars render back.
+ */
+export const orgIntegrations = pgTable("org_integrations", {
+  userId: uuid("user_id").primaryKey(),
+  anthropicKeyCiphertext: text("anthropic_key_ciphertext"),
+  anthropicKeyLast4: text("anthropic_key_last4"),
+  anthropicKeyAddedAt: timestamp("anthropic_key_added_at", {
+    withTimezone: true,
+  }),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const onboardings = pgTable("onboardings", {
   userId: uuid("user_id").primaryKey(),
   startedAt: timestamp("started_at", { withTimezone: true })

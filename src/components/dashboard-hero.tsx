@@ -28,6 +28,19 @@ export function DashboardHero({ firstName }: DashboardHeroProps) {
 
   useEffect(() => setNow(new Date()), []);
 
+  // Sidebar Search / global ⌘K land on /dashboard#ask — focus the composer.
+  useEffect(() => {
+    const focusIfAsked = () => {
+      if (window.location.hash === "#ask") {
+        textareaRef.current?.focus();
+        history.replaceState(null, "", window.location.pathname);
+      }
+    };
+    focusIfAsked();
+    window.addEventListener("hashchange", focusIfAsked);
+    return () => window.removeEventListener("hashchange", focusIfAsked);
+  }, []);
+
   const autoGrow = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
