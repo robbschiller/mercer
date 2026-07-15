@@ -11,6 +11,14 @@ repo — re-drop them if you want the money-screen fidelity to go deeper.*
 
 ## SYSTEM (paste first, every time)
 
+**Start from the file `Sidebar Redesign - Direction A Final.html` in this
+project.** Open it before designing anything: it is the shipped global
+sidebar and the design-language source of truth. Reuse its `<style>` tokens
+and its expanded sidebar markup verbatim as the fixed 260px left column of
+every frame you produce — the page you're designing renders to its right,
+inside the same app shell. Do not restyle or reinvent the sidebar; only set
+the correct nav item active for the page at hand.
+
 You are designing a page for **Mercer** — the operating system for commercial
 multifamily exterior contractors (painting, wood rot, stucco). The user is a
 contractor-owner like Jordan at Affordable Quality Painting: he sells repaints
@@ -19,8 +27,7 @@ properties ("takeoffs"), sends AI-drafted quotes through shareable links, and
 runs the won jobs. Design for a busy operator on a laptop — decisive, dense
 where it earns density, calm everywhere else.
 
-Design language (must match the shipped "Sidebar Redesign — Direction A Final"
-in this project):
+Design language (inherited from the sidebar file; restated for emphasis):
 - Fonts: Geist (UI), Geist Mono (numbers/kbd), Instrument Serif (brand moments
   only). oklch neutrals: ink 0.205, muted 0.556, border 0.922, page bg 0.991.
 - Accent: near-black #18181b for primary actions/active states; blue
@@ -33,10 +40,9 @@ in this project):
   action-first, never metric-first. A number you can't act on belongs on
   Reports, nowhere else.
 - Frame the page at 1440×900+ inside the app shell: the Direction A sidebar
-  (260px, already designed) sits on the left — render it as a low-detail
-  placeholder column; the page owns the rest. Include realistic sample data
-  (below), light theme, `design_doc_mode: canvas`, and label each frame with
-  `data-screen-label`.
+  from the starter file on the left (real markup, correct item active), the
+  page owning the rest. Include realistic sample data (below), light theme,
+  `design_doc_mode: canvas`, and label each frame with `data-screen-label`.
 
 Canonical sample data (use these, not lorem): properties **Nona Terrace**
 (Orlando, 55 units, Community Management Services, contact **Yvonne Alvarez**),
@@ -48,6 +54,10 @@ $1,204,483.
 ---
 
 ## 1 — HOME
+
+*Starter: build on `Sidebar Redesign - Direction A Final.html` — its sidebar
+is the left column of every frame, with **Home** active. Save this design as
+`Home Redesign - Direction A.html`.*
 
 The morning screen. It must answer three questions in five seconds: *what
 happened while I was gone, what needs me today, what's the fastest way to act.*
@@ -87,6 +97,10 @@ nothing needs you. 3 quotes are out totaling $1.4M.").
 
 ## 2 — PIPELINE
 
+*Starter: build on `Sidebar Redesign - Direction A Final.html` — its sidebar
+is the left column of every frame, with **Pipeline** active (count badge 26).
+Save as `Pipeline Redesign - Direction A.html`.*
+
 Every open deal from first contact to signed, one working surface. This is
 where Jordan lives between takeoffs. Replaces separate leads/takeoffs/bids
 lists (they exist as filters here).
@@ -111,6 +125,10 @@ lists (they exist as filters here).
 ---
 
 ## 3 — JOBS
+
+*Starter: build on `Sidebar Redesign - Direction A Final.html` — its sidebar
+is the left column of every frame, with **Jobs** active (count badge 5).
+Save as `Jobs Redesign - Direction A.html`.*
 
 Won work in delivery. Jordan's AQP canon is explicit here (money layer): a job
 carries an immutable contract value, budget-by-category, draws/invoices,
@@ -141,6 +159,10 @@ away, not embedded.
 
 ## 4 — PROPERTIES
 
+*Starter: build on `Sidebar Redesign - Direction A Final.html` — its sidebar
+is the left column of every frame, with **Properties** active.
+Save as `Properties Redesign - Direction A.html`.*
+
 The durable asset register — buildings outlast every deal and every management
 company. This page sells the repeat-business story.
 
@@ -166,6 +188,10 @@ Jul 2019, $84k. [Start lead]".
 ---
 
 ## 5 — REPORTS
+
+*Starter: build on `Sidebar Redesign - Direction A Final.html` — its sidebar
+is the left column of every frame, with **Reports** active.
+Save as `Reports Redesign - Direction A.html`.*
 
 The ONE page allowed to be metric-first — but every number should whisper an
 action. Audience: Jordan deciding where next month comes from, and Robb
