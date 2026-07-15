@@ -4,7 +4,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { revalidatePath } from "next/cache";
 import { getOrgContext } from "@/lib/org-context";
-import { resolveAnthropicKey } from "@/lib/integrations";
+import { platformAnthropicKey, recordAiUsage } from "@/lib/usage";
 import {
   getCachedMorningBrief,
   getHomeAgenda,
@@ -99,7 +99,7 @@ export async function getMorningBriefAction(
   const agenda = await getHomeAgenda();
   let text = templateBrief(agenda);
 
-  const apiKey = await resolveAnthropicKey(ctx.ownerUserId);
+  const apiKey = platformAnthropicKey();
   if (apiKey) {
     try {
       const client = new Anthropic({ apiKey });
@@ -119,6 +119,12 @@ export async function getMorningBriefAction(
         .join("")
         .trim();
       if (t) text = t;
+      await recordAiUsage({
+        ownerUserId: ctx.ownerUserId,
+        feature: "morning_brief",
+        model: "claude-opus-4-8",
+        usage: response.usage,
+      });
     } catch {
       // Template brief already set — a model hiccup never blanks the page.
     }

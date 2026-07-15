@@ -6,7 +6,7 @@ import { eq, desc, and } from "drizzle-orm";
 import { db } from "@/db";
 import { bids, proposals, proposalShares } from "@/db/schema";
 import { getOrgContext } from "@/lib/org-context";
-import { resolveAnthropicKey } from "@/lib/integrations";
+import { platformAnthropicKey, recordAiUsage } from "@/lib/usage";
 import { getCompanyProfile, logLeadContact } from "@/lib/store";
 import { activityEvents } from "@/db/schema";
 
@@ -63,7 +63,7 @@ export async function draftFollowUpAction(data: {
     `From: ${sender}`,
   ].join("\n");
 
-  const apiKey = await resolveAnthropicKey(ctx.ownerUserId);
+  const apiKey = platformAnthropicKey();
   if (!apiKey) {
     // Offline template keeps the button useful without a key.
     return {
@@ -88,6 +88,12 @@ export async function draftFollowUpAction(data: {
       .map((b) => b.text)
       .join("")
       .trim();
+    await recordAiUsage({
+      ownerUserId: ctx.ownerUserId,
+      feature: "follow_up",
+      model: "claude-opus-4-8",
+      usage: response.usage,
+    });
     return { text: text || null, error: text ? null : "Empty draft." };
   } catch (err) {
     return {

@@ -32,7 +32,6 @@ import {
   companyProfiles,
   onboardings,
   orgMemberships,
-  orgIntegrations,
 } from "@/db/schema";
 import {
   eq,
@@ -5765,77 +5764,59 @@ export async function getReportsExtras(): Promise<ReportsExtras> {
   };
 }
 
-// ── Integrations (BYO Claude API key) ───────────────────────────────────────
+// ── AI usage (token-metered billing) ─────────────────────────────────────────
 
-export type IntegrationStatus = {
-  anthropic: { connected: boolean; last4: string | null; addedAt: Date | null };
+/** Month-to-date AI usage per feature, for Settings → Usage & billing. */
+export type UsageSummaryRow = {
+  feature: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheWriteTokens: number;
+  cacheReadTokens: number;
 };
 
-export async function getIntegrationStatus(): Promise<IntegrationStatus> {
+export async function getUsageSummary(): Promise<{
+  monthStart: string;
+  rows: UsageSummaryRow[];
+}> {
   const user = await requireUser();
-  const rows = await db
-    .select({
-      last4: orgIntegrations.anthropicKeyLast4,
-      addedAt: orgIntegrations.anthropicKeyAddedAt,
-      ciphertext: orgIntegrations.anthropicKeyCiphertext,
-    })
-    .from(orgIntegrations)
-    .where(eq(orgIntegrations.userId, user.ownerUserId))
-    .limit(1);
-  const r = rows[0];
-  return {
-    anthropic: {
-      connected: Boolean(r?.ciphertext),
-      last4: r?.last4 ?? null,
-      addedAt: r?.addedAt ?? null,
-    },
+  const rows = await db.execute(sql`
+    SELECT feature,
+      count(*)::int AS calls,
+      coalesce(sum(input_tokens), 0)::int AS input_tokens,
+      coalesce(sum(output_tokens), 0)::int AS output_tokens,
+      coalesce(sum(cache_write_tokens), 0)::int AS cache_write_tokens,
+      coalesce(sum(cache_read_tokens), 0)::int AS cache_read_tokens
+    FROM ai_usage
+    WHERE user_id = ${user.ownerUserId}
+      AND created_at >= date_trunc('month', now())
+    GROUP BY feature
+    ORDER BY sum(output_tokens) DESC
+  `);
+  type Row = {
+    feature: string;
+    calls: number;
+    input_tokens: number;
+    output_tokens: number;
+    cache_write_tokens: number;
+    cache_read_tokens: number;
   };
-}
-
-/** Owner-only: store the org's encrypted Anthropic key. */
-export async function setAnthropicKey(data: {
-  ciphertext: string;
-  last4: string;
-}): Promise<void> {
-  const user = await requireUser();
-  if (user.role !== "owner") {
-    throw new Error("Only the org owner can manage integrations");
-  }
-  const now = new Date();
-  await db
-    .insert(orgIntegrations)
-    .values({
-      userId: user.ownerUserId,
-      anthropicKeyCiphertext: data.ciphertext,
-      anthropicKeyLast4: data.last4,
-      anthropicKeyAddedAt: now,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: orgIntegrations.userId,
-      set: {
-        anthropicKeyCiphertext: data.ciphertext,
-        anthropicKeyLast4: data.last4,
-        anthropicKeyAddedAt: now,
-        updatedAt: now,
-      },
-    });
-}
-
-export async function removeAnthropicKey(): Promise<void> {
-  const user = await requireUser();
-  if (user.role !== "owner") {
-    throw new Error("Only the org owner can manage integrations");
-  }
-  await db
-    .update(orgIntegrations)
-    .set({
-      anthropicKeyCiphertext: null,
-      anthropicKeyLast4: null,
-      anthropicKeyAddedAt: null,
-      updatedAt: new Date(),
-    })
-    .where(eq(orgIntegrations.userId, user.ownerUserId));
+  return {
+    monthStart: new Date(
+      new Date().getFullYear(),
+      new Date().getMonth(),
+      1,
+    ).toISOString(),
+    rows: (rows as unknown as Row[]).map((r) => ({
+      feature: r.feature,
+      calls: Number(r.calls),
+      inputTokens: Number(r.input_tokens),
+      outputTokens: Number(r.output_tokens),
+      cacheWriteTokens: Number(r.cache_write_tokens),
+      cacheReadTokens: Number(r.cache_read_tokens),
+    })),
+  };
 }
 
 /**

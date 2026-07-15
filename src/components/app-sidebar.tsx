@@ -15,7 +15,7 @@ import {
   Monitor,
   Moon,
   PanelLeft,
-  Plug,
+  Coins,
   Plus,
   Search,
   Settings,
@@ -356,9 +356,9 @@ function AccountCard({
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/settings/integrations" onClick={dismissOnMobile}>
-                <Plug className="size-4" />
-                Integrations
+              <Link href="/settings/usage" onClick={dismissOnMobile}>
+                <Coins className="size-4" />
+                Usage &amp; billing
               </Link>
             </DropdownMenuItem>
           </div>

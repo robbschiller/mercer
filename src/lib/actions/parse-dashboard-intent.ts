@@ -4,7 +4,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { getOrgContext } from "@/lib/org-context";
-import { resolveAnthropicKey } from "@/lib/integrations";
+import { platformAnthropicKey, recordAiUsage } from "@/lib/usage";
 import {
   DashboardIntentSchema,
   type DashboardIntentKind,
@@ -166,10 +166,9 @@ export async function parseDashboardIntent(
     return { ok: false, error: "Prompt is too long (max 2000 characters)." };
   }
 
-  const apiKey = await resolveAnthropicKey(ctx.ownerUserId);
+  const apiKey = platformAnthropicKey();
   if (!apiKey) {
-    // No org key and no platform key — local keyword mock keeps the
-    // composer usable.
+    // No platform key — local keyword mock keeps the composer usable.
     return { ok: true, intent: mockParseDashboardIntent(trimmed) };
   }
 
@@ -205,6 +204,12 @@ export async function parseDashboardIntent(
     );
 
     const parsed = response.parsed_output;
+    await recordAiUsage({
+      ownerUserId: ctx.ownerUserId,
+      feature: "composer",
+      model: "claude-opus-4-8",
+      usage: response.usage,
+    });
     if (!parsed) {
       return {
         ok: false,
