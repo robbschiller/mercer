@@ -107,6 +107,14 @@ export const createBidSchema = z.object({
   longitude: formLatLng,
   googlePlaceId: formPlaceId,
   leadId: formOptionalUuid,
+  /** Finder: attach the existing property record — never a duplicate. */
+  propertyId: formOptionalUuid,
+  /** Finder: the property's contact rides along on the quote. */
+  contactId: formOptionalUuid,
+  size: z.union([z.enum(["small", "large"]), z.literal(""), z.undefined()])
+    .transform((v) => (v === "" || v == null ? null : v)),
+  /** Launchpad intent: 'draft' lands on the quote engine, else the bid. */
+  next: optionalText,
 });
 
 export const updateBidSchema = z.object({
