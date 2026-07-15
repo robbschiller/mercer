@@ -1,55 +1,40 @@
-import Link from "next/link";
-import { NewBidWizard } from "@/components/new-bid-wizard";
-import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { getLead } from "@/lib/store";
+import { NewBidIntake } from "@/components/new-bid-intake";
 
+/**
+ * The other front door (intake redesign §8): same property finder as New
+ * Lead, but the destination is the quote engine — the building locks, you
+ * confirm the deal, and the primary action drafts the quote with AI.
+ * Arriving from a lead (?leadId) skips the finder entirely.
+ */
 export default async function NewBidPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string; leadId?: string }>;
 }) {
-  const { error: errorParam, leadId } = await searchParams;
-  const errorMessage = errorParam
-    ? decodeURIComponent(errorParam)
-    : null;
+  const { error, leadId } = await searchParams;
   const prefillLead =
-    leadId && /^[0-9a-fA-F-]{36}$/.test(leadId)
-      ? await getLead(leadId)
-      : null;
+    leadId && /^[0-9a-fA-F-]{36}$/.test(leadId) ? await getLead(leadId) : null;
 
   return (
-    <div className="container mx-auto max-w-lg px-4 py-8">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between gap-2">
-            <CardTitle>New bid</CardTitle>
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/bids">Back to bids</Link>
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <NewBidWizard
-            errorMessage={errorMessage}
-            initialLead={
-              prefillLead
-                ? {
-                    id: prefillLead.id,
-                    propertyName: prefillLead.propertyName ?? "",
-                    address: prefillLead.resolvedAddress ?? "",
-                    clientName:
-                      prefillLead.company ?? prefillLead.name ?? "",
-                    notes: prefillLead.notes ?? "",
-                    latitude: prefillLead.latitude ?? null,
-                    longitude: prefillLead.longitude ?? null,
-                    googlePlaceId: prefillLead.googlePlaceId ?? null,
-                  }
-                : null
+    <NewBidIntake
+      error={error ? decodeURIComponent(error) : null}
+      initialLead={
+        prefillLead
+          ? {
+              id: prefillLead.id,
+              propertyName:
+                prefillLead.propertyName?.trim() || prefillLead.name,
+              address: prefillLead.resolvedAddress ?? "",
+              clientName: prefillLead.company ?? "",
+              latitude: prefillLead.latitude ?? null,
+              longitude: prefillLead.longitude ?? null,
+              googlePlaceId: prefillLead.googlePlaceId ?? null,
+              propertyId: prefillLead.propertyId ?? null,
+              isLargeJob: prefillLead.isLargeJob ?? false,
             }
-          />
-        </CardContent>
-      </Card>
-    </div>
+          : null
+      }
+    />
   );
 }

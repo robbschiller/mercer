@@ -149,6 +149,7 @@ export default async function BidPage({
         </Card>
       )}
 
+      <div id="quote" className="scroll-mt-6" />
       <QuoteEngine
         bid={bid}
         lineItems={lineItems}

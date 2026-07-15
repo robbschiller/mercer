@@ -4064,6 +4064,14 @@ export type KnownBuilding = {
   longitude: number | null;
   primaryContactId: string | null;
   primaryContactName: string | null;
+  /* Bid flavor: what a new bid can reuse. */
+  sqftNonfloor: number | null;
+  breezewayCount: number | null;
+  stairSystemCount: number | null;
+  photoCount: number;
+  /** A quote is already out on this building (latest sent bid). */
+  liveBidId: string | null;
+  liveBidLabel: string | null;
 };
 
 export async function searchKnownProperties(
@@ -4072,17 +4080,24 @@ export async function searchKnownProperties(
 ): Promise<KnownBuilding[]> {
   const user = await requireUser();
   const term = cleanText(q);
-  if (!term) return [];
-  const needle = `%${term}%`;
+  const needle = term ? `%${term}%` : null;
+  // Empty query = "recent buildings you've worked" (the bid finder's
+  // pre-typing state); a term = name/address match.
+  const match = needle
+    ? sql`AND (p.name ILIKE ${needle} OR p.address ILIKE ${needle})`
+    : sql``;
   const rows = await db.execute(sql`
     SELECT p.id, p.name, p.address, p.satellite_image_url,
       p.latitude, p.longitude,
+      p.attainable_sqft_nonfloor, p.breezeway_count, p.stair_system_count,
       COALESCE(ma.name, a.name) AS management_name,
       COALESCE(jb.n, 0)::int AS jobs,
       COALESCE(jb.lifetime, 0) AS lifetime,
       jb.last_won_at,
       pc.contact_id AS primary_contact_id,
-      pc.contact_name AS primary_contact_name
+      pc.contact_name AS primary_contact_name,
+      COALESCE(phc.n, 0)::int AS photo_count,
+      lv.live_bid_id, lv.live_bid_label
     FROM properties p
     LEFT JOIN accounts ma ON ma.id = p.management_account_id
     LEFT JOIN accounts a ON a.id = p.account_id
@@ -4100,8 +4115,20 @@ export async function searchKnownProperties(
       ORDER BY (x.role ILIKE '%decision%') DESC NULLS LAST, x.id ASC
       LIMIT 1
     ) pc ON true
-    WHERE p.user_id = ${user.ownerUserId}
-      AND (p.name ILIKE ${needle} OR p.address ILIKE ${needle})
+    LEFT JOIN LATERAL (
+      SELECT count(*) AS n FROM photos ph
+      WHERE (ph.context_type = 'property' AND ph.context_id = p.id)
+         OR (ph.context_type = 'bid' AND ph.context_id IN
+              (SELECT bb.id FROM bids bb WHERE bb.property_id = p.id))
+    ) phc ON true
+    LEFT JOIN LATERAL (
+      SELECT b.id AS live_bid_id,
+             COALESCE(NULLIF(b.label, ''), b.property_name) AS live_bid_label
+      FROM bids b
+      WHERE b.property_id = p.id AND b.status = 'sent'
+      ORDER BY b.updated_at DESC LIMIT 1
+    ) lv ON true
+    WHERE p.user_id = ${user.ownerUserId} ${match}
     ORDER BY COALESCE(jb.lifetime, 0) DESC, p.updated_at DESC
     LIMIT ${Math.min(Math.max(limit, 1), 8)}
   `);
@@ -4112,12 +4139,18 @@ export async function searchKnownProperties(
     satellite_image_url: string | null;
     latitude: number | null;
     longitude: number | null;
+    attainable_sqft_nonfloor: string | null;
+    breezeway_count: number | null;
+    stair_system_count: number | null;
     management_name: string | null;
     jobs: number;
     lifetime: string | number;
     last_won_at: string | Date | null;
     primary_contact_id: string | null;
     primary_contact_name: string | null;
+    photo_count: number;
+    live_bid_id: string | null;
+    live_bid_label: string | null;
   };
   return (rows as unknown as Row[]).map((r) => ({
     id: r.id,
@@ -4132,6 +4165,16 @@ export async function searchKnownProperties(
     longitude: r.longitude == null ? null : Number(r.longitude),
     primaryContactId: r.primary_contact_id,
     primaryContactName: r.primary_contact_name,
+    sqftNonfloor:
+      r.attainable_sqft_nonfloor == null
+        ? null
+        : Number(r.attainable_sqft_nonfloor),
+    breezewayCount: r.breezeway_count == null ? null : Number(r.breezeway_count),
+    stairSystemCount:
+      r.stair_system_count == null ? null : Number(r.stair_system_count),
+    photoCount: Number(r.photo_count ?? 0),
+    liveBidId: r.live_bid_id,
+    liveBidLabel: r.live_bid_label,
   }));
 }
 
@@ -4875,6 +4918,18 @@ export async function setLeadFollowUp(id: string, followUpAt: string | null) {
     });
   }
   return rows[0] ?? null;
+}
+
+/** Intake fork (small vs large) — the flag that drives takeoff & billing templates. */
+export async function setLeadJobSize(
+  id: string,
+  isLargeJob: boolean,
+): Promise<void> {
+  const user = await requireUser();
+  await db
+    .update(leads)
+    .set({ isLargeJob, updatedAt: new Date() })
+    .where(and(eq(leads.id, id), eq(leads.userId, user.ownerUserId)));
 }
 
 export async function updateLeadStatus(id: string, status: Lead["status"]) {

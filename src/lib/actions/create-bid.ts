@@ -6,6 +6,7 @@ import {
   createBid,
   getLead,
   getUserDefaults,
+  setLeadJobSize,
   updateBidPricing,
   updateLeadStatus,
 } from "../store";
@@ -23,7 +24,16 @@ export async function createBidAction(formData: FormData) {
 
   let created: { bid: Awaited<ReturnType<typeof createBid>>; defaults: Awaited<ReturnType<typeof getUserDefaults>> } | null = null;
   try {
-    const [bid, defaults] = await Promise.all([createBid(result.data), getUserDefaults()]);
+    const { contactId, size, next, ...bidData } = result.data;
+    void size;
+    void next;
+    const [bid, defaults] = await Promise.all([
+      createBid({
+        ...bidData,
+        primaryContactId: contactId ?? undefined,
+      }),
+      getUserDefaults(),
+    ]);
     created = { bid, defaults };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create bid";
@@ -41,8 +51,15 @@ export async function createBidAction(formData: FormData) {
 
   if (result.data.leadId) {
     await updateLeadStatus(result.data.leadId, "quoted");
+    if (result.data.size) {
+      await setLeadJobSize(result.data.leadId, result.data.size === "large");
+    }
   }
 
+  // The AI-draft launchpad lands on the quote engine; empty bids on the bid.
+  if (result.data.next === "draft") {
+    redirect(`/bids/${created!.bid.id}#quote`);
+  }
   redirect(`/bids/${created!.bid.id}`);
 }
 

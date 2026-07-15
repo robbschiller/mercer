@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
+import { useMemo, useRef, useState } from "react";
 import {
   BadgeCheck,
   Briefcase,
@@ -15,10 +8,8 @@ import {
   CalendarPlus,
   Check,
   ChevronDown,
-  CornerDownLeft,
   Gavel,
   Hand,
-  History,
   MapPin,
   Paperclip,
   Plus,
@@ -29,27 +20,22 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import {
-  createLeadAction,
-  searchKnownPropertiesAction,
-} from "@/lib/actions";
+import { createLeadAction } from "@/lib/actions";
 import type { ContactRegisterRow, KnownBuilding } from "@/lib/store";
+import {
+  AerialBuildingCard,
+  Fact,
+  GhostSteps,
+  PropertyFinder,
+  buildingAddress,
+  buildingName,
+  moneyK,
+  monthYear,
+  repaintDue,
+  type FinderBuilding,
+} from "@/components/property-finder";
 import { cn } from "@/lib/utils";
 
-/* ── shared bits ── */
-
-function moneyK(n: number): string {
-  if (Math.abs(n) >= 1_000_000)
-    return `$${(n / 1_000_000).toFixed(2).replace(/0$/, "").replace(/\.$/, "")}M`;
-  if (Math.abs(n) >= 1_000) return `$${Math.round(n / 1_000)}k`;
-  return `$${Math.round(n)}`;
-}
-function monthYear(d: Date): string {
-  return new Date(d).toLocaleDateString("en-US", {
-    month: "short",
-    year: "numeric",
-  });
-}
 const AVATAR_TINTS = [
   "bg-blue-600",
   "bg-rose-600",
@@ -72,7 +58,6 @@ function initials(name: string): string {
     .join("");
 }
 
-const REPAINT_CYCLE_MS = 6 * 365.25 * 24 * 60 * 60 * 1000;
 const SCOPE = [
   "Full exterior",
   "Breezeways",
@@ -89,31 +74,6 @@ const DEFAULT_SOURCES = [
   "Cold outreach",
 ];
 
-type PlacePick = {
-  name: string;
-  address: string;
-  lat: number | null;
-  lng: number | null;
-  placeId: string | null;
-};
-
-type Building =
-  | ({ kind: "known" } & KnownBuilding)
-  | ({ kind: "place" } & PlacePick)
-  | { kind: "custom"; text: string };
-
-function mapsKey(): string | undefined {
-  const k = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim();
-  return k || undefined;
-}
-function staticAerial(lat: number, lng: number): string | null {
-  const key = mapsKey();
-  if (!key) return null;
-  return `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=18&size=640x300&scale=2&maptype=satellite&key=${key}`;
-}
-
-/* ── the component ── */
-
 export function NewLeadIntake({
   contacts,
   sources,
@@ -123,14 +83,7 @@ export function NewLeadIntake({
   sources: string[];
   error: string | null;
 }) {
-  /* finder state */
-  const [query, setQuery] = useState("");
-  const [known, setKnown] = useState<KnownBuilding[]>([]);
-  const [preds, setPreds] = useState<
-    { placeId: string; main: string; sub: string }[]
-  >([]);
-  const [building, setBuilding] = useState<Building | null>(null);
-  const [resolving, setResolving] = useState(false);
+  const [building, setBuilding] = useState<FinderBuilding | null>(null);
 
   /* band state */
   const [contactId, setContactId] = useState<string | null>(null);
@@ -144,144 +97,22 @@ export function NewLeadIntake({
   const [largeJob, setLargeJob] = useState(false);
   const [rough, setRough] = useState("");
   const [fileNames, setFileNames] = useState<string[]>([]);
-
-  const finderInputRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const seqRef = useRef(0);
-  const placesTokenRef =
-    useRef<google.maps.places.AutocompleteSessionToken | null>(null);
-  const placesReadyRef = useRef(false);
 
-  /* Places bootstrap — same loader the address autocomplete uses. */
-  useEffect(() => {
-    const key = mapsKey();
-    if (!key) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        setOptions({ key, v: "weekly" });
-        await importLibrary("places");
-        if (cancelled) return;
-        placesTokenRef.current =
-          new google.maps.places.AutocompleteSessionToken();
-        placesReadyRef.current = true;
-      } catch (e) {
-        console.error("[NewLeadIntake] Places load failed:", e);
-      }
-    })();
-    return () => {
-      cancelled = true;
-      placesReadyRef.current = false;
-    };
-  }, []);
+  const isKnown = building?.kind === "known";
+  const knownB = isKnown
+    ? (building as { kind: "known" } & KnownBuilding)
+    : null;
+  const due = knownB != null && repaintDue(knownB);
 
-  useEffect(() => {
-    finderInputRef.current?.focus();
-  }, [building]);
-
-  /* merged search: known buildings (server) + Places (client) */
-  const runSearch = useCallback(async (q: string) => {
-    const seq = ++seqRef.current;
-    const term = q.trim();
-    if (term.length < 2) {
-      setKnown([]);
-      setPreds([]);
-      return;
+  function lock(b: FinderBuilding) {
+    setBuilding(b);
+    if (b.kind === "known") {
+      if (b.primaryContactId) setContactId(b.primaryContactId);
+      if (b.managementName) setCompany(b.managementName);
+      setSource("Repeat client");
+      if (repaintDue(b)) setScope(new Set(["Full exterior"]));
     }
-    const [knownRes, placeRes] = await Promise.all([
-      searchKnownPropertiesAction(term).catch(() => [] as KnownBuilding[]),
-      (async () => {
-        if (!placesReadyRef.current || !placesTokenRef.current) return [];
-        try {
-          const { suggestions } =
-            await google.maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions(
-              { input: term, sessionToken: placesTokenRef.current },
-            );
-          return suggestions
-            .map((s) => s.placePrediction)
-            .filter((p): p is google.maps.places.PlacePrediction => p != null)
-            .slice(0, 4)
-            .map((p) => ({
-              placeId: p.placeId ?? "",
-              main: p.mainText?.text ?? p.text.text,
-              sub: p.secondaryText?.text ?? "",
-              pred: p,
-            }));
-        } catch {
-          return [];
-        }
-      })(),
-    ]);
-    if (seq !== seqRef.current) return;
-    setKnown(knownRes);
-    setPreds(placeRes as typeof preds);
-    predsRef.current = placeRes as never;
-  }, []);
-
-  const predsRef = useRef<
-    ({ placeId: string; main: string; sub: string } & {
-      pred?: google.maps.places.PlacePrediction;
-    })[]
-  >([]);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  function onQueryChange(v: string) {
-    setQuery(v);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => void runSearch(v), 220);
-  }
-
-  /* picks */
-  function pickKnown(b: KnownBuilding) {
-    setBuilding({ kind: "known", ...b });
-    if (b.primaryContactId) setContactId(b.primaryContactId);
-    if (b.managementName) setCompany(b.managementName);
-    const due =
-      b.lastWonAt != null &&
-      Date.now() - new Date(b.lastWonAt).getTime() > REPAINT_CYCLE_MS;
-    setSource("Repeat client");
-    if (due) setScope(new Set(["Full exterior"]));
-  }
-  async function pickPlace(i: number) {
-    const entry = predsRef.current[i];
-    if (!entry) return;
-    setResolving(true);
-    try {
-      let pick: PlacePick = {
-        name: entry.main,
-        address: entry.sub || entry.main,
-        lat: null,
-        lng: null,
-        placeId: entry.placeId || null,
-      };
-      if (entry.pred) {
-        const place = entry.pred.toPlace();
-        await place.fetchFields({
-          fields: ["formattedAddress", "location", "id", "displayName"],
-        });
-        const raw = place.displayName as unknown;
-        const display =
-          typeof raw === "string"
-            ? raw
-            : ((raw as { text?: string } | null)?.text ?? null);
-        pick = {
-          name: display || entry.main,
-          address: place.formattedAddress ?? pick.address,
-          lat: place.location ? place.location.lat() : null,
-          lng: place.location ? place.location.lng() : null,
-          placeId: place.id ?? pick.placeId,
-        };
-        placesTokenRef.current =
-          new google.maps.places.AutocompleteSessionToken();
-      }
-      setBuilding({ kind: "place", ...pick });
-    } finally {
-      setResolving(false);
-    }
-  }
-  function pickCustom() {
-    const text = query.trim();
-    if (!text) return;
-    setBuilding({ kind: "custom", text });
   }
   function backToFinder() {
     setBuilding(null);
@@ -292,35 +123,6 @@ export function NewLeadIntake({
     setSource(null);
     setLargeJob(false);
   }
-
-  const isKnown = building?.kind === "known";
-  const knownB = isKnown ? (building as { kind: "known" } & KnownBuilding) : null;
-  const repaintDue =
-    knownB?.lastWonAt != null &&
-    Date.now() - new Date(knownB.lastWonAt).getTime() > REPAINT_CYCLE_MS;
-
-  const buildingName =
-    building?.kind === "custom"
-      ? building.text
-      : (building?.name ?? building?.address ?? "");
-  const buildingAddress =
-    building == null
-      ? ""
-      : building.kind === "custom"
-        ? building.text
-        : (building.address ?? "");
-  const aerialUrl = (() => {
-    if (!building) return null;
-    if (building.kind === "known") {
-      if (building.satelliteImageUrl) return building.satelliteImageUrl;
-      if (building.latitude != null && building.longitude != null)
-        return staticAerial(building.latitude, building.longitude);
-      return null;
-    }
-    if (building.kind === "place" && building.lat != null && building.lng != null)
-      return staticAerial(building.lat, building.lng);
-    return null;
-  })();
 
   const pickedContact = useMemo(
     () => contacts.find((c) => c.id === contactId) ?? null,
@@ -338,7 +140,9 @@ export function NewLeadIntake({
       .slice(0, 6);
   }, [contacts, contactQuery]);
 
-  const leadName = `${buildingName || "New property"} – ${
+  const name = building ? buildingName(building) : "";
+  const address = building ? buildingAddress(building) : "";
+  const leadName = `${name || "New property"} – ${
     [...scope][0] ?? "Exterior repaint"
   }`;
   const allSources = useMemo(() => {
@@ -348,7 +152,6 @@ export function NewLeadIntake({
 
   /* ═══════════ 7a — FINDER ═══════════ */
   if (!building) {
-    const hasQuery = query.trim().length >= 2;
     return (
       <div className="relative mx-auto w-full max-w-[860px] px-6 pb-28 pt-7">
         <header className="mb-5">
@@ -381,208 +184,15 @@ export function NewLeadIntake({
             </span>
           </div>
 
-          <div className="relative">
-            <div className="flex h-[68px] items-center gap-3.5 rounded-full border-[1.5px] bg-card pl-[22px] pr-3.5 shadow-[0_2px_4px_rgb(0_0_0/0.04),0_8px_30px_-14px_rgb(0_0_0/0.18)] transition-[border-color,box-shadow] focus-within:border-foreground/40 focus-within:shadow-[0_2px_4px_rgb(0_0_0/0.04),0_0_0_4px_rgb(0_0_0/0.06)]">
-              <Search className="size-[22px] shrink-0 text-muted-foreground" />
-              <input
-                ref={finderInputRef}
-                type="text"
-                value={query}
-                onChange={(e) => onQueryChange(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key !== "Enter") return;
-                  e.preventDefault();
-                  if (known[0]) pickKnown(known[0]);
-                  else if (predsRef.current[0]) void pickPlace(0);
-                  else pickCustom();
-                }}
-                autoComplete="off"
-                spellCheck={false}
-                placeholder="Property name or address…"
-                className="min-w-0 flex-1 border-none bg-transparent text-xl font-medium tracking-tight outline-none placeholder:font-normal placeholder:text-muted-foreground/60"
-              />
-              {query && (
-                <button
-                  type="button"
-                  aria-label="Clear"
-                  onClick={() => {
-                    setQuery("");
-                    setKnown([]);
-                    setPreds([]);
-                    finderInputRef.current?.focus();
-                  }}
-                  className="grid size-10 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
-                >
-                  <X className="size-[17px]" />
-                </button>
-              )}
-            </div>
+          <PropertyFinder flavor="lead" onLock={lock} />
 
-            {hasQuery && (known.length > 0 || preds.length > 0 || true) && (
-              <div className="mt-3 overflow-hidden rounded-[18px] border bg-card shadow-[0_18px_44px_-14px_rgb(0_0_0/0.26),0_2px_6px_rgb(0_0_0/0.06)]">
-                {known.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-2 px-[18px] pb-1 pt-3">
-                      <History className="size-3.5 text-muted-foreground/70" />
-                      <span className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
-                        In Mercer — buildings you&apos;ve worked
-                      </span>
-                      <span className="ml-auto font-mono text-[11px] tabular-nums text-muted-foreground/70">
-                        {known.length}
-                      </span>
-                    </div>
-                    {known.map((b, i) => {
-                      const due =
-                        b.lastWonAt != null &&
-                        Date.now() - new Date(b.lastWonAt).getTime() >
-                          REPAINT_CYCLE_MS;
-                      return (
-                        <button
-                          key={b.id}
-                          type="button"
-                          onClick={() => pickKnown(b)}
-                          className={cn(
-                            "flex w-full items-center gap-3.5 px-[18px] py-3 text-left transition-colors hover:bg-muted/40",
-                            i === 0 && "bg-muted/25",
-                          )}
-                        >
-                          <span className="grid size-10 shrink-0 place-items-center rounded-[11px] bg-foreground text-background">
-                            <Building2 className="size-[19px]" />
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="flex items-center gap-2">
-                              <span className="truncate text-[15px] font-semibold tracking-tight">
-                                {b.name ?? b.address}
-                              </span>
-                              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border bg-muted/60 px-2 py-px text-[10.5px] font-semibold text-foreground/70">
-                                <History className="size-[11px]" />
-                                Known
-                              </span>
-                            </span>
-                            <span className="mt-0.5 block truncate text-[12.5px] text-muted-foreground">
-                              {[b.address, b.managementName]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </span>
-                          </span>
-                          <span className="flex shrink-0 flex-col items-end gap-1.5">
-                            <span className="whitespace-nowrap font-mono text-xs tabular-nums text-muted-foreground">
-                              <b className="font-medium text-foreground">
-                                {moneyK(b.lifetime)}
-                              </b>{" "}
-                              · {b.jobs} job{b.jobs === 1 ? "" : "s"}
-                            </span>
-                            {due && (
-                              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-[3px] text-[11px] font-semibold text-amber-700 dark:text-amber-400">
-                                <RotateCcw className="size-3" />
-                                Repaint due
-                              </span>
-                            )}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                <div className={cn(known.length > 0 && "border-t border-border/60")}>
-                  <div className="flex items-center gap-2 px-[18px] pb-1 pt-3">
-                    <MapPin className="size-3.5 text-muted-foreground/70" />
-                    <span className="text-[10.5px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
-                      Maps
-                    </span>
-                    <span className="ml-auto font-mono text-[11px] tabular-nums text-muted-foreground/70">
-                      {preds.length}
-                    </span>
-                  </div>
-                  {preds.length > 0 ? (
-                    preds.map((p, i) => (
-                      <button
-                        key={`${p.placeId}-${i}`}
-                        type="button"
-                        disabled={resolving}
-                        onClick={() => void pickPlace(i)}
-                        className="flex w-full items-center gap-3.5 px-[18px] py-3 text-left transition-colors hover:bg-muted/40 disabled:opacity-60"
-                      >
-                        <span className="grid size-10 shrink-0 place-items-center rounded-[11px] bg-muted text-foreground/60">
-                          <MapPin className="size-[19px]" />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[15px] font-semibold tracking-tight">
-                            {p.main}
-                          </span>
-                          <span className="mt-0.5 block truncate text-[12.5px] text-muted-foreground">
-                            {p.sub}
-                          </span>
-                        </span>
-                        <CornerDownLeft className="size-4 shrink-0 text-muted-foreground/50" />
-                      </button>
-                    ))
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={pickCustom}
-                      className="flex w-full items-center gap-3.5 px-[18px] py-3 text-left transition-colors hover:bg-muted/40"
-                    >
-                      <span className="grid size-10 shrink-0 place-items-center rounded-[11px] bg-muted text-foreground/60">
-                        <MapPin className="size-[19px]" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[15px] font-semibold tracking-tight">
-                          Use &ldquo;{query.trim()}&rdquo;
-                        </span>
-                        <span className="mt-0.5 block text-[12.5px] text-muted-foreground">
-                          Drop a pin at this address
-                        </span>
-                      </span>
-                      <CornerDownLeft className="size-4 shrink-0 text-muted-foreground/50" />
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2 border-t border-border/60 bg-muted/20 px-[18px] py-2.5 text-xs text-muted-foreground/80">
-                  <CornerDownLeft className="size-[13px]" />
-                  Picking a known building attaches the existing record — no
-                  duplicates.
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* ghost of what comes next */}
-          <div
-            aria-hidden
-            className="pointer-events-none mt-8 select-none opacity-50 [mask-image:linear-gradient(180deg,#000_0%,#000_30%,transparent_96%)]"
-          >
-            {[
+          <GhostSteps
+            steps={[
               { n: "A", t: "Who", w: [150, 150] },
               { n: "B", t: "What", w: [110, 90, 90, 120] },
               { n: "C", t: "Send-off", w: [220] },
-            ].map((g) => (
-              <div
-                key={g.n}
-                className="mb-3.5 flex items-center gap-3.5 rounded-2xl border bg-card p-[18px_20px]"
-              >
-                <span className="grid size-[30px] shrink-0 place-items-center rounded-full bg-muted font-mono text-[13px] text-muted-foreground/70">
-                  {g.n}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[14.5px] font-semibold text-foreground/80">
-                    {g.t}
-                  </p>
-                  <div className="mt-2.5 flex gap-2">
-                    {g.w.map((w, i) => (
-                      <span
-                        key={i}
-                        className="block h-[30px] rounded-[9px] bg-muted"
-                        style={{ width: w }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+            ]}
+          />
         </div>
       </div>
     );
@@ -604,7 +214,7 @@ export function NewLeadIntake({
         </h1>
         <p className="mt-1.5 max-w-[560px] text-sm text-muted-foreground">
           {isKnown
-            ? `You painted ${buildingName} before. The owner, the contact, and the history came with it — confirm the scope and the lead is in.`
+            ? `You painted ${name} before. The owner, the contact, and the history came with it — confirm the scope and the lead is in.`
             : "The building's pinned. Add who it's for and what the work is — that's the whole lead."}
         </p>
       </header>
@@ -618,8 +228,8 @@ export function NewLeadIntake({
       <form action={createLeadAction} className="flex flex-col">
         {/* hidden payload */}
         <input type="hidden" name="name" value={leadName} />
-        <input type="hidden" name="propertyName" value={buildingName} />
-        <input type="hidden" name="resolvedAddress" value={buildingAddress} />
+        <input type="hidden" name="propertyName" value={name} />
+        <input type="hidden" name="resolvedAddress" value={address} />
         {isKnown && knownB && (
           <input type="hidden" name="propertyId" value={knownB.id} />
         )}
@@ -644,111 +254,70 @@ export function NewLeadIntake({
           <input type="hidden" name="contactId" value={pickedContact.id} />
         )}
         <input type="hidden" name="company" value={company} />
-        <input type="hidden" name="scopeCategory" value={[...scope].join(", ")} />
+        <input
+          type="hidden"
+          name="scopeCategory"
+          value={[...scope].join(", ")}
+        />
         <input type="hidden" name="sourceTag" value={source ?? ""} />
         <input type="hidden" name="estValue" value={rough} />
         {largeJob && <input type="hidden" name="isLargeJob" value="on" />}
 
-        {/* ── building card ── */}
-        <div className="mb-4 overflow-hidden rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
-          <div className="relative h-[288px] overflow-hidden bg-muted">
-            {aerialUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={aerialUrl}
-                alt="Aerial view"
-                className="absolute inset-0 size-full object-cover"
-              />
+        <AerialBuildingCard
+          building={building}
+          onBack={backToFinder}
+          banner={
+            isKnown && knownB ? (
+              <div className="flex items-center gap-3 border-t border-emerald-600/25 bg-emerald-600/10 px-5 py-3">
+                <span className="grid size-[30px] shrink-0 place-items-center rounded-[9px] bg-emerald-600 text-white">
+                  <BadgeCheck className="size-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13.5px] font-semibold text-emerald-800 dark:text-emerald-300">
+                    Mercer knows this building
+                  </span>
+                  <span className="mt-0.5 block truncate text-[12.5px] text-emerald-700/90 dark:text-emerald-400/90">
+                    {knownB.lastWonAt
+                      ? `Painted ${monthYear(knownB.lastWonAt)} · `
+                      : ""}
+                    <span className="font-mono tabular-nums">
+                      {knownB.jobs} job{knownB.jobs === 1 ? "" : "s"}
+                    </span>{" "}
+                    ·{" "}
+                    <span className="font-mono tabular-nums">
+                      {moneyK(knownB.lifetime)}
+                    </span>{" "}
+                    lifetime
+                  </span>
+                </span>
+                <a
+                  href={`/properties/${knownB.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="shrink-0 text-[12.5px] font-medium text-blue-700 hover:underline dark:text-blue-400"
+                >
+                  View history
+                </a>
+              </div>
             ) : (
-              <div className="absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_50%_40%,rgb(148_163_184/0.25),transparent_60%)] text-muted-foreground/50">
-                <span className="text-xs font-medium uppercase tracking-[0.08em]">
-                  Aerial pending — resolves on enrichment
+              <div className="flex items-center gap-3 border-t bg-muted/20 px-5 py-3">
+                <span className="grid size-[30px] shrink-0 place-items-center rounded-[9px] bg-muted text-foreground/60">
+                  <Sparkles className="size-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13.5px] font-semibold text-foreground/80">
+                    New to Mercer
+                  </span>
+                  <span className="mt-0.5 block text-[12.5px] text-muted-foreground">
+                    We&apos;ll create the property record when you add the lead
+                    — no duplicate.
+                  </span>
                 </span>
               </div>
-            )}
-            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgb(10_12_20/0.28)_0%,transparent_26%,transparent_48%,rgb(10_12_20/0.62)_100%)]" />
-            {/* dropped pin */}
-            <span className="pointer-events-none absolute left-1/2 top-[44%] z-[3] -translate-x-1/2 -translate-y-full animate-[pinDrop_.5s_cubic-bezier(.34,1.3,.5,1)_both]">
-              <span className="relative block size-7 -rotate-45 rounded-[50%_50%_50%_0] bg-foreground shadow-[0_8px_18px_-4px_rgb(0_0_0/0.55)] dark:bg-background">
-                <span className="absolute left-1/2 top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-background dark:bg-foreground" />
-              </span>
-            </span>
-            <button
-              type="button"
-              onClick={backToFinder}
-              className="absolute left-3.5 top-3.5 z-[4] inline-flex h-8 items-center gap-2 rounded-full bg-black/50 px-3.5 text-[12.5px] font-medium text-white backdrop-blur-md transition-colors hover:bg-black/70"
-            >
-              <span className="font-mono text-[13px]">⌫</span>
-              not it? search again
-            </button>
-            {isKnown && (
-              <span className="pointer-events-none absolute right-3.5 top-3.5 z-[3] inline-flex h-[30px] items-center gap-1.5 rounded-full bg-black/50 px-3 text-[11.5px] font-semibold text-white backdrop-blur-md">
-                <BadgeCheck className="size-[13px]" />
-                In Mercer
-              </span>
-            )}
-            <div className="pointer-events-none absolute inset-x-5 bottom-[18px] z-[3]">
-              <p className="flex items-center gap-2 text-2xl font-semibold tracking-tight text-white [text-shadow:0_1px_12px_rgb(0_0_0/0.45)]">
-                <MapPin className="size-5 opacity-90" />
-                {buildingName}
-              </p>
-              <p className="ml-[29px] mt-1 text-[13.5px] text-white/85 [text-shadow:0_1px_10px_rgb(0_0_0/0.5)]">
-                {buildingAddress}
-              </p>
-            </div>
-          </div>
-
-          {isKnown && knownB ? (
-            <div className="flex items-center gap-3 border-t border-emerald-600/25 bg-emerald-600/10 px-5 py-3">
-              <span className="grid size-[30px] shrink-0 place-items-center rounded-[9px] bg-emerald-600 text-white">
-                <BadgeCheck className="size-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[13.5px] font-semibold text-emerald-800 dark:text-emerald-300">
-                  Mercer knows this building
-                </span>
-                <span className="mt-0.5 block truncate text-[12.5px] text-emerald-700/90 dark:text-emerald-400/90">
-                  {knownB.lastWonAt
-                    ? `Painted ${monthYear(knownB.lastWonAt)} · `
-                    : ""}
-                  <span className="font-mono tabular-nums">
-                    {knownB.jobs} job{knownB.jobs === 1 ? "" : "s"}
-                  </span>{" "}
-                  ·{" "}
-                  <span className="font-mono tabular-nums">
-                    {moneyK(knownB.lifetime)}
-                  </span>{" "}
-                  lifetime
-                </span>
-              </span>
-              <a
-                href={`/properties/${knownB.id}`}
-                target="_blank"
-                rel="noreferrer"
-                className="shrink-0 text-[12.5px] font-medium text-blue-700 hover:underline dark:text-blue-400"
-              >
-                View history
-              </a>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3 border-t bg-muted/20 px-5 py-3">
-              <span className="grid size-[30px] shrink-0 place-items-center rounded-[9px] bg-muted text-foreground/60">
-                <Sparkles className="size-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[13.5px] font-semibold text-foreground/80">
-                  New to Mercer
-                </span>
-                <span className="mt-0.5 block text-[12.5px] text-muted-foreground">
-                  We&apos;ll create the property record when you add the lead —
-                  no duplicate.
-                </span>
-              </span>
-            </div>
-          )}
-
-          <div className="flex flex-wrap items-center gap-2 border-t border-border/60 px-5 py-3">
-            {isKnown && knownB ? (
+            )
+          }
+          facts={
+            isKnown && knownB ? (
               <>
                 {knownB.managementName && (
                   <Fact icon={<Briefcase className="size-[13px]" />}>
@@ -763,7 +332,7 @@ export function NewLeadIntake({
                     </b>
                   </Fact>
                 )}
-                {repaintDue && (
+                {due && (
                   <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11.5px] font-semibold text-amber-700 dark:text-amber-400">
                     <RotateCcw className="size-3" />
                     Repaint due
@@ -773,7 +342,7 @@ export function NewLeadIntake({
             ) : (
               <>
                 <Fact icon={<MapPin className="size-[13px]" />}>
-                  {buildingAddress || "Address pending"}
+                  {address || "Address pending"}
                 </Fact>
                 <Fact icon={<Building2 className="size-[13px]" />}>
                   Units —{" "}
@@ -782,9 +351,9 @@ export function NewLeadIntake({
                   </span>
                 </Fact>
               </>
-            )}
-          </div>
-        </div>
+            )
+          }
+        />
 
         {/* ── band 1: who ── */}
         <Band
@@ -860,8 +429,7 @@ export function NewLeadIntake({
                   {isKnown && (
                     <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
                       <Sparkles className="mt-px size-[13px] shrink-0 text-emerald-600" />
-                      Came attached to {buildingName} — their name is on its
-                      history.
+                      Came attached to {name} — their name is on its history.
                     </p>
                   )}
                 </div>
@@ -947,8 +515,9 @@ export function NewLeadIntake({
                               {c.name}
                             </span>
                             <span className="block truncate text-xs text-muted-foreground">
-                              {[c.title, c.company].filter(Boolean).join(" · ") ||
-                                "—"}
+                              {[c.title, c.company]
+                                .filter(Boolean)
+                                .join(" · ") || "—"}
                             </span>
                           </span>
                           <span className="shrink-0 font-mono text-[11.5px] tabular-nums text-muted-foreground/70">
@@ -1153,11 +722,7 @@ export function NewLeadIntake({
         </Band>
 
         {/* ── band 3: notes & files ── */}
-        <Band
-          num="3"
-          title="Notes & files"
-          note={<BandNote>Optional</BandNote>}
-        >
+        <Band num="3" title="Notes & files" note={<BandNote>Optional</BandNote>}>
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
@@ -1189,9 +754,7 @@ export function NewLeadIntake({
             accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.eml,.msg,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*,application/pdf"
             className="hidden"
             onChange={(e) =>
-              setFileNames(
-                Array.from(e.target.files ?? []).map((f) => f.name),
-              )
+              setFileNames(Array.from(e.target.files ?? []).map((f) => f.name))
             }
           />
           <textarea
@@ -1209,7 +772,7 @@ export function NewLeadIntake({
               This lead
             </p>
             <p className="truncate text-[13px] text-foreground/80">
-              <b className="font-semibold text-foreground">{buildingName}</b>
+              <b className="font-semibold text-foreground">{name}</b>
               <span className="px-1.5 text-border">·</span>
               {pickedContact?.name ?? (
                 <span className="text-muted-foreground/70">add a contact</span>
@@ -1310,20 +873,5 @@ function SlimField({ children }: { children: React.ReactNode }) {
     <div className="flex h-[46px] items-center gap-2.5 rounded-[11px] border bg-card px-3.5 transition-[border-color,box-shadow] focus-within:border-foreground/35 focus-within:shadow-[0_0_0_3px_rgb(0_0_0/0.06)]">
       {children}
     </div>
-  );
-}
-
-function Fact({
-  icon,
-  children,
-}: {
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-lg border bg-muted/40 px-2.5 py-1 text-[12.5px] text-foreground/80 [&>svg]:text-muted-foreground/70">
-      {icon}
-      {children}
-    </span>
   );
 }
