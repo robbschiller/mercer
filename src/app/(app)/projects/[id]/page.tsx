@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft, ArrowUpRight, Camera, Landmark } from "lucide-react";
 import {
   getProject,
   getProjectPreStart,
   getProjectUpdates,
   getJobFinancials,
   getJobScheduleContext,
+  getAcceptedSignatureForBid,
   getPhotos,
   getExpensesForBid,
   getInvoicesForBid,
@@ -150,6 +152,7 @@ export default async function ProjectPage({
     preStart,
     financials,
     schedule,
+    signature,
     photos,
     expenses,
     invoices,
@@ -162,6 +165,7 @@ export default async function ProjectPage({
       : Promise.resolve(null),
     getJobFinancials(project.id),
     getJobScheduleContext(project.id),
+    getAcceptedSignatureForBid(project.id),
     getPhotos("bid", project.id),
     getExpensesForBid(project.id),
     getInvoicesForBid(project.id),
@@ -170,154 +174,384 @@ export default async function ProjectPage({
   ]);
   const startReady = preStart ? isProjectStartReady(preStart) : true;
 
+  // Same fork ScheduleCard uses — the money panel needs the elapsed fraction
+  // to place the schedule marker on the burn bar.
+  const large =
+    schedule.isLargeJob ??
+    !(project.daysTotal != null && project.weeksTotal == null);
+  const schedTotal = large ? project.weeksTotal : project.daysTotal;
+  const schedCurrent = large ? project.currentWeek : project.currentDay;
+  const schedulePct =
+    schedTotal && schedTotal > 0 && schedCurrent != null
+      ? Math.min(1, schedCurrent / schedTotal)
+      : null;
+
   return (
-    <div className="container mx-auto max-w-3xl px-4 py-8 flex flex-col gap-6">
+    <div className="relative mx-auto w-full max-w-[1240px] px-6 pb-24 pt-7">
       <BreadcrumbLabel segment={id} label={bid.propertyName} />
-      <div>
-        <Button variant="ghost" size="sm" asChild>
-          <Link href={`/bids/${bid.id}`}>&larr; Back to bid</Link>
-        </Button>
-      </div>
 
       {error && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-2 text-sm text-destructive">
+        <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/5 px-4 py-2 text-sm text-destructive">
           {error}
         </div>
       )}
 
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">
-            Project
-          </p>
-          <h1 className="text-3xl font-medium tracking-tight">
-            {bid.propertyName}
-          </h1>
-          {bid.address && (
-            <p className="text-sm text-muted-foreground">{bid.address}</p>
-          )}
-        </div>
-        <div className="flex flex-col items-start gap-1 sm:items-end">
-          <Badge variant={projectStatusVariant(project.status)}>
-            {projectStatusLabel(project.status)}
-          </Badge>
-          {project.acceptedByName && (
-            <p className="text-xs text-muted-foreground">
-              Accepted by {project.acceptedByName}
-              {project.acceptedByTitle ? `, ${project.acceptedByTitle}` : ""}
-              {project.acceptedAt
-                ? ` on ${formatDate(project.acceptedAt)}`
-                : ""}
-            </p>
-          )}
-        </div>
-      </header>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Bid context</CardTitle>
-          <CardDescription>
-            The accepted bid is the contract artifact — frozen, read-only.
-            Scope changes need a new bid.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-2 text-sm sm:grid-cols-2">
-          <div>
-            <p className="text-xs text-muted-foreground">Client</p>
-            <p>{bid.clientName}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Bid status</p>
-            <Badge variant={bidStatusVariant(bid.status)}>
-              {bidStatusLabel(bid.status)}
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <Link
+            href="/projects"
+            className="mb-2.5 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="size-3.5" />
+            All jobs
+          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-[27px] font-semibold leading-tight tracking-tight">
+              {bid.propertyName}
+            </h1>
+            <Badge variant={projectStatusVariant(project.status)}>
+              {projectStatusLabel(project.status)}
             </Badge>
           </div>
-          <div className="sm:col-span-2 pt-2">
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/bids/${bid.id}`}>Open bid</Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <ScheduleCard
-        project={project}
-        schedule={schedule}
-        financials={financials}
-      />
-
-      <BudgetCard
-        projectId={project.id}
-        financials={financials}
-        expenses={expenses}
-      />
-
-      <PhotosCard
-        contextType="bid"
-        contextId={project.id}
-        returnTo={`/projects/${project.id}`}
-        photos={photos}
-        defaultKind="progress"
-        description="The job's photo record — progress, completion walk, damage found along the way."
-      />
-
-      <ChangeOrdersCard projectId={project.id} changeOrders={changeOrders} />
-
-      <InvoicesCard
-        projectId={project.id}
-        invoices={invoices}
-        contactOptions={contactOptions}
-        invoicingContactId={bid.invoicingContactId}
-      />
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Status</CardTitle>
-          <CardDescription>{STATUS_DESCRIPTIONS[project.status]}</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {transitions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No further transitions available from this state.
-            </p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {transitions.map((next) => {
-                const gated = next === "in_progress" && !startReady;
-                return (
-                  <form key={next} action={updateProjectStatusAction}>
-                    <input type="hidden" name="id" value={project.id} />
-                    <input type="hidden" name="status" value={next} />
-                    <SubmitButton
-                      variant="outline"
-                      size="sm"
-                      disabled={gated}
-                      title={
-                        gated
-                          ? "Complete the pre-start checklist below first."
-                          : undefined
-                      }
-                    >
-                      {transitionLabel(project.status, next)}
-                    </SubmitButton>
-                  </form>
-                );
-              })}
-            </div>
-          )}
-          <p className="text-xs text-muted-foreground">
-            Entering <em>in progress</em> stamps the actual start date if it
-            isn&apos;t already set; entering <em>complete</em> stamps the
-            actual end date.
+          <p className="mt-1 text-[13.5px] text-muted-foreground">
+            {bid.clientName}
+            {bid.address ? ` · ${bid.address}` : ""}
           </p>
-        </CardContent>
-      </Card>
+        </div>
+        <a
+          href="#updates"
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-foreground bg-foreground px-3.5 text-[13px] font-medium text-background transition-opacity hover:opacity-90"
+        >
+          <Camera className="size-3.5" />
+          Post update
+        </a>
+      </header>
 
-      {preStart ? (
-        <PreStartCard preStart={preStart} startReady={startReady} />
-      ) : null}
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_420px]">
+        {/* ── Left: delivery ── */}
+        <div className="flex min-w-0 flex-col gap-5">
+          <ScheduleCard
+            project={project}
+            schedule={schedule}
+            financials={financials}
+          />
 
-      <Card>
+          {preStart ? (
+            <PreStartCard preStart={preStart} startReady={startReady} />
+          ) : null}
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Status</CardTitle>
+              <CardDescription>
+                {STATUS_DESCRIPTIONS[project.status]}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {transitions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No further transitions available from this state.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {transitions.map((next) => {
+                    const gated = next === "in_progress" && !startReady;
+                    return (
+                      <form key={next} action={updateProjectStatusAction}>
+                        <input type="hidden" name="id" value={project.id} />
+                        <input type="hidden" name="status" value={next} />
+                        <SubmitButton
+                          variant="outline"
+                          size="sm"
+                          disabled={gated}
+                          title={
+                            gated
+                              ? "Complete the pre-start checklist first."
+                              : undefined
+                          }
+                        >
+                          {transitionLabel(project.status, next)}
+                        </SubmitButton>
+                      </form>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Entering <em>in progress</em> stamps the actual start date if
+                it isn&apos;t already set; entering <em>complete</em> stamps
+                the actual end date.
+              </p>
+            </CardContent>
+          </Card>
+
+          <UpdatesCard project={project} updates={updates} />
+
+          <PhotosCard
+            contextType="bid"
+            contextId={project.id}
+            returnTo={`/projects/${project.id}`}
+            photos={photos}
+            defaultKind="progress"
+            description="The job's photo record — progress, completion walk, damage found along the way."
+          />
+
+          <DetailsCard project={project} />
+        </div>
+
+        {/* ── Right: money stack ── */}
+        <div className="flex min-w-0 flex-col gap-5">
+          <MoneyPanel
+            financials={financials}
+            project={project}
+            signature={signature}
+            schedulePct={schedulePct}
+          />
+
+          <InvoicesCard
+            projectId={project.id}
+            invoices={invoices}
+            contactOptions={contactOptions}
+            invoicingContactId={bid.invoicingContactId}
+          />
+
+          <ChangeOrdersCard
+            projectId={project.id}
+            changeOrders={changeOrders}
+          />
+
+          <BudgetCard projectId={project.id} expenses={expenses} />
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Bid context</CardTitle>
+              <CardDescription>
+                The accepted bid is the contract artifact — frozen, read-only.
+                Scope changes need a new bid.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap items-center gap-3 text-sm">
+              <Badge variant={bidStatusVariant(bid.status)}>
+                {bidStatusLabel(bid.status)}
+              </Badge>
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/bids/${bid.id}`}>
+                  Open bid
+                  <ArrowUpRight className="size-3.5" />
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Right-rail hero: the contract, who signed it, and where the money stands. */
+function MoneyPanel({
+  financials,
+  project,
+  signature,
+  schedulePct,
+}: {
+  financials: JobFinancials;
+  project: ProjectView;
+  signature: string | null;
+  schedulePct: number | null;
+}) {
+  const {
+    contractValue,
+    changeOrdersTotal,
+    adjustedContract,
+    spent,
+    remaining,
+    pctSpent,
+    byCategory,
+    invoicedTotal,
+    paidTotal,
+    outstanding,
+  } = financials;
+  const pct =
+    pctSpent == null ? null : Math.min(100, Math.round(pctSpent * 100));
+  const over = remaining != null && remaining < 0;
+  const schedPct =
+    schedulePct == null ? null : Math.round(schedulePct * 100);
+  const maxCat = Math.max(1, ...byCategory.map((c) => c.spent));
+
+  return (
+    <div className="overflow-hidden rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
+      <div className="border-b px-5 pb-4 pt-[18px]">
+        <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+          <Landmark className="size-3.5" />
+          Contract value
+        </p>
+        <p className="mt-1 font-mono text-[28px] font-medium tabular-nums tracking-tight">
+          {fmtMoney(adjustedContract)}
+        </p>
+        {changeOrdersTotal !== 0 && (
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Base {fmtMoney(contractValue)} + approved additional work{" "}
+            {fmtMoney(changeOrdersTotal)}
+          </p>
+        )}
+        {project.acceptedByName && (
+          <div className="mt-3.5 flex items-center justify-between gap-3 rounded-xl border bg-muted/30 px-3.5 py-2.5">
+            <div className="min-w-0">
+              <p className="text-[10.5px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+                Accepted by
+              </p>
+              <p className="truncate text-[13px] font-medium">
+                {project.acceptedByName}
+                {project.acceptedByTitle ? (
+                  <span className="font-normal text-muted-foreground">
+                    {" "}
+                    · {project.acceptedByTitle}
+                  </span>
+                ) : null}
+              </p>
+              {project.acceptedAt && (
+                <p className="text-xs text-muted-foreground">
+                  {formatDate(project.acceptedAt)}
+                </p>
+              )}
+            </div>
+            {signature && (
+              <span
+                className="shrink-0 font-serif text-[19px] italic leading-none text-foreground/80"
+                title="Signature on the accepted proposal"
+              >
+                {signature}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-4 px-5 py-4">
+        {pct != null ? (
+          <div>
+            <div className="mb-1.5 flex items-baseline justify-between text-xs">
+              <span className="font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+                Budget burn
+              </span>
+              <span className="font-mono tabular-nums text-foreground/80">
+                {fmtMoney(spent)}
+                <span className="text-muted-foreground/70">
+                  {" "}
+                  / {fmtMoney(adjustedContract)} · {pct}%
+                </span>
+              </span>
+            </div>
+            <div className="relative h-2 rounded-full bg-muted">
+              <span
+                className={
+                  "absolute inset-y-0 left-0 rounded-full " +
+                  (over
+                    ? "bg-destructive"
+                    : pct > (schedPct ?? 100) + 2
+                      ? "bg-amber-500"
+                      : "bg-foreground")
+                }
+                style={{ width: `${pct}%` }}
+              />
+              {schedPct != null && schedPct > 0 && schedPct < 100 && (
+                <span
+                  title={`Schedule ${schedPct}% elapsed`}
+                  className="absolute -inset-y-[3px] w-[2px] rounded bg-foreground/60"
+                  style={{ left: `${schedPct}%` }}
+                />
+              )}
+            </div>
+            {schedPct != null && (
+              <p className="mt-1.5 text-[11.5px] text-muted-foreground">
+                Schedule marker at {schedPct}% —{" "}
+                {pct > schedPct + 2
+                  ? "spend is running ahead of the schedule."
+                  : "spend is tracking at or under schedule pace."}
+              </p>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            No contract value yet — it&apos;s stamped when the proposal is
+            accepted.
+          </p>
+        )}
+
+        <div className="grid grid-cols-3 gap-2">
+          <MoneyStat label="Spent" value={fmtMoney(spent)} />
+          <MoneyStat
+            label={over ? "Over by" : "Remaining"}
+            value={fmtMoney(remaining == null ? null : Math.abs(remaining))}
+            bad={over}
+          />
+          <MoneyStat label="Outstanding" value={fmtMoney(outstanding)} />
+        </div>
+        <p className="-mt-2 text-[11.5px] text-muted-foreground">
+          Invoiced {fmtMoney(invoicedTotal)} · paid {fmtMoney(paidTotal)}
+        </p>
+
+        {byCategory.length > 0 && (
+          <div className="flex flex-col gap-2 border-t pt-3.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+              Spend by category
+            </p>
+            {byCategory.map((c) => (
+              <div key={c.category}>
+                <div className="mb-1 flex items-baseline justify-between text-xs">
+                  <span className="font-medium text-foreground/80">
+                    {expenseCategoryLabel(c.category)}
+                  </span>
+                  <span className="font-mono tabular-nums text-muted-foreground">
+                    {fmtMoney(c.spent)}
+                  </span>
+                </div>
+                <div className="h-1.5 rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-foreground/60"
+                    style={{ width: `${Math.round((c.spent / maxCat) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MoneyStat({
+  label,
+  value,
+  bad,
+}: {
+  label: string;
+  value: string;
+  bad?: boolean;
+}) {
+  return (
+    <div className="rounded-lg border bg-muted/20 px-2.5 py-2">
+      <p className="text-[10.5px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+        {label}
+      </p>
+      <p
+        className={
+          "mt-0.5 truncate font-mono text-[15px] font-medium tabular-nums " +
+          (bad ? "text-destructive" : "")
+        }
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+/** Target dates, crew assignment, internal notes. */
+function DetailsCard({ project }: { project: ProjectView }) {
+  return (
+    <Card>
         <form action={updateProjectDetailsAction}>
           <input type="hidden" name="id" value={project.id} />
           <CardHeader>
@@ -398,80 +632,105 @@ export default async function ProjectPage({
           </CardContent>
         </form>
       </Card>
+  );
+}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Project updates</CardTitle>
-          <CardDescription>
-            Append-only progress feed. Tick &ldquo;Visible to property
-            manager&rdquo; to surface a single entry on the post-acceptance
-            status page; everything else stays internal.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <form
-            action={createProjectUpdateAction}
-            className="flex flex-col gap-3"
-          >
-            <input type="hidden" name="projectId" value={project.id} />
-            <div className="grid gap-1.5">
-              <Label htmlFor="body" className="sr-only">
-                Update
-              </Label>
-              <Textarea
-                id="body"
-                name="body"
-                rows={3}
-                placeholder="Crew arrived, prep started on the south elevation…"
-                required
+/** Append-only progress feed with the composer on top. */
+function UpdatesCard({
+  project,
+  updates,
+}: {
+  project: ProjectView;
+  updates: Awaited<ReturnType<typeof getProjectUpdates>>;
+}) {
+  return (
+    <Card id="updates" className="scroll-mt-6">
+      <CardHeader>
+        <CardTitle className="text-base">Job updates</CardTitle>
+        <CardDescription>
+          Append-only progress feed. Tick &ldquo;Visible to property
+          manager&rdquo; to surface an entry on the post-acceptance status
+          page; everything else stays internal.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <form
+          action={createProjectUpdateAction}
+          className="flex flex-col gap-2.5 rounded-xl border bg-muted/20 p-3"
+        >
+          <input type="hidden" name="projectId" value={project.id} />
+          <Label htmlFor="body" className="sr-only">
+            Update
+          </Label>
+          <Textarea
+            id="body"
+            name="body"
+            rows={3}
+            placeholder="Crew arrived, prep started on the south elevation…"
+            required
+            className="border-0 bg-transparent p-1 shadow-none focus-visible:ring-0"
+          />
+          <div className="flex items-center justify-between gap-3 border-t pt-2.5">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                name="visibleOnPublicUrl"
+                className="size-4 rounded border-input"
               />
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                <input
-                  type="checkbox"
-                  name="visibleOnPublicUrl"
-                  className="size-4 rounded border-input"
-                />
-                <span>Visible to property manager</span>
-              </label>
-              <SubmitButton size="sm">Post update</SubmitButton>
-            </div>
-          </form>
+              <span>Visible to property manager</span>
+            </label>
+            <SubmitButton size="sm">Post update</SubmitButton>
+          </div>
+        </form>
 
-          {updates.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No updates yet. The first one shows up here.
-            </p>
-          ) : (
-            <ol className="flex flex-col gap-3">
-              {updates.map((u) => (
-                <li
-                  key={u.id}
-                  className="rounded-md border border-border bg-card/50 p-3"
-                >
-                  <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span>
-                      {u.authorName || "Unknown"}
-                      {" · "}
-                      {formatDateTime(u.createdAt)}
+        {updates.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No updates yet. The first one shows up here.
+          </p>
+        ) : (
+          <ol className="flex flex-col">
+            {updates.map((u, i) => (
+              <li
+                key={u.id}
+                className={
+                  "relative py-3 pl-5 " +
+                  (i < updates.length - 1
+                    ? "border-l border-border ml-[5px]"
+                    : "ml-[5px]")
+                }
+              >
+                <span
+                  className={
+                    "absolute -left-[5px] top-[18px] size-[9px] rounded-full border-2 border-card " +
+                    (u.visibleOnPublicUrl
+                      ? "bg-blue-600"
+                      : "bg-muted-foreground/50")
+                  }
+                />
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground/80">
+                    {u.authorName || "Unknown"}
+                  </span>
+                  <span>{formatDateTime(u.createdAt)}</span>
+                  {u.visibleOnPublicUrl ? (
+                    <span className="rounded-full border border-blue-600/25 bg-blue-600/10 px-2 py-px text-[10.5px] font-semibold text-blue-700 dark:text-blue-400">
+                      Customer-visible
                     </span>
-                    {u.visibleOnPublicUrl ? (
-                      <Badge variant="outline">Visible publicly</Badge>
-                    ) : (
-                      <span className="text-muted-foreground/70">Internal</span>
-                    )}
-                  </div>
-                  <p className="mt-1.5 whitespace-pre-wrap text-sm">
-                    {u.body}
-                  </p>
-                </li>
-              ))}
-            </ol>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+                  ) : (
+                    <span className="rounded-full border bg-muted/60 px-2 py-px text-[10.5px] font-semibold text-muted-foreground">
+                      Internal
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">
+                  {u.body}
+                </p>
+              </li>
+            ))}
+          </ol>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -585,29 +844,6 @@ function PreStartCard({
 const SELECT_CLASS =
   "h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
-function Stat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone?: "bad";
-}) {
-  return (
-    <div className="rounded-md border p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p
-        className={
-          "text-lg font-semibold tabular-nums " +
-          (tone === "bad" ? "text-destructive" : "")
-        }
-      >
-        {value}
-      </p>
-    </div>
-  );
-}
 
 function ScheduleCard({
   project,
@@ -825,103 +1061,21 @@ function ScheduleField({
 
 function BudgetCard({
   projectId,
-  financials,
   expenses,
 }: {
   projectId: string;
-  financials: JobFinancials;
   expenses: Expense[];
 }) {
-  const {
-    contractValue,
-    changeOrdersTotal,
-    adjustedContract,
-    spent,
-    remaining,
-    pctSpent,
-    byCategory,
-    invoicedTotal,
-    paidTotal,
-    outstanding,
-  } = financials;
-  const pct = pctSpent == null ? null : Math.min(100, Math.round(pctSpent * 100));
-  const over = remaining != null && remaining < 0;
-
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Budget</CardTitle>
+        <CardTitle className="text-base">Expense ledger</CardTitle>
         <CardDescription>
-          Real-time spend against the contract baseline. Contract value is
-          snapshotted from the accepted proposal; approved additional work
-          adjusts it; spent, remaining, and billing derive live.
+          Every dollar going out on this job. Entries feed the burn bar and
+          category breakdown above in real time.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Stat label="Contract" value={fmtMoney(adjustedContract)} />
-          <Stat label="Spent" value={fmtMoney(spent)} />
-          <Stat
-            label={over ? "Over by" : "Remaining"}
-            value={fmtMoney(remaining == null ? null : Math.abs(remaining))}
-            tone={over ? "bad" : undefined}
-          />
-        </div>
-
-        {changeOrdersTotal !== 0 && (
-          <p className="-mt-2 text-xs text-muted-foreground">
-            Base {fmtMoney(contractValue)} + approved additional work{" "}
-            {fmtMoney(changeOrdersTotal)} = {fmtMoney(adjustedContract)}
-          </p>
-        )}
-
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Stat label="Invoiced" value={fmtMoney(invoicedTotal)} />
-          <Stat label="Paid" value={fmtMoney(paidTotal)} />
-          <Stat label="Outstanding" value={fmtMoney(outstanding)} />
-        </div>
-
-        {pct != null ? (
-          <div>
-            <div className="mb-1 flex justify-between text-xs text-muted-foreground">
-              <span>{pct}% of contract spent</span>
-              <span className="tabular-nums">
-                {fmtMoney(spent)} / {fmtMoney(adjustedContract)}
-              </span>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-              <div
-                className={
-                  "h-full rounded-full " + (over ? "bg-destructive" : "bg-primary")
-                }
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            No contract value yet — it&apos;s stamped when the proposal is
-            accepted.
-          </p>
-        )}
-
-        {byCategory.length > 0 && (
-          <div className="flex flex-col gap-1.5">
-            <p className="text-xs font-medium text-muted-foreground">
-              Spent by category
-            </p>
-            {byCategory.map((c) => (
-              <div
-                key={c.category}
-                className="flex justify-between text-sm"
-              >
-                <span>{expenseCategoryLabel(c.category)}</span>
-                <span className="tabular-nums">{fmtMoney(c.spent)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
         <form
           action={createExpenseAction}
           className="grid gap-3 rounded-md border p-3"

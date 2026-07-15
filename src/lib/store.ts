@@ -5097,6 +5097,160 @@ export async function getAcceptedVersionForBid(
   return v == null ? null : Number(v);
 }
 
+// ── Jobs list (Direction A) ─────────────────────────────────────────────────
+
+export type JobsListRow = {
+  bidId: string;
+  propertyName: string;
+  clientName: string;
+  status: ProjectStatus;
+  contract: number | null;
+  spent: number;
+  /** Fraction of schedule elapsed (weeks or days), null when untracked. */
+  schedElapsed: number | null;
+  schedText: string;
+  schedSub: string | null;
+  lastUpdateDays: number | null;
+  targetStartDate: string | null;
+  /** Needs-attention: burn ahead, stale updates, or a slipped start. */
+  attn: boolean;
+  attnReason: string | null;
+};
+
+export async function getJobsList(
+  status?: ProjectStatus,
+): Promise<JobsListRow[]> {
+  const user = await requireUser();
+  const rows = await db.execute(sql`
+    SELECT
+      b.id, b.property_name, b.client_name, b.delivery_status,
+      b.contract_value, b.weeks_total, b.current_week, b.days_total,
+      b.current_day, b.buildings_done, b.target_start_date,
+      (SELECT coalesce(sum(count), 0)::int FROM buildings WHERE bid_id = b.id) AS bldg_total,
+      COALESCE(e.spent, 0) AS spent,
+      u.last_update_at
+    FROM bids b
+    LEFT JOIN LATERAL (
+      SELECT sum(amount::numeric + tax::numeric) AS spent
+      FROM expenses WHERE bid_id = b.id
+    ) e ON true
+    LEFT JOIN LATERAL (
+      SELECT max(created_at) AS last_update_at
+      FROM project_updates WHERE bid_id = b.id
+    ) u ON true
+    WHERE b.user_id = ${user.ownerUserId} AND b.delivery_status IS NOT NULL
+      ${status ? sql`AND b.delivery_status = ${status}` : sql``}
+    ORDER BY b.updated_at DESC
+  `);
+
+  type Row = {
+    id: string;
+    property_name: string;
+    client_name: string;
+    delivery_status: ProjectStatus;
+    contract_value: string | null;
+    weeks_total: number | null;
+    current_week: number | null;
+    days_total: number | null;
+    current_day: number | null;
+    buildings_done: number | null;
+    bldg_total: number;
+    target_start_date: string | null;
+    spent: string;
+    last_update_at: string | Date | null;
+  };
+
+  const jobs = (rows as unknown as Row[]).map((r) => {
+    const contract = r.contract_value == null ? null : Number(r.contract_value);
+    const spent = Number(r.spent);
+    const lastUpdateDays = r.last_update_at
+      ? Math.round(
+          (Date.now() - new Date(r.last_update_at).getTime()) / 86_400_000,
+        )
+      : null;
+
+    let schedElapsed: number | null = null;
+    let schedText = "No schedule yet";
+    let schedSub: string | null = null;
+    if (r.weeks_total && r.current_week) {
+      schedElapsed = Math.min(1, r.current_week / r.weeks_total);
+      schedText = `Week ${r.current_week} of ${r.weeks_total}`;
+      if (r.bldg_total > 0) {
+        schedSub = `${r.buildings_done ?? 0} of ${r.bldg_total} buildings`;
+      }
+    } else if (r.days_total && r.current_day) {
+      schedElapsed = Math.min(1, r.current_day / r.days_total);
+      schedText = `Day ${r.current_day} of ${r.days_total}`;
+    } else if (r.delivery_status === "not_started" && r.target_start_date) {
+      schedElapsed = 0;
+      schedText = `Starts ${new Date(r.target_start_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+    }
+
+    const startSlipped =
+      r.delivery_status === "not_started" &&
+      r.target_start_date != null &&
+      new Date(r.target_start_date).getTime() < Date.now();
+    const burnAhead =
+      contract != null &&
+      contract > 0 &&
+      schedElapsed != null &&
+      spent / contract > schedElapsed + 0.02 &&
+      (r.delivery_status === "in_progress" ||
+        r.delivery_status === "punch_out");
+    const stale =
+      lastUpdateDays != null &&
+      lastUpdateDays > 7 &&
+      r.delivery_status === "in_progress";
+
+    return {
+      bidId: r.id,
+      propertyName: r.property_name,
+      clientName: r.client_name,
+      status: r.delivery_status,
+      contract,
+      spent,
+      schedElapsed,
+      schedText,
+      schedSub,
+      lastUpdateDays,
+      targetStartDate: r.target_start_date,
+      attn: burnAhead || stale || startSlipped,
+      attnReason: burnAhead
+        ? "Burn is ahead of the schedule"
+        : stale
+          ? `${lastUpdateDays}d since last update`
+          : startSlipped
+            ? "Target start passed"
+            : null,
+    };
+  });
+
+  // Needs-attention first, then most recently touched (query order holds).
+  return jobs.sort((a, b) => Number(b.attn) - Number(a.attn));
+}
+
+/** The e-signature captured when this job's quote was accepted. */
+export async function getAcceptedSignatureForBid(
+  bidId: string,
+): Promise<string | null> {
+  const user = await requireUser();
+  const rows = await db
+    .select({ sig: proposalShares.acceptedSignature })
+    .from(proposalShares)
+    .innerJoin(proposals, eq(proposalShares.proposalId, proposals.id))
+    .innerJoin(bids, eq(bids.id, proposals.bidId))
+    .where(
+      and(
+        eq(bids.id, bidId),
+        eq(bids.userId, user.ownerUserId),
+        sql`${proposalShares.acceptedAt} IS NOT NULL`,
+      ),
+    )
+    .orderBy(desc(proposalShares.acceptedAt))
+    .limit(1);
+  return rows[0]?.sig ?? null;
+}
+
 // ── Morning brief cache ─────────────────────────────────────────────────────
 
 export type MorningBrief = { date: string; text: string; generatedAt: string };
