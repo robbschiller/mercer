@@ -64,7 +64,7 @@ export function HomeAgendaSection({ agenda }: { agenda: HomeAgenda }) {
             <Sun className="size-6" />
           </span>
           <h3 className="mb-1.5 text-lg font-semibold tracking-tight">
-            Clear morning
+            All clear
           </h3>
           <p className="max-w-sm text-sm text-muted-foreground">
             Nothing needs you.{" "}
