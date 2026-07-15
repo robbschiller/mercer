@@ -10,6 +10,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { AppShellHeader } from "@/components/app-shell-header";
 import { BreadcrumbLabelProvider } from "@/components/breadcrumb-label";
+import { GlobalSearch } from "@/components/global-search";
 
 export default async function AppLayout({
   children,
@@ -45,6 +46,7 @@ export default async function AppLayout({
           {children}
         </BreadcrumbLabelProvider>
       </SidebarInset>
+      <GlobalSearch />
     </SidebarProvider>
   );
 }

@@ -8,6 +8,7 @@ import {
   getPhotos,
   getAttachments,
   getJobScheduleContext,
+  getContactName,
 } from "@/lib/store";
 import { QuoteEngine } from "@/components/quote-engine";
 import { addCatalogLineItemAction } from "@/lib/actions";
@@ -57,6 +58,10 @@ export default async function BidPage({
   if (!data) {
     notFound();
   }
+
+  const primaryContactName = data.bid.primaryContactId
+    ? await getContactName(data.bid.primaryContactId)
+    : null;
 
   const {
     bid,
@@ -149,6 +154,7 @@ export default async function BidPage({
         lineItems={lineItems}
         photos={bidPhotos}
         attachments={bidAttachments}
+        defaultRecipient={primaryContactName}
         proposals={proposals}
         proposalShares={proposalShares}
         totalSqft={totalSqft}

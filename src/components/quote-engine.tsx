@@ -703,6 +703,7 @@ export function QuoteEngine({
   lineItems,
   photos,
   attachments,
+  defaultRecipient,
   proposals,
   proposalShares,
   totalSqft,
@@ -714,6 +715,7 @@ export function QuoteEngine({
   lineItems: LineItem[];
   photos: Photo[];
   attachments: Attachment[];
+  defaultRecipient?: string | null;
   proposals: ProposalSummary[];
   proposalShares: { proposalId: string; share: ProposalShare }[];
   totalSqft: number;
@@ -753,7 +755,7 @@ export function QuoteEngine({
   const [approving, startApprove] = useTransition();
   const [shareBusy, startShare] = useTransition();
   const [copied, setCopied] = useState(false);
-  const [recipient, setRecipient] = useState("");
+  const [recipient, setRecipient] = useState(defaultRecipient ?? "");
 
   const nextVersion = maxVersion + 1;
   const liveTotal = lineItems.reduce((s, li) => s + Number(li.amount), 0);
