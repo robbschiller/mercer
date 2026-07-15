@@ -778,6 +778,8 @@ export const userDefaults = pgTable("user_defaults", {
   notificationsSeenAt: timestamp("notifications_seen_at", {
     withTimezone: true,
   }),
+  /** Cached AI morning brief — {date, text, generatedAt}. */
+  morningBrief: jsonb("morning_brief"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
