@@ -2809,7 +2809,17 @@ export async function createLead(
         | "scopeCategory"
         | "estValue"
       >
-    > & { accountId?: string | null; contactName?: string | null }
+    > & {
+      accountId?: string | null;
+      contactName?: string | null;
+      /** Finder: attach an existing property — never a duplicate. */
+      propertyId?: string | null;
+      /** Finder: attach an existing contact instead of minting one. */
+      contactId?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
+      googlePlaceId?: string | null;
+    }
 ) {
   const user = await requireUser();
   let account: Account | null = null;
@@ -2833,19 +2843,54 @@ export async function createLead(
       sourceTag: data.sourceTag ?? null,
     });
   }
-  const property = await findOrCreateProperty({
-    userId: user.ownerUserId,
-    accountId: account?.id ?? null,
-    name: data.propertyName,
-    address: data.resolvedAddress,
-    sourceTag: data.sourceTag ?? null,
-  });
+  // Known building picked in the finder: use the existing record directly.
+  let property: Property | null = null;
+  if (data.propertyId) {
+    const existing = await db
+      .select()
+      .from(properties)
+      .where(
+        and(
+          eq(properties.id, data.propertyId),
+          eq(properties.userId, user.ownerUserId),
+        ),
+      )
+      .limit(1);
+    property = existing[0] ?? null;
+  }
+  if (!property) {
+    property = await findOrCreateProperty({
+      userId: user.ownerUserId,
+      accountId: account?.id ?? null,
+      name: data.propertyName,
+      address: data.resolvedAddress,
+      latitude: data.latitude ?? null,
+      longitude: data.longitude ?? null,
+      googlePlaceId: data.googlePlaceId ?? null,
+      sourceTag: data.sourceTag ?? null,
+    });
+  }
   // A contact is a person. Only mint one when we have person fields —
   // never from the lead name, which is the opportunity title ("Nona
   // Terrace – Full Exterior Repaint"), not someone's name.
   const contactName = data.contactName?.trim() || null;
+  let pickedContact: Contact | null = null;
+  if (data.contactId) {
+    const existing = await db
+      .select()
+      .from(contacts)
+      .where(
+        and(
+          eq(contacts.id, data.contactId),
+          eq(contacts.userId, user.ownerUserId),
+        ),
+      )
+      .limit(1);
+    pickedContact = existing[0] ?? null;
+  }
   const contact =
-    contactName || data.email || data.phone
+    pickedContact ??
+    (contactName || data.email || data.phone
       ? await findOrCreateContact({
           userId: user.ownerUserId,
           accountId: account?.id ?? null,
@@ -2854,7 +2899,7 @@ export async function createLead(
           phone: data.phone ?? null,
           sourceTag: data.sourceTag ?? null,
         })
-      : null;
+      : null);
   const propertyContact = contact
     ? await upsertPropertyContact({
         userId: user.ownerUserId,
@@ -2881,6 +2926,9 @@ export async function createLead(
       isLargeJob: data.isLargeJob ?? false,
       scopeCategory: data.scopeCategory ?? null,
       estValue: data.estValue ?? null,
+      latitude: data.latitude ?? property?.latitude ?? null,
+      longitude: data.longitude ?? property?.longitude ?? null,
+      googlePlaceId: data.googlePlaceId ?? property?.googlePlaceId ?? null,
       // Rep follows the firm: inherit the management company's rep as owner.
       ownerId: account?.internalRepId ?? null,
     })
@@ -3996,6 +4044,95 @@ async function createActivityEvent(input: {
     metadata: input.metadata ?? null,
     occurredAt: input.occurredAt ?? new Date(),
   });
+}
+
+/**
+ * The property finder's "buildings we know" tier (intake redesign): match
+ * existing properties by name/address so picking one attaches the record —
+ * never a duplicate — and the aerial can banner its history.
+ */
+export type KnownBuilding = {
+  id: string;
+  name: string | null;
+  address: string | null;
+  managementName: string | null;
+  jobs: number;
+  lifetime: number;
+  lastWonAt: Date | null;
+  satelliteImageUrl: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  primaryContactId: string | null;
+  primaryContactName: string | null;
+};
+
+export async function searchKnownProperties(
+  q: string,
+  limit = 4,
+): Promise<KnownBuilding[]> {
+  const user = await requireUser();
+  const term = cleanText(q);
+  if (!term) return [];
+  const needle = `%${term}%`;
+  const rows = await db.execute(sql`
+    SELECT p.id, p.name, p.address, p.satellite_image_url,
+      p.latitude, p.longitude,
+      COALESCE(ma.name, a.name) AS management_name,
+      COALESCE(jb.n, 0)::int AS jobs,
+      COALESCE(jb.lifetime, 0) AS lifetime,
+      jb.last_won_at,
+      pc.contact_id AS primary_contact_id,
+      pc.contact_name AS primary_contact_name
+    FROM properties p
+    LEFT JOIN accounts ma ON ma.id = p.management_account_id
+    LEFT JOIN accounts a ON a.id = p.account_id
+    LEFT JOIN LATERAL (
+      SELECT count(*) AS n, sum(b.contract_value::numeric) AS lifetime,
+             max(b.accepted_at) AS last_won_at
+      FROM bids b
+      WHERE b.property_id = p.id AND b.delivery_status IS NOT NULL
+    ) jb ON true
+    LEFT JOIN LATERAL (
+      SELECT c.id AS contact_id, c.name AS contact_name
+      FROM property_contacts x
+      INNER JOIN contacts c ON c.id = x.contact_id
+      WHERE x.property_id = p.id AND x.active = true
+      ORDER BY (x.role ILIKE '%decision%') DESC NULLS LAST, x.id ASC
+      LIMIT 1
+    ) pc ON true
+    WHERE p.user_id = ${user.ownerUserId}
+      AND (p.name ILIKE ${needle} OR p.address ILIKE ${needle})
+    ORDER BY COALESCE(jb.lifetime, 0) DESC, p.updated_at DESC
+    LIMIT ${Math.min(Math.max(limit, 1), 8)}
+  `);
+  type Row = {
+    id: string;
+    name: string | null;
+    address: string | null;
+    satellite_image_url: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    management_name: string | null;
+    jobs: number;
+    lifetime: string | number;
+    last_won_at: string | Date | null;
+    primary_contact_id: string | null;
+    primary_contact_name: string | null;
+  };
+  return (rows as unknown as Row[]).map((r) => ({
+    id: r.id,
+    name: r.name,
+    address: r.address,
+    managementName: r.management_name,
+    jobs: Number(r.jobs),
+    lifetime: Number(r.lifetime ?? 0),
+    lastWonAt: r.last_won_at ? new Date(r.last_won_at) : null,
+    satelliteImageUrl: r.satellite_image_url,
+    latitude: r.latitude == null ? null : Number(r.latitude),
+    longitude: r.longitude == null ? null : Number(r.longitude),
+    primaryContactId: r.primary_contact_id,
+    primaryContactName: r.primary_contact_name,
+  }));
 }
 
 export async function searchAccounts(q: string, limit = 8): Promise<Pick<Account, "id" | "name">[]> {
