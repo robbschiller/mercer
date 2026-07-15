@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, CircleDollarSign, FileText, Package } from "lucide-react";
+import {
+  Building2,
+  CircleDollarSign,
+  FileText,
+  Package,
+  Plug,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
@@ -15,6 +21,7 @@ const items = [
   { href: "/settings/catalog", label: "Catalog & suppliers", icon: Package },
   { href: "/settings/company", label: "Company details", icon: FileText },
   { href: "/settings/members", label: "Team", icon: Building2 },
+  { href: "/settings/integrations", label: "Integrations", icon: Plug },
 ];
 
 export function SettingsNav() {

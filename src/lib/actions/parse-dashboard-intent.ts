@@ -4,6 +4,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { getOrgContext } from "@/lib/org-context";
+import { resolveAnthropicKey } from "@/lib/integrations";
 import {
   DashboardIntentSchema,
   type DashboardIntentKind,
@@ -165,14 +166,14 @@ export async function parseDashboardIntent(
     return { ok: false, error: "Prompt is too long (max 2000 characters)." };
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    // TEMPORARY: no key yet — fall back to the local keyword mock so the
-    // composer is usable during dev. Replace this with the no-key error
-    // return once the API key is configured (and delete mockParseDashboardIntent).
+  const apiKey = await resolveAnthropicKey(ctx.ownerUserId);
+  if (!apiKey) {
+    // No org key and no platform key — local keyword mock keeps the
+    // composer usable.
     return { ok: true, intent: mockParseDashboardIntent(trimmed) };
   }
 
-  const client = new Anthropic();
+  const client = new Anthropic({ apiKey });
   const today = new Date().toISOString().slice(0, 10);
 
   try {

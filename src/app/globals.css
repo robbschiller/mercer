@@ -115,6 +115,11 @@
     var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+/* Sidebar wordmark (Direction A) */
+.font-serif-brand {
+  font-family: var(--font-instrument), ui-serif, Georgia, serif;
+}
+
 /* ---------- Marketing-only utilities ---------- */
 
 /* Blueprint grid — subtle, aligned to 48px. */

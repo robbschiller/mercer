@@ -26,6 +26,7 @@ import {
   type PriceListCategory,
   type PricingUnit,
 } from "@/lib/status-meta";
+import { resolveAnthropicKey } from "@/lib/integrations";
 
 const SYSTEM_PROMPT = `You are the quote engine for Mercer, a platform for commercial multifamily exterior renovation contractors (painting, wood rot repair, stucco, stair systems, railings).
 
@@ -290,11 +291,14 @@ export async function generateQuoteDraft(data: {
   const nextVersion = (ctx.latestProposal?.version ?? 0) + 1;
   const clarifications = data.clarifications ?? [];
 
+  // Org key first (Settings → Integrations), platform env key second,
+  // offline mock last.
+  const apiKey = await resolveAnthropicKey(ctx.bid.userId);
   let draft: QuoteDraft;
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!apiKey) {
     draft = mockDraft(ctx, scopeText);
   } else {
-    const result = await callClaude(ctx, scopeText, clarifications);
+    const result = await callClaude(ctx, scopeText, clarifications, apiKey);
     if (!result.ok) return result;
     draft = result.draft;
   }
@@ -417,8 +421,9 @@ async function callClaude(
   ctx: QuoteDraftContext,
   scopeText: string,
   clarifications: DraftClarification[],
+  apiKey: string,
 ): Promise<{ ok: true; draft: QuoteDraft } | { ok: false; error: string }> {
-  const client = new Anthropic();
+  const client = new Anthropic({ apiKey });
 
   const photoList = ctx.photos.slice(0, MAX_PHOTOS);
   const photoBlocks: Anthropic.ContentBlockParam[] = photoList.flatMap(

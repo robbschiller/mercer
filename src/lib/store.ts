@@ -32,6 +32,7 @@ import {
   companyProfiles,
   onboardings,
   orgMemberships,
+  orgIntegrations,
 } from "@/db/schema";
 import {
   eq,
@@ -80,6 +81,11 @@ export type AccessItem = typeof accessItems.$inferSelect;
 export type UserDefault = typeof userDefaults.$inferSelect;
 export type RateConfig = typeof rateConfig.$inferSelect;
 export type Proposal = typeof proposals.$inferSelect;
+/** Version-rail shape: everything about a stamped version except the document. */
+export type ProposalSummary = Pick<
+  Proposal,
+  "id" | "bidId" | "version" | "changeLog" | "scopeText" | "pdfUrl" | "createdAt"
+> & { total: number | null };
 export type ProposalShare = typeof proposalShares.$inferSelect;
 export type Account = typeof accounts.$inferSelect;
 export type Property = typeof properties.$inferSelect;
@@ -514,8 +520,20 @@ export async function getBidPageData(bidId: string) {
         .from(surfaces)
         .innerJoin(buildings, eq(surfaces.buildingId, buildings.id))
         .where(eq(buildings.bidId, bidId)),
+      // Summaries only — snapshots are multi-KB JSONB per version and the
+      // bid page was shipping every one of them to the client in the RSC
+      // payload. The version rail needs the total, not the document.
       db
-        .select()
+        .select({
+          id: proposals.id,
+          bidId: proposals.bidId,
+          version: proposals.version,
+          changeLog: proposals.changeLog,
+          scopeText: proposals.scopeText,
+          pdfUrl: proposals.pdfUrl,
+          createdAt: proposals.createdAt,
+          total: sql<string | null>`coalesce(${proposals.snapshot}->>'grandTotal', ${proposals.snapshot}->'pricing'->>'grandTotal')`,
+        })
         .from(proposals)
         .where(eq(proposals.bidId, bidId))
         .orderBy(desc(proposals.createdAt)),
@@ -548,7 +566,10 @@ export async function getBidPageData(bidId: string) {
     lineItems: lineItemRows,
     accessItems: accessItemRows,
     totalSqft: Number(sqftRows[0]?.total ?? 0),
-    proposals: proposalRows,
+    proposals: proposalRows.map((p) => ({
+      ...p,
+      total: p.total == null ? null : Number(p.total),
+    })),
     proposalShares: proposalShareRows,
   };
 }
@@ -4953,6 +4974,118 @@ export async function getPipeline(): Promise<PipelineRow[]> {
   );
 }
 
+// ── Integrations (BYO Claude API key) ───────────────────────────────────────
+
+export type IntegrationStatus = {
+  anthropic: { connected: boolean; last4: string | null; addedAt: Date | null };
+};
+
+export async function getIntegrationStatus(): Promise<IntegrationStatus> {
+  const user = await requireUser();
+  const rows = await db
+    .select({
+      last4: orgIntegrations.anthropicKeyLast4,
+      addedAt: orgIntegrations.anthropicKeyAddedAt,
+      ciphertext: orgIntegrations.anthropicKeyCiphertext,
+    })
+    .from(orgIntegrations)
+    .where(eq(orgIntegrations.userId, user.ownerUserId))
+    .limit(1);
+  const r = rows[0];
+  return {
+    anthropic: {
+      connected: Boolean(r?.ciphertext),
+      last4: r?.last4 ?? null,
+      addedAt: r?.addedAt ?? null,
+    },
+  };
+}
+
+/** Owner-only: store the org's encrypted Anthropic key. */
+export async function setAnthropicKey(data: {
+  ciphertext: string;
+  last4: string;
+}): Promise<void> {
+  const user = await requireUser();
+  if (user.role !== "owner") {
+    throw new Error("Only the org owner can manage integrations");
+  }
+  const now = new Date();
+  await db
+    .insert(orgIntegrations)
+    .values({
+      userId: user.ownerUserId,
+      anthropicKeyCiphertext: data.ciphertext,
+      anthropicKeyLast4: data.last4,
+      anthropicKeyAddedAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: orgIntegrations.userId,
+      set: {
+        anthropicKeyCiphertext: data.ciphertext,
+        anthropicKeyLast4: data.last4,
+        anthropicKeyAddedAt: now,
+        updatedAt: now,
+      },
+    });
+}
+
+export async function removeAnthropicKey(): Promise<void> {
+  const user = await requireUser();
+  if (user.role !== "owner") {
+    throw new Error("Only the org owner can manage integrations");
+  }
+  await db
+    .update(orgIntegrations)
+    .set({
+      anthropicKeyCiphertext: null,
+      anthropicKeyLast4: null,
+      anthropicKeyAddedAt: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(orgIntegrations.userId, user.ownerUserId));
+}
+
+/**
+ * Sidebar badge counts (Direction A) — runs on every app-shell render, so
+ * one round-trip for all three numbers.
+ */
+export type SidebarCounts = {
+  pipeline: number;
+  jobs: number;
+  members: number;
+};
+
+export async function getSidebarCounts(): Promise<SidebarCounts> {
+  const user = await requireUser();
+  const rows = await db.execute(sql`
+    SELECT
+      (SELECT count(*) FROM leads
+        WHERE user_id = ${user.ownerUserId}
+          AND status IN ('needs_takeoff', 'takeoff_scheduled', 'on_hold'))
+      + (SELECT count(*) FROM bids
+        WHERE user_id = ${user.ownerUserId} AND status IN ('draft', 'sent'))
+      AS pipeline,
+      (SELECT count(*) FROM bids
+        WHERE user_id = ${user.ownerUserId}
+          AND delivery_status IS NOT NULL
+          AND delivery_status <> 'complete') AS jobs,
+      (SELECT count(*) + 1 FROM org_memberships
+        WHERE owner_user_id = ${user.ownerUserId}) AS members
+  `);
+  const r = (rows as unknown as {
+    pipeline: number;
+    jobs: number;
+    members: number;
+  }[])[0];
+  return {
+    pipeline: Number(r?.pipeline ?? 0),
+    jobs: Number(r?.jobs ?? 0),
+    members: Number(r?.members ?? 1),
+  };
+}
+
 // ── Properties (IA rework: the durable entity, promoted to top level) ───────
 
 export type PropertyIndexRow = {
@@ -5618,10 +5751,7 @@ async function buildBidPack(id: string): Promise<ContextPack> {
   });
 
   // Accepted amount, if a proposal snapshot captured one.
-  const snap = data.proposals[0]?.snapshot as
-    | { pricing?: { grandTotal?: number }; grandTotal?: number }
-    | undefined;
-  const acceptedTotal = snap?.pricing?.grandTotal ?? snap?.grandTotal ?? null;
+  const acceptedTotal = data.proposals[0]?.total ?? null;
 
   const lines = [
     `${isProject ? "Project" : "Bid"}: ${label}${bid.address ? ` — ${bid.address}` : ""}`,

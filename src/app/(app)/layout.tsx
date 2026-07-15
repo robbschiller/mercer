@@ -4,6 +4,7 @@ import {
   getOnboardingState,
   isOnboardingComplete,
   getCompanyProfile,
+  getSidebarCounts,
 } from "@/lib/store";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -18,9 +19,10 @@ export default async function AppLayout({
   const ctx = await getOrgContext();
   if (!ctx) redirect("/login");
 
-  const [onboarding, profile] = await Promise.all([
+  const [onboarding, profile, counts] = await Promise.all([
     getOnboardingState(ctx.ownerUserId),
     getCompanyProfile(ctx.ownerUserId),
+    getSidebarCounts(),
   ]);
   // Invited members skip onboarding even if the org owner hasn't finished —
   // they joined an existing org.
@@ -34,9 +36,8 @@ export default async function AppLayout({
         userEmail={ctx.email ?? ""}
         userName={ctx.name ?? ""}
         companyName={profile?.companyName ?? ""}
-        companyLogoUrl={profile?.logoUrl ?? null}
-        companyPrimaryColor={profile?.primaryColor ?? null}
         role={ctx.role}
+        counts={counts}
       />
       <SidebarInset>
         <BreadcrumbLabelProvider>
