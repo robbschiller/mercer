@@ -26,7 +26,7 @@ import {
   type PriceListCategory,
   type PricingUnit,
 } from "@/lib/status-meta";
-import { resolveAnthropicKey } from "@/lib/integrations";
+import { platformAnthropicKey, recordAiUsage } from "@/lib/usage";
 
 const SYSTEM_PROMPT = `You are the quote engine for Mercer, a platform for commercial multifamily exterior renovation contractors (painting, wood rot repair, stucco, stair systems, railings).
 
@@ -291,9 +291,8 @@ export async function generateQuoteDraft(data: {
   const nextVersion = (ctx.latestProposal?.version ?? 0) + 1;
   const clarifications = data.clarifications ?? [];
 
-  // Org key first (Settings → Integrations), platform env key second,
-  // offline mock last.
-  const apiKey = await resolveAnthropicKey(ctx.bid.userId);
+  // Platform key (token-metered) or the offline mock.
+  const apiKey = platformAnthropicKey();
   let draft: QuoteDraft;
   if (!apiKey) {
     draft = mockDraft(ctx, scopeText);
@@ -527,6 +526,12 @@ async function callClaude(
     );
 
     const parsed = response.parsed_output;
+    await recordAiUsage({
+      ownerUserId: ctx.bid.userId,
+      feature: "quote_engine",
+      model: "claude-opus-4-8",
+      usage: response.usage,
+    });
     if (!parsed) {
       return {
         ok: false,

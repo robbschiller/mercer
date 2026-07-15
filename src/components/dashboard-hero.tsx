@@ -7,15 +7,15 @@ import {
   useState,
   useTransition,
 } from "react";
-import { ArrowUp, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { ArrowUp, Loader2 } from "lucide-react";
 import { parseDashboardIntent } from "@/lib/actions/parse-dashboard-intent";
 import { askMercer } from "@/lib/actions/ask";
-import { refreshMorningBriefAction } from "@/lib/actions/morning-brief";
 import type { DashboardIntent } from "@/lib/dashboard-intent";
 
 type DashboardHeroProps = {
   firstName: string | null;
-  brief: { text: string; generatedAt: string } | null;
+  /** Server-rendered morning brief, suspended so it streams in. */
+  briefSlot?: React.ReactNode;
 };
 
 function greetingFor(hour: number) {
@@ -25,10 +25,6 @@ function greetingFor(hour: number) {
   return "Good evening";
 }
 
-function fmtTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-}
 
 /**
  * Home hero (Direction A): eyebrow date · greeting · serif AI brief ·
@@ -36,12 +32,10 @@ function fmtTime(iso: string): string {
  * questions get answered inline (Ask, no tagged records) in a header block
  * above the input — one box, no wrong door.
  */
-export function DashboardHero({ firstName, brief }: DashboardHeroProps) {
+export function DashboardHero({ firstName, briefSlot }: DashboardHeroProps) {
   const [now, setNow] = useState<Date | null>(null);
   const [value, setValue] = useState("");
   const [pending, startTransition] = useTransition();
-  const [briefState, setBriefState] = useState(brief);
-  const [refreshing, startRefresh] = useTransition();
   const [answer, setAnswer] = useState<{ q: string; a: string } | null>(null);
   const [status, setStatus] = useState<
     { kind: "idle" } | { kind: "error"; text: string }
@@ -135,32 +129,7 @@ export function DashboardHero({ firstName, brief }: DashboardHeroProps) {
         <span className="text-muted-foreground">.</span>
       </h1>
 
-      {briefState?.text && (
-        <div className="mb-8">
-          <p className="font-serif-brand max-w-2xl text-[22px] leading-normal text-foreground/80 [text-wrap:pretty]">
-            {briefState.text}
-          </p>
-          <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Sparkles className="size-3" />
-            Generated {fmtTime(briefState.generatedAt)}
-            <span className="text-border">·</span>
-            <button
-              type="button"
-              onClick={() =>
-                startRefresh(async () => {
-                  const next = await refreshMorningBriefAction();
-                  setBriefState(next);
-                })
-              }
-              disabled={refreshing}
-              className="inline-flex items-center gap-1 rounded hover:text-foreground hover:underline underline-offset-2 disabled:opacity-50"
-            >
-              {refreshing && <RefreshCw className="size-3 animate-spin" />}
-              Refresh
-            </button>
-          </p>
-        </div>
-      )}
+      {briefSlot}
 
       <div className="overflow-hidden rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-[border-color,box-shadow] focus-within:border-foreground/25 focus-within:shadow-[0_0_0_4px] focus-within:shadow-foreground/5">
         {answer && (

@@ -920,17 +920,21 @@ export const photos = pgTable("photos", {
  * (app)/layout gate. See docs/plan.md → Phase G.
  */
 /**
- * Bring-your-own AI keys (Settings → Integrations). The Anthropic key is
- * AES-256-GCM encrypted at rest; only its last 4 chars render back.
+ * Token-metered AI usage: one row per model call, per org. The billing
+ * ledger — Mercer charges by the token instead of BYO API keys.
  */
-export const orgIntegrations = pgTable("org_integrations", {
-  userId: uuid("user_id").primaryKey(),
-  anthropicKeyCiphertext: text("anthropic_key_ciphertext"),
-  anthropicKeyLast4: text("anthropic_key_last4"),
-  anthropicKeyAddedAt: timestamp("anthropic_key_added_at", {
-    withTimezone: true,
-  }),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
+export const aiUsage = pgTable("ai_usage", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Org owner — the billing key everything else scopes by. */
+  userId: uuid("user_id").notNull(),
+  /** Which surface spent it: quote_engine | ask | morning_brief | follow_up | composer. */
+  feature: text("feature").notNull(),
+  model: text("model").notNull(),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
+  cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });

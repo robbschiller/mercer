@@ -6,8 +6,8 @@ import {
   Building2,
   CircleDollarSign,
   FileText,
+  Coins,
   Package,
-  Plug,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,7 +21,7 @@ const items = [
   { href: "/settings/catalog", label: "Catalog & suppliers", icon: Package },
   { href: "/settings/company", label: "Company details", icon: FileText },
   { href: "/settings/members", label: "Team", icon: Building2 },
-  { href: "/settings/integrations", label: "Integrations", icon: Plug },
+  { href: "/settings/usage", label: "Usage & billing", icon: Coins },
 ];
 
 export function SettingsNav() {

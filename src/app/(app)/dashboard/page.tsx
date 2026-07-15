@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import {
   CircleCheck,
   CircleX,
@@ -17,19 +18,21 @@ import {
 } from "@/lib/store";
 import { getMorningBriefAction } from "@/lib/actions/morning-brief";
 import { DashboardHero } from "@/components/dashboard-hero";
+import {
+  MorningBrief,
+  MorningBriefSkeleton,
+} from "@/components/morning-brief";
 import { DashboardActionPills } from "@/components/dashboard-action-pills";
 import { HomeAgendaSection } from "@/components/home-agenda";
 
 export default async function DashboardPage() {
-  const [ctx, recents, overdue, agenda, notifications, brief] =
-    await Promise.all([
-      getOrgContext(),
-      getDashboardRecents(6),
-      getOverdueFollowUps(20),
-      getHomeAgenda(),
-      getNotifications(),
-      getMorningBriefAction(),
-    ]);
+  const [ctx, recents, overdue, agenda, notifications] = await Promise.all([
+    getOrgContext(),
+    getDashboardRecents(6),
+    getOverdueFollowUps(20),
+    getHomeAgenda(),
+    getNotifications(),
+  ]);
   const firstName = pickFirstName(ctx?.name ?? null, ctx?.email ?? null);
 
   return (
@@ -37,7 +40,11 @@ export default async function DashboardPage() {
       <div className="relative mx-auto w-full max-w-[46.5rem] px-6 pb-24 pt-12">
         <DashboardHero
           firstName={firstName}
-          brief={brief.text ? brief : null}
+          briefSlot={
+            <Suspense fallback={<MorningBriefSkeleton />}>
+              <BriefSlot />
+            </Suspense>
+          }
         />
         <DashboardActionPills overdue={overdue} />
 
@@ -166,4 +173,14 @@ function pickFirstName(name: string | null, email: string | null) {
   const first = local.split(/[._-]/)[0];
   if (!first) return null;
   return first.charAt(0).toUpperCase() + first.slice(1);
+}
+
+/**
+ * The one potentially-slow thing on Home: a cache-miss morning generates
+ * the day's brief with the model. Suspended so it streams in after the
+ * shell — login lands on a painted page, the brief follows.
+ */
+async function BriefSlot() {
+  const brief = await getMorningBriefAction();
+  return <MorningBrief initial={brief.text ? brief : null} />;
 }
