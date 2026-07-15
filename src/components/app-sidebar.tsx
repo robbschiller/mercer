@@ -65,24 +65,6 @@ const NAV_ITEMS = [
   { href: "/reports", label: "Reports", icon: BarChart3, countKey: null },
 ];
 
-function MercerMark() {
-  return (
-    <span className="flex size-8 shrink-0 items-center justify-center rounded-[10px] bg-foreground text-background">
-      <svg
-        viewBox="0 0 24 24"
-        className="size-5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.1"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M4 19V8.5L12 14l8-5.5V19" />
-      </svg>
-    </span>
-  );
-}
-
 export function AppSidebar({
   userEmail,
   userName,
@@ -120,19 +102,16 @@ export function AppSidebar({
     <Sidebar collapsible="icon">
       {/* brand row */}
       <SidebarHeader className="px-3 pb-1 pt-3 group-data-[collapsible=icon]:px-0">
-        <div className="flex items-center gap-2.5 group-data-[collapsible=icon]:justify-center">
+        <div className="flex items-center gap-2.5 pl-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:pl-0">
           <button
             type="button"
             onClick={toggleSidebar}
-            aria-label="Toggle sidebar"
-            className="hidden shrink-0 group-data-[collapsible=icon]:block"
+            aria-label="Expand sidebar"
+            className="font-serif-brand hidden size-8 shrink-0 items-center justify-center text-[24px] leading-none group-data-[collapsible=icon]:flex"
           >
-            <MercerMark />
+            M
           </button>
-          <span className="group-data-[collapsible=icon]:hidden">
-            <MercerMark />
-          </span>
-          <span className="font-serif-brand truncate text-[24px] leading-none tracking-[0.005em] group-data-[collapsible=icon]:hidden">
+          <span className="font-serif-brand truncate text-[26px] leading-none tracking-[0.005em] group-data-[collapsible=icon]:hidden">
             Mercer
           </span>
           <button
