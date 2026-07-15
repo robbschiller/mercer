@@ -5770,85 +5770,6 @@ export async function getSidebarCounts(): Promise<SidebarCounts> {
 
 // ── Properties (IA rework: the durable entity, promoted to top level) ───────
 
-export type PropertyIndexRow = {
-  id: string;
-  name: string | null;
-  address: string | null;
-  managementName: string | null;
-  contactCount: number;
-  openDealCount: number;
-  jobCount: number;
-  /** Most recent won job's acceptance — drives the repaint-cycle signal. */
-  lastWonAt: Date | null;
-  lastActivityAt: Date;
-};
-
-export async function getPropertiesIndex(): Promise<PropertyIndexRow[]> {
-  const user = await requireUser();
-  const rows = await db.execute(sql`
-    SELECT
-      p.id,
-      p.name,
-      p.address,
-      COALESCE(ma.name, a.name) AS management_name,
-      COALESCE(pc.n, 0)::int AS contact_count,
-      (COALESCE(ol.n, 0) + COALESCE(ob.n, 0))::int AS open_deal_count,
-      COALESCE(jb.n, 0)::int AS job_count,
-      jb.last_won_at,
-      GREATEST(
-        p.updated_at,
-        COALESCE(ol.last_at, p.updated_at),
-        COALESCE(ob.last_at, p.updated_at),
-        COALESCE(jb.last_at, p.updated_at)
-      ) AS last_activity_at
-    FROM properties p
-    LEFT JOIN accounts ma ON ma.id = p.management_account_id
-    LEFT JOIN accounts a ON a.id = p.account_id
-    LEFT JOIN LATERAL (
-      SELECT count(*) AS n FROM property_contacts c
-      WHERE c.property_id = p.id
-    ) pc ON true
-    LEFT JOIN LATERAL (
-      SELECT count(*) AS n, max(l.updated_at) AS last_at FROM leads l
-      WHERE l.property_id = p.id
-        AND l.status IN ('needs_takeoff', 'takeoff_scheduled', 'on_hold')
-    ) ol ON true
-    LEFT JOIN LATERAL (
-      SELECT count(*) AS n, max(b.updated_at) AS last_at FROM bids b
-      WHERE b.property_id = p.id AND b.status IN ('draft', 'sent')
-    ) ob ON true
-    LEFT JOIN LATERAL (
-      SELECT count(*) AS n, max(b.updated_at) AS last_at,
-             max(b.accepted_at) AS last_won_at
-      FROM bids b
-      WHERE b.property_id = p.id AND b.delivery_status IS NOT NULL
-    ) jb ON true
-    WHERE p.user_id = ${user.ownerUserId}
-    ORDER BY last_activity_at DESC
-  `);
-  type Row = {
-    id: string;
-    name: string | null;
-    address: string | null;
-    management_name: string | null;
-    contact_count: number;
-    open_deal_count: number;
-    job_count: number;
-    last_won_at: string | Date | null;
-    last_activity_at: string | Date;
-  };
-  return (rows as unknown as Row[]).map((r) => ({
-    id: r.id,
-    name: r.name,
-    address: r.address,
-    managementName: r.management_name,
-    contactCount: Number(r.contact_count),
-    openDealCount: Number(r.open_deal_count),
-    jobCount: Number(r.job_count),
-    lastWonAt: r.last_won_at ? new Date(r.last_won_at) : null,
-    lastActivityAt: new Date(r.last_activity_at),
-  }));
-}
 
 /**
  * Every deal that ever touched a property — the repeat-business story
@@ -5864,6 +5785,8 @@ export type PropertyDeal = {
   status: string;
   value: number | null;
   createdAt: Date;
+  /** For bids/jobs: when the proposal was accepted (null while open/lost). */
+  acceptedAt: Date | null;
 };
 
 export async function getPropertyDeals(
@@ -5900,6 +5823,7 @@ export async function getPropertyDeals(
       status: l.status,
       value: l.estValue == null ? null : Number(l.estValue),
       createdAt: l.createdAt,
+      acceptedAt: null,
     })),
     ...bidRows.map((b) => ({
       kind: (b.deliveryStatus ? "job" : "bid") as "job" | "bid",
@@ -5909,9 +5833,142 @@ export async function getPropertyDeals(
       status: b.deliveryStatus ?? b.status,
       value: b.contractValue == null ? null : Number(b.contractValue),
       createdAt: b.createdAt,
+      acceptedAt: b.acceptedAt,
     })),
   ];
   return deals.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
+/**
+ * The asset register (Properties redesign, frame 4a): one rich row per
+ * property — who runs it, what it's worth to us, whether a repaint is due,
+ * and whether a deal is live right now.
+ */
+export type PropertyRegisterRow = {
+  id: string;
+  name: string | null;
+  address: string | null;
+  managementName: string | null;
+  /** Year the current management relationship started (from dated history). */
+  mgmtSinceYear: number | null;
+  ownerName: string | null;
+  ownerType: string | null;
+  contactCount: number;
+  openLeadCount: number;
+  openBidCount: number;
+  jobCount: number;
+  /** Sum of contract values across won jobs at this property. */
+  lifetime: number;
+  lastWonAt: Date | null;
+  lastWonValue: number | null;
+  /** Delivery status of the most recently touched non-complete job. */
+  activeJobStatus: string | null;
+  sqftNonfloor: number | null;
+  lastActivityAt: Date;
+};
+
+export async function getPropertiesRegister(): Promise<PropertyRegisterRow[]> {
+  const user = await requireUser();
+  const rows = await db.execute(sql`
+    SELECT
+      p.id, p.name, p.address,
+      p.attainable_sqft_nonfloor,
+      COALESCE(ma.name, a.name) AS management_name,
+      EXTRACT(YEAR FROM ms.since)::int AS mgmt_since_year,
+      oa.name AS owner_name, oa.type AS owner_type,
+      COALESCE(pc.n, 0)::int AS contact_count,
+      COALESCE(ol.n, 0)::int AS open_lead_count,
+      COALESCE(ob.n, 0)::int AS open_bid_count,
+      COALESCE(jb.n, 0)::int AS job_count,
+      COALESCE(jb.lifetime, 0) AS lifetime,
+      jb.last_won_at, jb.last_won_value,
+      aj.delivery_status AS active_job_status,
+      GREATEST(
+        p.updated_at,
+        COALESCE(ol.last_at, p.updated_at),
+        COALESCE(ob.last_at, p.updated_at),
+        COALESCE(jb.last_at, p.updated_at)
+      ) AS last_activity_at
+    FROM properties p
+    LEFT JOIN accounts ma ON ma.id = p.management_account_id
+    LEFT JOIN accounts a ON a.id = p.account_id
+    LEFT JOIN accounts oa ON oa.id = p.owner_account_id
+    LEFT JOIN LATERAL (
+      SELECT min(m.start_date) AS since FROM property_mgmt m
+      WHERE m.property_id = p.id AND m.end_date IS NULL
+    ) ms ON true
+    LEFT JOIN LATERAL (
+      SELECT count(*) AS n FROM property_contacts c
+      WHERE c.property_id = p.id
+    ) pc ON true
+    LEFT JOIN LATERAL (
+      SELECT count(*) AS n, max(l.updated_at) AS last_at FROM leads l
+      WHERE l.property_id = p.id
+        AND l.status IN ('needs_takeoff', 'takeoff_scheduled', 'on_hold')
+    ) ol ON true
+    LEFT JOIN LATERAL (
+      SELECT count(*) AS n, max(b.updated_at) AS last_at FROM bids b
+      WHERE b.property_id = p.id AND b.status IN ('draft', 'sent')
+    ) ob ON true
+    LEFT JOIN LATERAL (
+      SELECT count(*) AS n, max(b.updated_at) AS last_at,
+             max(b.accepted_at) AS last_won_at,
+             sum(b.contract_value) AS lifetime,
+             (array_agg(b.contract_value ORDER BY b.accepted_at DESC NULLS LAST))[1]
+               AS last_won_value
+      FROM bids b
+      WHERE b.property_id = p.id AND b.delivery_status IS NOT NULL
+    ) jb ON true
+    LEFT JOIN LATERAL (
+      SELECT b.delivery_status FROM bids b
+      WHERE b.property_id = p.id
+        AND b.delivery_status IS NOT NULL AND b.delivery_status <> 'complete'
+      ORDER BY b.updated_at DESC LIMIT 1
+    ) aj ON true
+    WHERE p.user_id = ${user.ownerUserId}
+    ORDER BY last_activity_at DESC
+  `);
+  type Row = {
+    id: string;
+    name: string | null;
+    address: string | null;
+    attainable_sqft_nonfloor: string | null;
+    management_name: string | null;
+    mgmt_since_year: number | null;
+    owner_name: string | null;
+    owner_type: string | null;
+    contact_count: number;
+    open_lead_count: number;
+    open_bid_count: number;
+    job_count: number;
+    lifetime: string | number;
+    last_won_at: string | Date | null;
+    last_won_value: string | null;
+    active_job_status: string | null;
+    last_activity_at: string | Date;
+  };
+  return (rows as unknown as Row[]).map((r) => ({
+    id: r.id,
+    name: r.name,
+    address: r.address,
+    managementName: r.management_name,
+    mgmtSinceYear: r.mgmt_since_year == null ? null : Number(r.mgmt_since_year),
+    ownerName: r.owner_name,
+    ownerType: r.owner_type,
+    contactCount: Number(r.contact_count),
+    openLeadCount: Number(r.open_lead_count),
+    openBidCount: Number(r.open_bid_count),
+    jobCount: Number(r.job_count),
+    lifetime: Number(r.lifetime ?? 0),
+    lastWonAt: r.last_won_at ? new Date(r.last_won_at) : null,
+    lastWonValue: r.last_won_value == null ? null : Number(r.last_won_value),
+    activeJobStatus: r.active_job_status,
+    sqftNonfloor:
+      r.attainable_sqft_nonfloor == null
+        ? null
+        : Number(r.attainable_sqft_nonfloor),
+    lastActivityAt: new Date(r.last_activity_at),
+  }));
 }
 
 /** Distinct source_tag values for the current user (for filter dropdown). */
