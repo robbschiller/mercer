@@ -30,6 +30,7 @@ import {
   createLead,
   createLeadsBatch,
   searchAccounts,
+  searchKnownProperties,
   updateLead,
   updateLeadStatus,
   scheduleLeadTakeoff,
@@ -908,8 +909,19 @@ export async function createLeadAction(formData: FormData) {
     }
   }
   revalidatePath("/leads");
+  revalidatePath("/pipeline");
   revalidatePath("/dashboard");
-  redirect("/leads");
+  // "Add & schedule takeoff" lands on the lead where scheduling lives;
+  // plain "Add lead" lands in the pipeline the lead just joined.
+  if (formData.get("next") === "schedule") {
+    redirect(`/leads/${lead.id}`);
+  }
+  redirect("/pipeline");
+}
+
+/** Property-finder tier 1: buildings Mercer already knows. */
+export async function searchKnownPropertiesAction(q: string) {
+  return searchKnownProperties(q);
 }
 
 export async function createContactAction(formData: FormData) {

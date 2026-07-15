@@ -297,6 +297,19 @@ export const createLeadSchema = z.object({
   phone: optionalText,
   company: optionalText,
   accountId: formOptionalUuid,
+  /** Finder: attach an existing property record — never a duplicate. */
+  propertyId: formOptionalUuid,
+  /** Finder: attach an existing contact instead of minting one. */
+  contactId: formOptionalUuid,
+  latitude: z.preprocess(
+    (v) => (v === "" || v == null ? null : Number(v)),
+    z.union([z.number().finite(), z.null()]),
+  ),
+  longitude: z.preprocess(
+    (v) => (v === "" || v == null ? null : Number(v)),
+    z.union([z.number().finite(), z.null()]),
+  ),
+  googlePlaceId: optionalText,
   propertyName: optionalText,
   resolvedAddress: optionalText,
   notes: z
