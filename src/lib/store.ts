@@ -5058,6 +5058,276 @@ export async function getAcceptedVersionForBid(
   return v == null ? null : Number(v);
 }
 
+// ── Morning brief cache ─────────────────────────────────────────────────────
+
+export type MorningBrief = { date: string; text: string; generatedAt: string };
+
+export async function getCachedMorningBrief(): Promise<MorningBrief | null> {
+  const user = await requireUser();
+  const rows = await db
+    .select({ brief: userDefaults.morningBrief })
+    .from(userDefaults)
+    .where(eq(userDefaults.userId, user.userId))
+    .limit(1);
+  const b = rows[0]?.brief as MorningBrief | null | undefined;
+  return b && typeof b.text === "string" ? b : null;
+}
+
+export async function saveMorningBrief(brief: MorningBrief): Promise<void> {
+  const user = await requireUser();
+  await db
+    .insert(userDefaults)
+    .values({ userId: user.userId, morningBrief: brief, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: userDefaults.userId,
+      set: { morningBrief: brief, updatedAt: new Date() },
+    });
+}
+
+// ── Home agenda (Direction A) ────────────────────────────────────────────────
+
+export type AgendaQuietQuote = {
+  bidId: string;
+  proposalId: string;
+  propertyName: string;
+  total: number | null;
+  sentDaysAgo: number;
+  viewCount: number;
+  neverOpened: boolean;
+  lastViewedAt: Date | null;
+};
+
+export type AgendaFollowUp = {
+  leadId: string;
+  name: string;
+  propertyName: string | null;
+  dueDate: string;
+  overdueDays: number;
+};
+
+export type AgendaTakeoff = {
+  leadId: string;
+  name: string;
+  contactName: string | null;
+  scheduledAt: Date;
+};
+
+export type AgendaExpiringLink = {
+  bidId: string;
+  propertyName: string;
+  expiresAt: Date;
+  daysLeft: number;
+};
+
+export type AgendaDriftingJob = {
+  bidId: string;
+  propertyName: string;
+  reason: string;
+  notStarted: boolean;
+};
+
+export type HomeAgenda = {
+  quietQuotes: AgendaQuietQuote[];
+  followUps: AgendaFollowUp[];
+  takeoffs: AgendaTakeoff[];
+  expiringLinks: AgendaExpiringLink[];
+  driftingJobs: AgendaDriftingJob[];
+  /** Open quotes context for the clear-morning hero and the brief. */
+  openQuotes: { count: number; totalValue: number };
+  /** Names of open sent quotes (largest first) — the brief may only use these. */
+  openQuoteNames: string[];
+};
+
+const QUIET_AFTER_DAYS = 3;
+
+export async function getHomeAgenda(): Promise<HomeAgenda> {
+  const user = await requireUser();
+  const uid = user.ownerUserId;
+
+  const [quietRows, followRows, takeoffRows, expiringRows, driftRows, openRows] =
+    await Promise.all([
+      // Sent quotes whose latest live share has gone quiet.
+      db.execute(sql`
+        SELECT DISTINCT ON (b.id)
+          b.id AS bid_id, p.id AS proposal_id, b.property_name,
+          COALESCE(p.snapshot->>'grandTotal', p.snapshot->'pricing'->>'grandTotal') AS total,
+          s.created_at AS sent_at, s.view_count, s.accessed_at
+        FROM bids b
+        JOIN proposals p ON p.bid_id = b.id
+        JOIN proposal_shares s ON s.proposal_id = p.id
+          AND s.accepted_at IS NULL AND s.declined_at IS NULL
+        WHERE b.user_id = ${uid} AND b.status = 'sent'
+          AND s.created_at < now() - interval '${sql.raw(String(QUIET_AFTER_DAYS))} days'
+        ORDER BY b.id, p.version DESC, s.created_at DESC
+      `),
+      db
+        .select({
+          leadId: leads.id,
+          name: leads.name,
+          propertyName: leads.propertyName,
+          followUpAt: leads.followUpAt,
+        })
+        .from(leads)
+        .where(
+          and(
+            eq(leads.userId, uid),
+            isNull(leads.closedAt),
+            sql`${leads.followUpAt} IS NOT NULL AND ${leads.followUpAt}::date <= now()::date`,
+          ),
+        )
+        .orderBy(asc(leads.followUpAt))
+        .limit(6),
+      db
+        .select({
+          leadId: leads.id,
+          name: leads.name,
+          scheduledAt: leads.takeoffScheduledAt,
+          contactName: contacts.name,
+        })
+        .from(leads)
+        .leftJoin(contacts, eq(leads.primaryContactId, contacts.id))
+        .where(
+          and(
+            eq(leads.userId, uid),
+            eq(leads.status, "takeoff_scheduled"),
+            sql`${leads.takeoffScheduledAt} BETWEEN now() - interval '12 hours' AND now() + interval '7 days'`,
+          ),
+        )
+        .orderBy(asc(leads.takeoffScheduledAt))
+        .limit(5),
+      db.execute(sql`
+        SELECT DISTINCT ON (b.id) b.id AS bid_id, b.property_name, s.expires_at
+        FROM bids b
+        JOIN proposals p ON p.bid_id = b.id
+        JOIN proposal_shares s ON s.proposal_id = p.id
+          AND s.accepted_at IS NULL AND s.declined_at IS NULL
+        WHERE b.user_id = ${uid} AND b.status = 'sent'
+          AND s.expires_at BETWEEN now() AND now() + interval '7 days'
+        ORDER BY b.id, s.expires_at ASC
+      `),
+      db.execute(sql`
+        SELECT id AS bid_id, property_name, delivery_status, target_start_date, updated_at
+        FROM bids
+        WHERE user_id = ${uid} AND delivery_status IS NOT NULL
+          AND delivery_status NOT IN ('complete', 'warranty_watch')
+          AND (
+            (delivery_status = 'not_started' AND target_start_date IS NOT NULL
+              AND target_start_date::date < now()::date)
+            OR (delivery_status = 'in_progress' AND updated_at < now() - interval '10 days')
+          )
+        ORDER BY updated_at ASC
+        LIMIT 5
+      `),
+      db.execute(sql`
+        SELECT b.property_name,
+          COALESCE(p.snapshot->>'grandTotal', p.snapshot->'pricing'->>'grandTotal')::numeric AS total
+        FROM bids b
+        JOIN LATERAL (
+          SELECT snapshot FROM proposals WHERE bid_id = b.id
+          ORDER BY version DESC LIMIT 1
+        ) p ON true
+        WHERE b.user_id = ${uid} AND b.status = 'sent'
+        ORDER BY total DESC NULLS LAST
+      `),
+    ]);
+
+  type QuietRow = {
+    bid_id: string;
+    proposal_id: string;
+    property_name: string;
+    total: string | null;
+    sent_at: string | Date;
+    view_count: number;
+    accessed_at: string | Date | null;
+  };
+  const quietQuotes = (quietRows as unknown as QuietRow[]).map((r) => ({
+    bidId: r.bid_id,
+    proposalId: r.proposal_id,
+    propertyName: r.property_name,
+    total: r.total == null ? null : Number(r.total),
+    sentDaysAgo: Math.max(
+      0,
+      Math.round(
+        (Date.now() - new Date(r.sent_at).getTime()) / 86_400_000,
+      ),
+    ),
+    viewCount: Number(r.view_count),
+    neverOpened: r.accessed_at == null,
+    lastViewedAt: r.accessed_at ? new Date(r.accessed_at) : null,
+  }));
+
+  const today = new Date().toISOString().slice(0, 10);
+  const followUps = followRows
+    .filter((r) => r.followUpAt != null)
+    .map((r) => ({
+      leadId: r.leadId,
+      name: r.name,
+      propertyName: r.propertyName,
+      dueDate: r.followUpAt!,
+      overdueDays: Math.max(
+        0,
+        Math.round(
+          (new Date(today).getTime() - new Date(r.followUpAt!).getTime()) /
+            86_400_000,
+        ),
+      ),
+    }));
+
+  const takeoffs = takeoffRows
+    .filter((r) => r.scheduledAt != null)
+    .map((r) => ({
+      leadId: r.leadId,
+      name: r.name,
+      contactName: r.contactName,
+      scheduledAt: r.scheduledAt!,
+    }));
+
+  type ExpRow = { bid_id: string; property_name: string; expires_at: string | Date };
+  const expiringLinks = (expiringRows as unknown as ExpRow[]).map((r) => {
+    const expiresAt = new Date(r.expires_at);
+    return {
+      bidId: r.bid_id,
+      propertyName: r.property_name,
+      expiresAt,
+      daysLeft: Math.max(
+        0,
+        Math.ceil((expiresAt.getTime() - Date.now()) / 86_400_000),
+      ),
+    };
+  });
+
+  type DriftRow = {
+    bid_id: string;
+    property_name: string;
+    delivery_status: string;
+    updated_at: string | Date;
+  };
+  const driftingJobs = (driftRows as unknown as DriftRow[]).map((r) => ({
+    bidId: r.bid_id,
+    propertyName: r.property_name,
+    notStarted: r.delivery_status === "not_started",
+    reason:
+      r.delivery_status === "not_started"
+        ? "Target start passed"
+        : `No update in ${Math.round((Date.now() - new Date(r.updated_at).getTime()) / 86_400_000)} days`,
+  }));
+
+  type OpenRow = { property_name: string; total: string | null };
+  const open = openRows as unknown as OpenRow[];
+  return {
+    quietQuotes,
+    followUps,
+    takeoffs,
+    expiringLinks,
+    driftingJobs,
+    openQuotes: {
+      count: open.length,
+      totalValue: open.reduce((s, r) => s + Number(r.total ?? 0), 0),
+    },
+    openQuoteNames: open.slice(0, 5).map((r) => r.property_name),
+  };
+}
+
 // ── Notification bell ────────────────────────────────────────────────────────
 
 const NOTIFICATION_EVENT_TYPES = ["proposal_viewed", "proposal_sent"] as const;

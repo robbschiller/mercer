@@ -1651,6 +1651,7 @@ export async function setLeadFollowUpAction(formData: FormData) {
   }
   revalidatePath("/leads");
   revalidatePath(`/leads/${result.data.id}`);
+  revalidatePath("/dashboard");
 }
 
 export async function setPropertyOwnerContactAction(formData: FormData) {
