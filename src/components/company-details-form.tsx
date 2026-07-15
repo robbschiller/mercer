@@ -2,6 +2,7 @@
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/submit-button";
 import { updateCompanyProfileAction } from "@/lib/actions";
 import type { CompanyProfile } from "@/lib/store";
@@ -151,6 +152,45 @@ export function CompanyDetailsForm({
           defaultValue={profile?.bodyFont ?? ""}
           placeholder="Inter, system-ui, sans-serif"
         />
+      </div>
+
+      <div className="flex flex-col gap-2 border-t pt-4">
+        <Label htmlFor="aboutBlurb">About the company</Label>
+        <Textarea
+          id="aboutBlurb"
+          name="aboutBlurb"
+          rows={3}
+          defaultValue={profile?.aboutBlurb ?? ""}
+          placeholder="Two or three sentences customers see on every proposal — who you are, how long you've done this, what you stand behind."
+        />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="credentials">License &amp; insurance</Label>
+        <Input
+          id="credentials"
+          name="credentials"
+          defaultValue={profile?.credentials ?? ""}
+          placeholder="FL License #CBC1234567 · Insured to $2M · Bonded"
+        />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="coverLetterTemplate">Proposal cover letter</Label>
+        <Textarea
+          id="coverLetterTemplate"
+          name="coverLetterTemplate"
+          rows={4}
+          defaultValue={profile?.coverLetterTemplate ?? ""}
+          placeholder={
+            "{recipient}, thanks for walking {property} with us. This proposal covers everything we discussed — every line priced and itemized. Questions welcome any time."
+          }
+        />
+        <p className="text-xs text-muted-foreground">
+          Opens every customer proposal. Merge fields:{" "}
+          <code>{"{recipient}"}</code>, <code>{"{property}"}</code>,{" "}
+          <code>{"{total}"}</code>.
+        </p>
       </div>
 
       <div className="flex justify-end pt-2">

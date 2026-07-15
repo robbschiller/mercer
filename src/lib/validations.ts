@@ -230,8 +230,11 @@ export const updateQuoteLineSchema = z
       .number()
       .nonnegative("Unit price must be ≥ 0")
       .optional(),
+    // Rate-only ("as found") lines carry a unit price with no committed
+    // qty; toggling and price edits send this flag instead of qty.
+    rateOnly: z.boolean().optional(),
   })
-  .refine((d) => (d.qty == null) === (d.unitPrice == null), {
+  .refine((d) => d.rateOnly === true || (d.qty == null) === (d.unitPrice == null), {
     message: "qty and unitPrice must be sent together",
   });
 
@@ -249,6 +252,8 @@ export const generateProposalSchema = z.object({
 
 export const createProposalShareSchema = z.object({
   proposalId: z.string().uuid("Invalid proposal ID"),
+  /** "Prepared for …" — personalizes the cover letter on this link. */
+  recipientName: optionalText,
 });
 
 export const acceptProposalShareSchema = z.object({
@@ -695,6 +700,9 @@ export const updateCompanyProfileSchema = z.object({
   primaryColor: optionalHexColor,
   accentColor: optionalHexColor,
   bodyFont: optionalText,
+  aboutBlurb: optionalText,
+  credentials: optionalText,
+  coverLetterTemplate: optionalText,
 });
 
 export const inviteOrgMemberSchema = z.object({

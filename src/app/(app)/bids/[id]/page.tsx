@@ -6,6 +6,7 @@ import {
   getProjectByBidId,
   getPriceListItems,
   getPhotos,
+  getAttachments,
   getJobScheduleContext,
 } from "@/lib/store";
 import { QuoteEngine } from "@/components/quote-engine";
@@ -43,12 +44,13 @@ export default async function BidPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const [{ id }, { error }] = await Promise.all([params, searchParams]);
-  const [data, project, catalog, bidPhotos, scheduleContext] =
+  const [data, project, catalog, bidPhotos, bidAttachments, scheduleContext] =
     await Promise.all([
       getBidPageData(id),
       getProjectByBidId(id),
       getPriceListItems({ activeOnly: true }),
       getPhotos("bid", id),
+      getAttachments("bid", id),
       getJobScheduleContext(id),
     ]);
 
@@ -146,6 +148,7 @@ export default async function BidPage({
         bid={bid}
         lineItems={lineItems}
         photos={bidPhotos}
+        attachments={bidAttachments}
         proposals={proposals}
         proposalShares={proposalShares}
         totalSqft={totalSqft}

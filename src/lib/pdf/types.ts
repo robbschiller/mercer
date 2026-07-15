@@ -22,9 +22,31 @@ export interface SnapshotLineItem {
   /** Raw unit string as stored on the line; render via pricingUnitLabel. */
   unit?: string | null;
   unitPrice?: number | null;
+  /** Unit-rate line: priced per unit, billed as found, out of the total. */
+  rateOnly?: boolean;
   /** Raw category enum; render via priceListCategoryLabel. */
   category?: string | null;
   sku?: string | null;
+  /** The takeoff photo that motivated this line — the proposal's scope story. */
+  evidencePhotoUrl?: string | null;
+}
+
+/**
+ * Company branding frozen into the proposal at stamp time (Yvonne-test D) —
+ * a later rebrand must not repaint documents customers already received.
+ */
+export interface SnapshotBrand {
+  companyName: string | null;
+  tagline: string | null;
+  logoUrl: string | null;
+  primaryColor: string | null;
+  accentColor: string | null;
+  aboutBlurb: string | null;
+  credentials: string | null;
+  phone: string | null;
+  email: string | null;
+  /** {recipient}, {property}, {total} merge fields; recipient is per-share. */
+  coverLetterTemplate: string | null;
 }
 
 /**
@@ -68,6 +90,10 @@ export interface ProposalSnapshot {
   grandTotal: number;
   /** Quote version stamped on the document. Optional — absent pre-032. */
   version?: number;
+  /** Optional — present on proposals stamped after the Yvonne-test batch. */
+  brand?: SnapshotBrand;
+  /** Hero image for the branded proposal (best bid photo, else satellite). */
+  coverPhotoUrl?: string | null;
   generatedAt: string;
   /** In-memory only for PDF render; never persist to `proposals.snapshot`. */
   satelliteImageDataUri?: string;

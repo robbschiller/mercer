@@ -25,6 +25,8 @@ import {
   createProposal,
   createProposalShare,
   getNextProposalVersion,
+  getCompanyProfile,
+  getPhotos,
   createLead,
   createLeadsBatch,
   searchAccounts,
@@ -466,16 +468,26 @@ export async function updateQuoteLineAction(data: {
   name?: string;
   qty?: string | number;
   unitPrice?: string | number;
+  rateOnly?: boolean;
 }) {
   const result = updateQuoteLineSchema.safeParse(data);
   if (!result.success) {
     return { error: result.error.issues[0]?.message ?? "Invalid input" };
   }
 
-  const { id, bidId, name, qty, unitPrice } = result.data;
+  const { id, bidId, name, qty, unitPrice, rateOnly } = result.data;
   const patch: Parameters<typeof updateLineItem>[1] = {};
   if (name !== undefined) patch.name = name;
-  if (qty != null && unitPrice != null) {
+  if (rateOnly === true) {
+    // "As found" line: priced per unit, no committed qty, out of the total.
+    patch.rateOnly = true;
+    patch.qty = null;
+    patch.amount = "0";
+    if (unitPrice != null) patch.unitPrice = String(unitPrice);
+    patch.confidence = "high";
+    patch.flagNote = null;
+  } else if (qty != null && unitPrice != null) {
+    patch.rateOnly = false;
     patch.qty = String(qty);
     patch.unitPrice = String(unitPrice);
     patch.amount = String(qty * unitPrice);
@@ -638,11 +650,21 @@ export async function generateProposalAction(data: {
     return { error: "Pricing is incomplete. Fill in all pricing fields before generating a proposal.", pdfUrl: null };
   }
 
-  const parties = bid.propertyId
-    ? await getProposalPartyBlock(bid.propertyId)
-    : null;
+  const [parties, version, companyProfile, bidPhotos] = await Promise.all([
+    bid.propertyId ? getProposalPartyBlock(bid.propertyId) : null,
+    getNextProposalVersion(bid.id),
+    getCompanyProfile(),
+    getPhotos("bid", bid.id),
+  ]);
 
-  const version = await getNextProposalVersion(bid.id);
+  const photoUrlById = new Map(bidPhotos.map((p) => [p.id, p.url]));
+  // Hero: the first takeoff photo tells the property's story better than a
+  // map; fall back to the satellite proxy when there are no photos.
+  const coverPhotoUrl =
+    bidPhotos.find((p) => p.kind === "takeoff")?.url ??
+    bidPhotos[0]?.url ??
+    bid.satelliteImageUrl ??
+    null;
 
   const snapshot: ProposalSnapshot = {
     propertyName: bid.propertyName,
@@ -666,8 +688,12 @@ export async function generateProposalAction(data: {
       qty: li.qty != null ? Number(li.qty) : null,
       unit: li.unit,
       unitPrice: li.unitPrice != null ? Number(li.unitPrice) : null,
+      rateOnly: li.rateOnly || undefined,
       category: li.category,
       sku: li.sku,
+      evidencePhotoUrl: li.evidencePhotoId
+        ? (photoUrlById.get(li.evidencePhotoId) ?? null)
+        : null,
     })),
     accessItems: accessItems.map((a) => ({
       type: a.type,
@@ -680,6 +706,21 @@ export async function generateProposalAction(data: {
     totalSqft,
     grandTotal: pricing.grandTotal,
     version,
+    brand: companyProfile
+      ? {
+          companyName: companyProfile.companyName,
+          tagline: companyProfile.tagline,
+          logoUrl: companyProfile.logoUrl,
+          primaryColor: companyProfile.primaryColor,
+          accentColor: companyProfile.accentColor,
+          aboutBlurb: companyProfile.aboutBlurb,
+          credentials: companyProfile.credentials,
+          phone: companyProfile.phone,
+          email: companyProfile.email,
+          coverLetterTemplate: companyProfile.coverLetterTemplate,
+        }
+      : undefined,
+    coverPhotoUrl,
     generatedAt: new Date().toISOString(),
   };
 
@@ -717,8 +758,16 @@ export async function generateProposalAction(data: {
     scopeText,
   });
 
-  if (bid.draftChangeLog != null || bid.draftScopeText != null) {
-    await updateBid(bid.id, { draftChangeLog: null, draftScopeText: null });
+  if (
+    bid.draftChangeLog != null ||
+    bid.draftScopeText != null ||
+    bid.draftClarifications != null
+  ) {
+    await updateBid(bid.id, {
+      draftChangeLog: null,
+      draftScopeText: null,
+      draftClarifications: null,
+    });
   }
 
   if (bid.status === "draft") {
@@ -745,14 +794,19 @@ export async function generateProposalAction(data: {
   };
 }
 
-export async function createProposalShareAction(data: { proposalId: string }) {
+export async function createProposalShareAction(data: {
+  proposalId: string;
+  recipientName?: string | null;
+}) {
   const result = createProposalShareSchema.safeParse(data);
   if (!result.success) {
     return { error: result.error.issues[0]?.message ?? "Invalid input", shareUrl: null };
   }
 
   try {
-    const share = await createProposalShare(result.data.proposalId);
+    const share = await createProposalShare(result.data.proposalId, {
+      recipientName: result.data.recipientName,
+    });
     const siteUrl = getAppOrigin();
     revalidatePath(`/bids/${share.bidId}`);
     revalidatePath("/bids");

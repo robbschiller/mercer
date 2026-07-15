@@ -89,6 +89,15 @@ export default async function SharedProposalPage({
 
   const isAccepted = Boolean(record.share.acceptedAt);
   const isDeclined = Boolean(record.share.declinedAt);
+  const committedLines = snapshot.lineItems.filter((li) => !li.rateOnly);
+  const rateLines = snapshot.lineItems.filter((li) => li.rateOnly === true);
+  const brand = snapshot.brand ?? null;
+  const accent = brand?.accentColor ?? brand?.primaryColor ?? null;
+  const coverLetter = renderCoverLetter(
+    brand?.coverLetterTemplate ?? null,
+    record.share.recipientName,
+    snapshot,
+  );
   const parties = snapshot.parties ?? null;
   const hasParties =
     parties != null &&
@@ -119,26 +128,106 @@ export default async function SharedProposalPage({
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 px-4 py-10">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
-            Mercer Proposal
-          </p>
-          <h1 className="text-2xl font-semibold">{snapshot.propertyName}</h1>
-          <p className="text-sm text-muted-foreground">{snapshot.address}</p>
+    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 px-4 py-8">
+      {/* Branded masthead — present on snapshots stamped with a company
+          profile; older proposals render the plain header below. */}
+      {brand?.companyName && (
+        <div
+          className="flex items-center gap-3 border-b pb-4"
+          style={accent ? { borderColor: accent } : undefined}
+        >
+          {brand.logoUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={brand.logoUrl}
+              alt={`${brand.companyName} logo`}
+              className="h-10 w-auto max-w-[140px] object-contain"
+            />
+          )}
+          <div className="min-w-0">
+            <p className="truncate text-base font-semibold">
+              {brand.companyName}
+            </p>
+            {brand.tagline && (
+              <p className="truncate text-xs text-muted-foreground">
+                {brand.tagline}
+              </p>
+            )}
+          </div>
+          <div className="ml-auto text-right text-xs text-muted-foreground">
+            {brand.phone && <p>{brand.phone}</p>}
+            {brand.email && <p>{brand.email}</p>}
+          </div>
         </div>
-        {/* This badge is about THIS quote link, not the bid — a customer
-            opening a fresh v4 link must not see the bid's internal WON/DRAFT
-            state. */}
-        <Badge variant="secondary">
-          {isAccepted
-            ? "ACCEPTED"
-            : isDeclined
-              ? "DECLINED"
-              : `QUOTE V${record.proposal.version}`}
-        </Badge>
-      </div>
+      )}
+
+      {snapshot.coverPhotoUrl ? (
+        <div className="relative overflow-hidden rounded-xl border">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={snapshot.coverPhotoUrl}
+            alt={snapshot.propertyName}
+            className="h-56 w-full object-cover sm:h-72"
+          />
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent px-5 pb-4 pt-16">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.14em] text-white/70">
+                  Proposal
+                </p>
+                <h1 className="text-2xl font-semibold text-white">
+                  {snapshot.propertyName}
+                </h1>
+                <p className="text-sm text-white/80">{snapshot.address}</p>
+              </div>
+              <Badge variant="secondary" className="shrink-0">
+                {isAccepted
+                  ? "ACCEPTED"
+                  : isDeclined
+                    ? "DECLINED"
+                    : `QUOTE V${record.proposal.version}`}
+              </Badge>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+              {brand?.companyName
+                ? `${brand.companyName} Proposal`
+                : "Mercer Proposal"}
+            </p>
+            <h1 className="text-2xl font-semibold">{snapshot.propertyName}</h1>
+            <p className="text-sm text-muted-foreground">{snapshot.address}</p>
+          </div>
+          {/* This badge is about THIS quote link, not the bid — a customer
+              opening a fresh v4 link must not see the bid's internal
+              WON/DRAFT state. */}
+          <Badge variant="secondary">
+            {isAccepted
+              ? "ACCEPTED"
+              : isDeclined
+                ? "DECLINED"
+                : `QUOTE V${record.proposal.version}`}
+          </Badge>
+        </div>
+      )}
+
+      {coverLetter && (
+        <Card>
+          <CardContent className="pt-6">
+            <p className="whitespace-pre-wrap text-[15px] leading-relaxed">
+              {coverLetter}
+            </p>
+            <p className="mt-4 text-sm text-muted-foreground">
+              {[brand?.companyName, brand?.phone, brand?.email]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -177,7 +266,8 @@ export default async function SharedProposalPage({
               </ul>
             </div>
           )}
-          {snapshot.lineItems.length > 0 && (
+          <EvidenceStrip lines={committedLines} />
+          {committedLines.length > 0 && (
             <div className="rounded-md border">
               <table className="w-full text-sm">
                 <thead>
@@ -189,7 +279,7 @@ export default async function SharedProposalPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {snapshot.lineItems.map((li, i) => (
+                  {committedLines.map((li, i) => (
                     <tr key={i} className="border-b last:border-0">
                       <td className="p-3">{li.name}</td>
                       <td className="p-3 text-right tabular-nums">
@@ -202,6 +292,31 @@ export default async function SharedProposalPage({
                       </td>
                       <td className="p-3 text-right font-medium tabular-nums">
                         {formatCurrency(li.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {rateLines.length > 0 && (
+            <div className="rounded-md border">
+              <div className="border-b bg-muted/40 p-3">
+                <p className="text-sm font-medium">Unit rates — as found work</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Billed at the listed rate as work is found and approved. Not
+                  included in the bid total.
+                </p>
+              </div>
+              <table className="w-full text-sm">
+                <tbody>
+                  {rateLines.map((li, i) => (
+                    <tr key={i} className="border-b last:border-0">
+                      <td className="p-3">{li.name}</td>
+                      <td className="p-3 text-right font-medium tabular-nums">
+                        {li.unitPrice != null
+                          ? `${formatCurrency(li.unitPrice)}${li.unit ? ` / ${li.unit}` : ""}`
+                          : "—"}
                       </td>
                     </tr>
                   ))}
@@ -325,6 +440,26 @@ export default async function SharedProposalPage({
         </Card>
       )}
 
+      {brand && (brand.aboutBlurb || brand.credentials) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">
+              About {brand.companyName ?? "the contractor"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {brand.aboutBlurb && (
+              <p className="text-sm leading-relaxed">{brand.aboutBlurb}</p>
+            )}
+            {brand.credentials && (
+              <p className="text-xs text-muted-foreground">
+                {brand.credentials}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Respond</CardTitle>
@@ -340,7 +475,72 @@ export default async function SharedProposalPage({
           />
         </CardContent>
       </Card>
+
+      <p className="pb-4 text-center text-[11px] text-muted-foreground">
+        {brand?.companyName
+          ? `Prepared by ${brand.companyName}`
+          : "Prepared with Mercer"}
+        {brand?.credentials ? ` · ${brand.credentials}` : ""}
+      </p>
     </main>
+  );
+}
+
+/**
+ * The cover letter is the handshake: template merge fields filled per share.
+ * No template + no recipient → no letter (older proposals stay unchanged).
+ */
+function renderCoverLetter(
+  template: string | null,
+  recipientName: string | null,
+  snapshot: ProposalSnapshot,
+): string | null {
+  const recipient = recipientName?.trim() || null;
+  const base =
+    template?.trim() ||
+    (recipient
+      ? `{recipient}, thank you for the opportunity to bid ${snapshot.propertyName}. Every line in this proposal is itemized below — the price you see is the price you pay, and we're glad to walk through any of it.`
+      : null);
+  if (!base) return null;
+  return base
+    .replaceAll("{recipient}", recipient ?? snapshot.clientName)
+    .replaceAll("{property}", snapshot.propertyName)
+    .replaceAll("{total}", formatCurrency(snapshot.grandTotal));
+}
+
+/** Evidence photos beside the lines they justify — the scope story. */
+function EvidenceStrip({
+  lines,
+}: {
+  lines: ProposalSnapshot["lineItems"];
+}) {
+  const urls = [
+    ...new Set(
+      lines
+        .map((li) => li.evidencePhotoUrl)
+        .filter((u): u is string => Boolean(u)),
+    ),
+  ].slice(0, 6);
+  if (urls.length === 0) return null;
+  return (
+    <div>
+      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        From the property walk
+      </p>
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+        {urls.map((url) => (
+          <a key={url} href={url} target="_blank" rel="noreferrer">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt="Takeoff photo"
+              loading="lazy"
+              className="aspect-square w-full rounded-md border object-cover"
+            />
+          </a>
+        ))}
+      </div>
+    </div>
   );
 }
 

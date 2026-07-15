@@ -175,7 +175,12 @@ export function QuoteTotalsCard({
   );
 }
 
-export type QuotePhase = "compose" | "generating" | "review" | "done";
+export type QuotePhase =
+  | "compose"
+  | "generating"
+  | "clarify"
+  | "review"
+  | "done";
 
 export function QuoteVersionHistory({
   phase,
@@ -241,6 +246,19 @@ export function QuoteVersionHistory({
             </div>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               Drafting from your scope…
+            </p>
+          </VersionRow>
+        )}
+        {phase === "clarify" && (
+          <VersionRow icon={<PencilLine className="size-3" />} current>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold tabular-nums">
+                v{nextVersion}
+              </span>
+              <Badge variant="outline">Questions</Badge>
+            </div>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Mercer asked before drafting — answer or skip to continue.
             </p>
           </VersionRow>
         )}

@@ -378,6 +378,7 @@ export async function updateBid(
       | "googlePlaceId"
       | "draftScopeText"
       | "draftChangeLog"
+      | "draftClarifications"
     >
   >
 ) {
@@ -807,6 +808,7 @@ export async function updateLineItem(
     qty?: string | null;
     unit?: string | null;
     unitPrice?: string | null;
+    rateOnly?: boolean;
     confidence?: LineItemConfidence | null;
     flagNote?: string | null;
   }
@@ -1105,7 +1107,10 @@ export async function createProposal(
   return rows[0];
 }
 
-export async function createProposalShare(proposalId: string) {
+export async function createProposalShare(
+  proposalId: string,
+  opts?: { recipientName?: string | null },
+) {
   const user = await requireUser();
   const proposalRows = await db
     .select({ id: proposals.id, bidId: proposals.bidId })
@@ -1115,6 +1120,8 @@ export async function createProposalShare(proposalId: string) {
     .limit(1);
   const proposalRow = proposalRows[0];
   if (!proposalRow) throw new Error("Proposal not found");
+
+  const recipientName = opts?.recipientName?.trim() || null;
 
   // One live link per version: copying the link again must return the SAME
   // url (view counts and acceptance state live on the share row). Only a
@@ -1131,11 +1138,22 @@ export async function createProposalShare(proposalId: string) {
     )
     .orderBy(desc(proposalShares.createdAt))
     .limit(1);
-  if (existing[0]) return { ...existing[0], bidId: proposalRow.bidId };
+  if (existing[0]) {
+    // A newly supplied recipient personalizes the existing live link.
+    if (recipientName && recipientName !== existing[0].recipientName) {
+      const updated = await db
+        .update(proposalShares)
+        .set({ recipientName })
+        .where(eq(proposalShares.id, existing[0].id))
+        .returning();
+      return { ...(updated[0] ?? existing[0]), bidId: proposalRow.bidId };
+    }
+    return { ...existing[0], bidId: proposalRow.bidId };
+  }
 
   const rows = await db
     .insert(proposalShares)
-    .values({ proposalId })
+    .values({ proposalId, recipientName })
     .returning();
   return { ...rows[0], bidId: proposalRow.bidId };
 }
@@ -5316,6 +5334,9 @@ export async function upsertCompanyProfile(
       | "primaryColor"
       | "accentColor"
       | "bodyFont"
+      | "aboutBlurb"
+      | "credentials"
+      | "coverLetterTemplate"
     >
   >
 ) {
@@ -6960,6 +6981,8 @@ export type QuoteDraftContext = {
   bid: Bid;
   isLargeJob: boolean;
   photos: Photo[];
+  /** Documents on the bid (spec PDFs, RFPs) — sent as document blocks. */
+  attachments: Attachment[];
   priceList: PriceListItem[];
   totalSqft: number;
   buildingsCount: number;
@@ -6996,6 +7019,7 @@ export async function getQuoteDraftContext(
 
   const [
     photoRows,
+    attachmentRows,
     priceList,
     sqftRows,
     buildingRows,
@@ -7014,6 +7038,17 @@ export async function getQuoteDraftContext(
           ),
         )
         .orderBy(asc(photos.createdAt)),
+      db
+        .select()
+        .from(attachments)
+        .where(
+          and(
+            eq(attachments.userId, user.ownerUserId),
+            eq(attachments.contextType, "bid"),
+            eq(attachments.contextId, bidId),
+          ),
+        )
+        .orderBy(asc(attachments.createdAt)),
       getPriceListItems({ activeOnly: true }),
       db
         .select({
@@ -7071,6 +7106,7 @@ export async function getQuoteDraftContext(
     bid,
     isLargeJob: leadRows[0]?.isLargeJob ?? true,
     photos: photoRows,
+    attachments: attachmentRows,
     priceList,
     totalSqft: Number(sqftRows[0]?.total ?? 0),
     buildingsCount: Number(buildingRows[0]?.total ?? 0),
@@ -7082,14 +7118,17 @@ export async function getQuoteDraftContext(
 export type DraftLineInsert = {
   name: string;
   amount: string;
-  qty: string;
+  /** Null on rate-only lines (no committed quantity). */
+  qty: string | null;
   unit: string;
   unitPrice: string;
+  rateOnly: boolean;
   category: PriceListCategory;
   priceListItemId: string | null;
   sku: string | null;
   confidence: LineItemConfidence;
   evidencePhotoId: string | null;
+  evidenceAttachmentId: string | null;
   aiRationale: string | null;
   flagNote: string | null;
 };
@@ -7103,7 +7142,11 @@ export type DraftLineInsert = {
 export async function replaceAiDraftLines(
   bidId: string,
   lines: DraftLineInsert[],
-  meta: { scopeText: string; changeLog: string | null },
+  meta: {
+    scopeText: string;
+    changeLog: string | null;
+    clarifications?: unknown;
+  },
 ): Promise<LineItem[]> {
   const user = await requireUser();
   await requireBidOwnership(bidId, user.ownerUserId);
@@ -7135,6 +7178,7 @@ export async function replaceAiDraftLines(
       updatedAt: new Date(),
       draftScopeText: meta.scopeText,
       draftChangeLog: meta.changeLog,
+      draftClarifications: meta.clarifications ?? null,
     })
     .where(eq(bids.id, bidId));
 
@@ -7143,4 +7187,20 @@ export async function replaceAiDraftLines(
     .from(lineItems)
     .where(eq(lineItems.bidId, bidId))
     .orderBy(asc(lineItems.sortOrder), asc(lineItems.createdAt));
+}
+
+/**
+ * Persist the engine's clarifying questions on the in-flight draft (one
+ * round max; answers merge in before the second generation pass).
+ */
+export async function saveDraftClarifications(
+  bidId: string,
+  clarifications: unknown,
+): Promise<void> {
+  const user = await requireUser();
+  await requireBidOwnership(bidId, user.ownerUserId);
+  await db
+    .update(bids)
+    .set({ draftClarifications: clarifications, updatedAt: new Date() })
+    .where(eq(bids.id, bidId));
 }

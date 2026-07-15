@@ -32,6 +32,34 @@ const styles = StyleSheet.create({
   header: {
     marginBottom: 32,
   },
+  brandBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 18,
+  },
+  brandLogo: {
+    height: 28,
+    maxWidth: 110,
+    objectFit: "contain",
+  },
+  brandName: {
+    fontSize: 11,
+    fontFamily: "Helvetica-Bold",
+  },
+  brandTagline: {
+    fontSize: 7.5,
+    color: "#666666",
+    marginTop: 1,
+  },
+  brandContact: {
+    marginLeft: "auto",
+    textAlign: "right",
+  },
+  brandContactLine: {
+    fontSize: 7.5,
+    color: "#666666",
+  },
   title: {
     fontSize: 22,
     fontFamily: "Helvetica-Bold",
@@ -275,6 +303,11 @@ const styles = StyleSheet.create({
     fontFamily: "Helvetica-Bold",
     textAlign: "right",
   },
+  rateCardNote: {
+    marginTop: 4,
+    fontSize: 7.5,
+    color: "#666666",
+  },
   priceSection: {
     marginTop: 28,
     paddingVertical: 12,
@@ -381,22 +414,62 @@ export function ProposalDocument({
 
   const accessItems = snapshot.accessItems ?? [];
   const hasBuildings = snapshot.buildings.length > 0;
+  // Rate-only lines render as a separate rate card, not in the priced scope.
+  const committedLines = snapshot.lineItems.filter((li) => !li.rateOnly);
+  const rateLines = snapshot.lineItems.filter((li) => li.rateOnly === true);
   // Quote-engine snapshots carry per-line pricing; legacy ones are name+amount.
-  const hasRichLines = snapshot.lineItems.some(
+  const hasRichLines = committedLines.some(
     (li) => li.qty != null && li.unitPrice != null,
   );
-  const lineGroups = hasRichLines
-    ? groupLinesByCategory(snapshot.lineItems)
-    : [];
-  const lineSubtotal = snapshot.lineItems.reduce((s, l) => s + l.amount, 0);
+  const lineGroups = hasRichLines ? groupLinesByCategory(committedLines) : [];
+  const lineSubtotal = committedLines.reduce((s, l) => s + l.amount, 0);
   const versionSuffix =
     snapshot.version != null ? ` · v${snapshot.version}` : "";
+  const brand = snapshot.brand ?? null;
+  const accent = brand?.accentColor ?? brand?.primaryColor ?? null;
 
   return (
     <Document>
       <Page size="LETTER" style={styles.page}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Proposal</Text>
+        {brand?.companyName ? (
+          <View style={styles.brandBar}>
+            {brand.logoUrl ? (
+              /* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image has no alt prop */
+              <Image src={brand.logoUrl} style={styles.brandLogo} />
+            ) : null}
+            <View>
+              <Text style={styles.brandName}>{brand.companyName}</Text>
+              {brand.tagline ? (
+                <Text style={styles.brandTagline}>{brand.tagline}</Text>
+              ) : null}
+            </View>
+            <View style={styles.brandContact}>
+              {brand.phone ? (
+                <Text style={styles.brandContactLine}>{brand.phone}</Text>
+              ) : null}
+              {brand.email ? (
+                <Text style={styles.brandContactLine}>{brand.email}</Text>
+              ) : null}
+            </View>
+          </View>
+        ) : null}
+        <View
+          style={
+            accent
+              ? [
+                  styles.header,
+                  {
+                    borderBottomWidth: 2,
+                    borderBottomColor: accent,
+                    paddingBottom: 12,
+                  },
+                ]
+              : styles.header
+          }
+        >
+          <Text style={accent ? [styles.title, { color: accent }] : styles.title}>
+            Proposal
+          </Text>
           <Text style={styles.date}>
             {formattedDate}
             {versionSuffix}
@@ -639,10 +712,10 @@ export function ProposalDocument({
               </Text>
             </View>
           </>
-        ) : snapshot.lineItems.length > 0 ? (
+        ) : committedLines.length > 0 ? (
           <>
             <Text style={styles.sectionTitle}>Additional Items</Text>
-            {snapshot.lineItems.map((item, i) => (
+            {committedLines.map((item, i) => (
               <View
                 key={i}
                 style={
@@ -660,6 +733,43 @@ export function ProposalDocument({
           </>
         ) : null}
 
+        {rateLines.length > 0 ? (
+          <View wrap={false}>
+            <Text style={styles.sectionTitle}>Unit Rates — As Found Work</Text>
+            {rateLines.map((line, i) => (
+              <View
+                key={i}
+                style={
+                  i % 2 === 1
+                    ? [styles.quoteLineRow, styles.quoteLineRowAlt]
+                    : styles.quoteLineRow
+                }
+              >
+                <Text style={styles.quoteLineName}>
+                  {line.name}
+                  {line.sku ? (
+                    <Text style={styles.quoteLineSku}>
+                      {"  "}
+                      {line.sku}
+                    </Text>
+                  ) : null}
+                </Text>
+                <Text style={styles.quoteLineQty}>as found</Text>
+                <Text style={styles.quoteLineUnitPrice}></Text>
+                <Text style={styles.quoteLineAmount}>
+                  {line.unitPrice != null
+                    ? `${formatCurrency(line.unitPrice)}${line.unit ? ` / ${pricingUnitLabel(line.unit)}` : ""}`
+                    : ""}
+                </Text>
+              </View>
+            ))}
+            <Text style={styles.rateCardNote}>
+              Billed at the listed rate as work is found and approved (see
+              Additional Work). Not included in the total below.
+            </Text>
+          </View>
+        ) : null}
+
         <View style={styles.priceSection} wrap={false}>
           <Text style={styles.priceLabel}>Total Price</Text>
           <Text style={styles.priceValue}>
@@ -675,8 +785,9 @@ export function ProposalDocument({
         )}
 
         <Text style={styles.footer}>
-          Generated by Mercer — {formattedDate}
-          {versionSuffix}
+          {brand?.companyName
+            ? `${brand.companyName}${brand.credentials ? ` · ${brand.credentials}` : ""} — ${formattedDate}${versionSuffix}`
+            : `Generated by Mercer — ${formattedDate}${versionSuffix}`}
         </Text>
       </Page>
     </Document>
