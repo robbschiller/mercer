@@ -1,5 +1,16 @@
 import Link from "next/link";
 import { getPropertiesIndex } from "@/lib/store";
+
+/**
+ * Repeat business is the whole game: exteriors get repainted on a cycle.
+ * A property whose last won job is 6+ years old is due for a call.
+ */
+const REPAINT_CYCLE_MS = 6 * 365.25 * 24 * 60 * 60 * 1000;
+function repaintDue(lastWonAt: Date | null): boolean {
+  return (
+    lastWonAt != null && Date.now() - lastWonAt.getTime() > REPAINT_CYCLE_MS
+  );
+}
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -72,11 +83,18 @@ export default async function PropertiesPage() {
                       )}
                     </td>
                     <td className="py-2.5 pr-4 tabular-nums">
-                      {p.jobCount > 0 ? (
-                        p.jobCount
-                      ) : (
-                        <span className="text-muted-foreground">0</span>
-                      )}
+                      <span className="inline-flex items-center gap-2">
+                        {p.jobCount > 0 ? (
+                          p.jobCount
+                        ) : (
+                          <span className="text-muted-foreground">0</span>
+                        )}
+                        {repaintDue(p.lastWonAt) && (
+                          <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-px text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                            Repaint due
+                          </span>
+                        )}
+                      </span>
                     </td>
                     <td className="py-2.5 text-xs text-muted-foreground">
                       {p.lastActivityAt.toLocaleDateString()}

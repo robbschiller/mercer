@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
+  getAcceptedVersionForBid,
   getProposalShareBySlug,
   getPublicProjectByBidId,
   markProposalShareAccessed,
@@ -89,6 +90,19 @@ export default async function SharedProposalPage({
 
   const isAccepted = Boolean(record.share.acceptedAt);
   const isDeclined = Boolean(record.share.declinedAt);
+  const isExpired =
+    !isAccepted &&
+    !isDeclined &&
+    record.share.expiresAt != null &&
+    record.share.expiresAt.getTime() < Date.now();
+  // A link for an OLDER version than the one already accepted is superseded —
+  // it renders read-only. Newer versions (revisions) stay acceptable.
+  const acceptedVersion = isAccepted
+    ? null
+    : await getAcceptedVersionForBid(record.bid.id);
+  const isSuperseded =
+    acceptedVersion != null &&
+    (record.proposal.version ?? 0) < acceptedVersion;
   const committedLines = snapshot.lineItems.filter((li) => !li.rateOnly);
   const rateLines = snapshot.lineItems.filter((li) => li.rateOnly === true);
   const brand = snapshot.brand ?? null;
@@ -123,6 +137,7 @@ export default async function SharedProposalPage({
         snapshot={snapshot}
         bidStatus={record.bid.status}
         project={project}
+        signature={record.share.acceptedSignature}
       />
     );
   }
@@ -460,21 +475,49 @@ export default async function SharedProposalPage({
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Respond</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <PublicProposalResponse
-            slug={slug}
-            isAccepted={isAccepted}
-            isDeclined={isDeclined}
-            acceptedByName={record.share.acceptedByName}
-            acceptedByTitle={record.share.acceptedByTitle}
-            declineReason={record.share.declineReason}
-          />
-        </CardContent>
-      </Card>
+      {isSuperseded ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">
+              A newer version was accepted
+            </CardTitle>
+            <CardDescription>
+              This quote (v{record.proposal.version}) was superseded — version{" "}
+              {acceptedVersion} of this proposal has already been accepted.
+              This page stays for reference only.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      ) : isExpired ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">This link has expired</CardTitle>
+            <CardDescription>
+              Pricing this old needs a fresh look — contact{" "}
+              {brand?.companyName ?? "your contractor"}
+              {brand?.phone ? ` at ${brand.phone}` : ""} for an updated
+              proposal.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Respond</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <PublicProposalResponse
+              slug={slug}
+              isAccepted={isAccepted}
+              isDeclined={isDeclined}
+              acceptedByName={record.share.acceptedByName}
+              acceptedByTitle={record.share.acceptedByTitle}
+              declineReason={record.share.declineReason}
+              clientName={snapshot.clientName}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <p className="pb-4 text-center text-[11px] text-muted-foreground">
         {brand?.companyName
@@ -558,10 +601,12 @@ function StatusPage({
   snapshot,
   bidStatus,
   project,
+  signature,
 }: {
   snapshot: ProposalSnapshot;
   bidStatus: string;
   project: NonNullable<Awaited<ReturnType<typeof getPublicProjectByBidId>>>;
+  signature?: string | null;
 }) {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 px-4 py-10">
@@ -692,6 +737,16 @@ function StatusPage({
                 ? ` on ${formatDate(project.acceptedAt)}`
                 : ""}
             </p>
+            {signature && (
+              <p
+                className="mt-1 text-xl italic"
+                style={{
+                  fontFamily: "var(--font-instrument), ui-serif, serif",
+                }}
+              >
+                {signature}
+              </p>
+            )}
           </div>
           <div className="rounded-md border p-3 sm:col-span-2">
             <p className="text-xs text-muted-foreground">Contract value</p>

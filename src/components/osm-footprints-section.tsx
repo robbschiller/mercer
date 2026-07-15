@@ -5,6 +5,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ImportOsmBuildingsButton } from "@/components/import-osm-buildings-button";
 import { getCachedOsmFootprints } from "@/lib/osm/overpass";
 
 function formatSqm(n: number): string {
@@ -17,9 +18,14 @@ function formatSqm(n: number): string {
 type Props = {
   latitude: number | null;
   longitude: number | null;
+  bidId?: string;
 };
 
-export async function OsmFootprintsSection({ latitude, longitude }: Props) {
+export async function OsmFootprintsSection({
+  latitude,
+  longitude,
+  bidId,
+}: Props) {
   const lat =
     latitude != null && Number.isFinite(Number(latitude))
       ? Number(latitude)
@@ -120,6 +126,16 @@ export async function OsmFootprintsSection({ latitude, longitude }: Props) {
             </tbody>
           </table>
         </div>
+        {bidId && (
+          <div className="border-t pt-3">
+            <ImportOsmBuildingsButton bidId={bidId} />
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Clusters similar footprints into building types and adds each
+              with a perimeter × height wall estimate — the takeoff starts
+              measured instead of blank.
+            </p>
+          </div>
+        )}
         <p className="text-[10px] text-muted-foreground leading-relaxed">
           © OpenStreetMap contributors. Not all structures are mapped; use for
           reference only.

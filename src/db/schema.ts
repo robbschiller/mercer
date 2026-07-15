@@ -456,6 +456,10 @@ export const proposalShares = pgTable("proposal_shares", {
     .defaultNow(),
   /** "Prepared for …" — personalizes the cover letter on this link. */
   recipientName: text("recipient_name"),
+  /** Unresponded links stop accepting after this (null = never). */
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  /** The exact name typed at acceptance — the signature of record. */
+  acceptedSignature: text("accepted_signature"),
   accessedAt: timestamp("accessed_at", { withTimezone: true }),
   viewCount: integer("view_count").notNull().default(0),
   acceptedAt: timestamp("accepted_at", { withTimezone: true }),
@@ -770,6 +774,10 @@ export const userDefaults = pgTable("user_defaults", {
   pricePerGallon: numeric("price_per_gallon"),
   laborRatePerUnit: numeric("labor_rate_per_unit"),
   marginPercent: numeric("margin_percent"),
+  /** Notification-bell watermark: feed items after this count as unread. */
+  notificationsSeenAt: timestamp("notifications_seen_at", {
+    withTimezone: true,
+  }),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

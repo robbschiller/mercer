@@ -1,4 +1,9 @@
-import { getReportData, type ReportJobsSlice } from "@/lib/store";
+import {
+  getDeclineReasons,
+  getReportData,
+  getWinLossByCompany,
+  type ReportJobsSlice,
+} from "@/lib/store";
 import {
   Card,
   CardHeader,
@@ -29,7 +34,11 @@ function marginPct(slice: ReportJobsSlice): string {
 }
 
 export default async function ReportsPage() {
-  const data = await getReportData();
+  const [data, winLoss, declines] = await Promise.all([
+    getReportData(),
+    getWinLossByCompany(),
+    getDeclineReasons(),
+  ]);
 
   const leadCounts = new Map(data.leadFunnel.map((r) => [r.status, r]));
   const closedWon = leadCounts.get("won")?.count ?? 0;
@@ -207,6 +216,79 @@ export default async function ReportsPage() {
           </table>
         </CardContent>
       </Card>
+
+      {winLoss.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Win rate by company</CardTitle>
+            <CardDescription>
+              Who says yes — and what it&apos;s been worth.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs text-muted-foreground">
+                  <th className="py-2 font-medium">Company</th>
+                  <th className="py-2 text-right font-medium">Won</th>
+                  <th className="py-2 text-right font-medium">Lost</th>
+                  <th className="py-2 text-right font-medium">Open</th>
+                  <th className="py-2 text-right font-medium">Win rate</th>
+                  <th className="py-2 text-right font-medium">Won value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {winLoss.map((r) => (
+                  <tr key={r.company} className="border-b last:border-0">
+                    <td className="py-1.5">{r.company}</td>
+                    <td className="py-1.5 text-right tabular-nums">{r.won}</td>
+                    <td className="py-1.5 text-right tabular-nums">{r.lost}</td>
+                    <td className="py-1.5 text-right tabular-nums">{r.open}</td>
+                    <td className="py-1.5 text-right tabular-nums">
+                      {pct(r.won, r.won + r.lost)}
+                    </td>
+                    <td className="py-1.5 text-right tabular-nums">
+                      {r.wonValue > 0 ? money.format(r.wonValue) : ""}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
+
+      {declines.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Why deals declined</CardTitle>
+            <CardDescription>
+              Verbatim from the customer, newest first.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="flex flex-col">
+              {declines.map((d, i) => (
+                <li
+                  key={i}
+                  className="flex items-start justify-between gap-3 border-b py-2 text-sm last:border-0"
+                >
+                  <span className="min-w-0">
+                    <span className="font-medium">{d.propertyName}</span>
+                    <span className="text-muted-foreground">
+                      {" "}
+                      · {d.company} — {d.reason}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {d.declinedAt.toLocaleDateString()}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

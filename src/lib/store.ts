@@ -1174,7 +1174,12 @@ export async function createProposalShare(
 
   const rows = await db
     .insert(proposalShares)
-    .values({ proposalId, recipientName })
+    .values({
+      proposalId,
+      recipientName,
+      // Links go stale with the pricing behind them — 45 days to respond.
+      expiresAt: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000),
+    })
     .returning();
   return { ...rows[0], bidId: proposalRow.bidId };
 }
@@ -1196,6 +1201,11 @@ export async function getProposalShareBySlug(slug: string) {
 
 export async function markProposalShareAccessed(slug: string) {
   // Every visit bumps view_count; accessedAt keeps first-view semantics.
+  const before = await db
+    .select({ accessedAt: proposalShares.accessedAt })
+    .from(proposalShares)
+    .where(eq(proposalShares.id, slug))
+    .limit(1);
   const rows = await db
     .update(proposalShares)
     .set({
@@ -1204,7 +1214,40 @@ export async function markProposalShareAccessed(slug: string) {
     })
     .where(eq(proposalShares.id, slug))
     .returning();
-  return rows[0] ?? null;
+  const share = rows[0] ?? null;
+
+  // First view: "Yvonne opened the proposal" — feeds the notification bell.
+  if (share && before[0] && before[0].accessedAt == null) {
+    const bidRows = await db
+      .select({
+        bidId: bids.id,
+        userId: bids.userId,
+        leadId: bids.leadId,
+        propertyId: bids.propertyId,
+        propertyName: bids.propertyName,
+        version: proposals.version,
+      })
+      .from(proposals)
+      .innerJoin(bids, eq(bids.id, proposals.bidId))
+      .where(eq(proposals.id, share.proposalId))
+      .limit(1);
+    const b = bidRows[0];
+    if (b) {
+      await db.insert(activityEvents).values({
+        userId: b.userId,
+        bidId: b.bidId,
+        leadId: b.leadId,
+        propertyId: b.propertyId,
+        type: "proposal_viewed",
+        title: `Proposal viewed — ${b.propertyName}`,
+        body: share.recipientName
+          ? `${share.recipientName} opened quote v${b.version}.`
+          : `Quote v${b.version} was opened for the first time.`,
+        occurredAt: new Date(),
+      });
+    }
+  }
+  return share;
 }
 
 /** Pull the grand total out of a proposal snapshot (jsonb), as a numeric
@@ -1230,6 +1273,7 @@ async function respondToProposalShare(
         bidId: proposals.bidId,
         bidUserId: bids.userId,
         bidStatus: bids.status,
+        bidPropertyName: bids.propertyName,
         leadId: bids.leadId,
         propertyId: bids.propertyId,
         primaryContactId: bids.primaryContactId,
@@ -1246,6 +1290,14 @@ async function respondToProposalShare(
     if (!existing) throw new Error("Proposal share not found");
     if (existing.share.acceptedAt || existing.share.declinedAt) {
       throw new Error("This proposal has already been responded to.");
+    }
+    if (
+      existing.share.expiresAt &&
+      existing.share.expiresAt.getTime() < Date.now()
+    ) {
+      throw new Error(
+        "This proposal link has expired — ask your contractor for a fresh one.",
+      );
     }
 
     const now = new Date();
@@ -1304,6 +1356,24 @@ async function respondToProposalShare(
       source: "proposal_share",
     });
 
+    // The response event always fires (the notification bell reads it) —
+    // lead-status bookkeeping below still only applies when a lead exists.
+    await tx.insert(activityEvents).values({
+      userId: existing.bidUserId,
+      leadId: existing.leadId,
+      contactId: existing.primaryContactId,
+      propertyId: existing.propertyId,
+      bidId: existing.bidId,
+      type: "proposal_sent",
+      title: `${outcome === "won" ? "Proposal accepted" : "Proposal declined"} — ${existing.bidPropertyName}`,
+      body:
+        outcome === "won"
+          ? `${updatedShare.acceptedByName ?? "The customer"} accepted.`
+          : (updatedShare.declineReason ?? ""),
+      metadata: { outcome },
+      occurredAt: now,
+    });
+
     if (existing.leadId) {
       await tx
         .update(leads)
@@ -1313,17 +1383,6 @@ async function respondToProposalShare(
           updatedAt: now,
         })
         .where(eq(leads.id, existing.leadId));
-      await tx.insert(activityEvents).values({
-        userId: existing.bidUserId,
-        leadId: existing.leadId,
-        contactId: existing.primaryContactId,
-        propertyId: existing.propertyId,
-        bidId: existing.bidId,
-        type: "proposal_sent",
-        title: outcome === "won" ? "Proposal accepted" : "Proposal declined",
-        metadata: { outcome },
-        occurredAt: now,
-      });
       await tx.insert(auditLog).values({
         userId: existing.bidUserId,
         actorUserId: existing.bidUserId,
@@ -1356,6 +1415,9 @@ export async function acceptProposalShare(
     acceptedAt: new Date(),
     acceptedByName: data.acceptedByName,
     acceptedByTitle: data.acceptedByTitle,
+    // The typed name IS the signature of record — kept verbatim even if
+    // the display name is ever cleaned up later.
+    acceptedSignature: data.acceptedByName,
   });
 }
 
@@ -4974,6 +5036,163 @@ export async function getPipeline(): Promise<PipelineRow[]> {
   );
 }
 
+/**
+ * Public (portal) helper: the highest ACCEPTED quote version on a bid.
+ * A share for an older version renders as superseded instead of offering
+ * the accept form — newer versions (revisions) stay acceptable.
+ */
+export async function getAcceptedVersionForBid(
+  bidId: string,
+): Promise<number | null> {
+  const rows = await db
+    .select({ version: sql<number>`max(${proposals.version})` })
+    .from(proposalShares)
+    .innerJoin(proposals, eq(proposalShares.proposalId, proposals.id))
+    .where(
+      and(
+        eq(proposals.bidId, bidId),
+        sql`${proposalShares.acceptedAt} IS NOT NULL`,
+      ),
+    );
+  const v = rows[0]?.version;
+  return v == null ? null : Number(v);
+}
+
+// ── Notification bell ────────────────────────────────────────────────────────
+
+const NOTIFICATION_EVENT_TYPES = ["proposal_viewed", "proposal_sent"] as const;
+
+export type NotificationItem = {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  bidId: string | null;
+  occurredAt: Date;
+  unread: boolean;
+};
+
+export async function getNotifications(): Promise<{
+  items: NotificationItem[];
+  unreadCount: number;
+}> {
+  const user = await requireUser();
+  const [events, seen] = await Promise.all([
+    db
+      .select({
+        id: activityEvents.id,
+        type: activityEvents.type,
+        title: activityEvents.title,
+        body: activityEvents.body,
+        bidId: activityEvents.bidId,
+        occurredAt: activityEvents.occurredAt,
+      })
+      .from(activityEvents)
+      .where(
+        and(
+          eq(activityEvents.userId, user.ownerUserId),
+          inArray(activityEvents.type, [...NOTIFICATION_EVENT_TYPES]),
+        ),
+      )
+      .orderBy(desc(activityEvents.occurredAt))
+      .limit(15),
+    db
+      .select({ seenAt: userDefaults.notificationsSeenAt })
+      .from(userDefaults)
+      .where(eq(userDefaults.userId, user.userId))
+      .limit(1),
+  ]);
+  const seenAt = seen[0]?.seenAt ?? null;
+  const items = events.map((e) => ({
+    ...e,
+    unread: seenAt == null || e.occurredAt.getTime() > seenAt.getTime(),
+  }));
+  return { items, unreadCount: items.filter((i) => i.unread).length };
+}
+
+export async function markNotificationsSeen(): Promise<void> {
+  const user = await requireUser();
+  const now = new Date();
+  await db
+    .insert(userDefaults)
+    .values({ userId: user.userId, notificationsSeenAt: now, updatedAt: now })
+    .onConflictDoUpdate({
+      target: userDefaults.userId,
+      set: { notificationsSeenAt: now, updatedAt: now },
+    });
+}
+
+// ── Win/loss intelligence (Reports) ──────────────────────────────────────────
+
+export type WinLossByCompany = {
+  company: string;
+  won: number;
+  lost: number;
+  open: number;
+  wonValue: number;
+};
+
+export async function getWinLossByCompany(): Promise<WinLossByCompany[]> {
+  const user = await requireUser();
+  const rows = await db.execute(sql`
+    SELECT
+      client_name AS company,
+      count(*) FILTER (WHERE status = 'won')::int AS won,
+      count(*) FILTER (WHERE status = 'lost')::int AS lost,
+      count(*) FILTER (WHERE status IN ('draft','sent'))::int AS open,
+      coalesce(sum(contract_value::numeric) FILTER (WHERE status = 'won'), 0) AS won_value
+    FROM bids
+    WHERE user_id = ${user.ownerUserId} AND client_name <> ''
+    GROUP BY client_name
+    ORDER BY won DESC, won_value DESC
+    LIMIT 8
+  `);
+  return (rows as unknown as Record<string, unknown>[]).map((r) => ({
+    company: String(r.company),
+    won: Number(r.won),
+    lost: Number(r.lost),
+    open: Number(r.open),
+    wonValue: Number(r.won_value),
+  }));
+}
+
+export type DeclineReasonRow = {
+  propertyName: string;
+  company: string;
+  reason: string;
+  declinedAt: Date;
+};
+
+export async function getDeclineReasons(): Promise<DeclineReasonRow[]> {
+  const user = await requireUser();
+  const rows = await db
+    .select({
+      propertyName: bids.propertyName,
+      company: bids.clientName,
+      reason: proposalShares.declineReason,
+      declinedAt: proposalShares.declinedAt,
+    })
+    .from(proposalShares)
+    .innerJoin(proposals, eq(proposalShares.proposalId, proposals.id))
+    .innerJoin(bids, eq(bids.id, proposals.bidId))
+    .where(
+      and(
+        eq(bids.userId, user.ownerUserId),
+        sql`${proposalShares.declinedAt} IS NOT NULL`,
+      ),
+    )
+    .orderBy(desc(proposalShares.declinedAt))
+    .limit(10);
+  return rows
+    .filter((r) => r.declinedAt != null)
+    .map((r) => ({
+      propertyName: r.propertyName,
+      company: r.company,
+      reason: r.reason?.trim() || "No reason given",
+      declinedAt: r.declinedAt!,
+    }));
+}
+
 // ── Integrations (BYO Claude API key) ───────────────────────────────────────
 
 export type IntegrationStatus = {
@@ -5096,6 +5315,8 @@ export type PropertyIndexRow = {
   contactCount: number;
   openDealCount: number;
   jobCount: number;
+  /** Most recent won job's acceptance — drives the repaint-cycle signal. */
+  lastWonAt: Date | null;
   lastActivityAt: Date;
 };
 
@@ -5110,6 +5331,7 @@ export async function getPropertiesIndex(): Promise<PropertyIndexRow[]> {
       COALESCE(pc.n, 0)::int AS contact_count,
       (COALESCE(ol.n, 0) + COALESCE(ob.n, 0))::int AS open_deal_count,
       COALESCE(jb.n, 0)::int AS job_count,
+      jb.last_won_at,
       GREATEST(
         p.updated_at,
         COALESCE(ol.last_at, p.updated_at),
@@ -5133,7 +5355,9 @@ export async function getPropertiesIndex(): Promise<PropertyIndexRow[]> {
       WHERE b.property_id = p.id AND b.status IN ('draft', 'sent')
     ) ob ON true
     LEFT JOIN LATERAL (
-      SELECT count(*) AS n, max(b.updated_at) AS last_at FROM bids b
+      SELECT count(*) AS n, max(b.updated_at) AS last_at,
+             max(b.accepted_at) AS last_won_at
+      FROM bids b
       WHERE b.property_id = p.id AND b.delivery_status IS NOT NULL
     ) jb ON true
     WHERE p.user_id = ${user.ownerUserId}
@@ -5147,6 +5371,7 @@ export async function getPropertiesIndex(): Promise<PropertyIndexRow[]> {
     contact_count: number;
     open_deal_count: number;
     job_count: number;
+    last_won_at: string | Date | null;
     last_activity_at: string | Date;
   };
   return (rows as unknown as Row[]).map((r) => ({
@@ -5157,6 +5382,7 @@ export async function getPropertiesIndex(): Promise<PropertyIndexRow[]> {
     contactCount: Number(r.contact_count),
     openDealCount: Number(r.open_deal_count),
     jobCount: Number(r.job_count),
+    lastWonAt: r.last_won_at ? new Date(r.last_won_at) : null,
     lastActivityAt: new Date(r.last_activity_at),
   }));
 }

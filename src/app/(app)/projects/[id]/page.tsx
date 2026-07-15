@@ -1091,6 +1091,16 @@ function ChangeOrdersCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        <div className="flex items-start justify-between gap-3 rounded-md border border-primary/20 bg-primary/[0.03] p-3">
+          <p className="text-sm text-muted-foreground">
+            Found more scope on site? Draft an additional-work quote with the
+            engine — describe it, review the lines, send a fresh version. When
+            the customer accepts, the contract value updates to the new total.
+          </p>
+          <Button variant="outline" size="sm" asChild className="shrink-0">
+            <Link href={`/bids/${projectId}`}>Draft with AI</Link>
+          </Button>
+        </div>
         <form
           action={createChangeOrderAction}
           className="grid gap-3 rounded-md border p-3"
