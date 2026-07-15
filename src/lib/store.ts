@@ -7180,6 +7180,212 @@ export async function getContactEmploymentHistory(
   return rows.map((r) => ({ ...r, current: r.endDate == null }));
 }
 
+/**
+ * The people register (Contacts redesign, frame 6a): one rich row per
+ * contact — who they are, what they've been worth, and whether they're
+ * going cold with work on the table.
+ */
+export type ContactRegisterRow = {
+  id: string;
+  name: string;
+  title: string | null;
+  company: string | null;
+  preferredMethod: ContactMethod | null;
+  /** Current employer tenure from dated employment history. */
+  sinceYear: number | null;
+  prevEmployer: string | null;
+  propsCount: number;
+  dealsCount: number;
+  wonCount: number;
+  decidedCount: number;
+  /** Sum of contract values on bids where they were the primary contact. */
+  lifetime: number;
+  openLeadCount: number;
+  openBidCount: number;
+  /** Best open-item description for the side rail. */
+  openLine: string | null;
+  lastTouchAt: Date | null;
+  isDecisionMaker: boolean;
+};
+
+export async function getContactsRegister(options?: {
+  q?: string | null;
+  limit?: number;
+  offset?: number;
+}): Promise<{ rows: ContactRegisterRow[]; total: number }> {
+  const user = await requireUser();
+  const q = options?.q?.trim() || null;
+  const limit = Math.min(Math.max(options?.limit ?? 60, 1), 200);
+  const offset = Math.max(options?.offset ?? 0, 0);
+  const needle = q ? `%${q}%` : null;
+  const search = needle
+    ? sql`AND (c.name ILIKE ${needle} OR c.title ILIKE ${needle}
+           OR EXISTS (SELECT 1 FROM accounts sa WHERE sa.id = c.account_id AND sa.name ILIKE ${needle}))`
+    : sql``;
+  const countRows = await db.execute(sql`
+    SELECT count(*)::int AS n FROM contacts c
+    WHERE c.user_id = ${user.ownerUserId} ${search}
+  `);
+  const total = Number(
+    (countRows as unknown as Array<{ n: number }>)[0]?.n ?? 0,
+  );
+  const rows = await db.execute(sql`
+    SELECT
+      c.id, c.name, c.title, c.preferred_contact_method,
+      a.name AS company,
+      EXTRACT(YEAR FROM ce.since)::int AS since_year,
+      pe.prev_name,
+      COALESCE(pc.n, 0)::int AS props_count,
+      COALESCE(ld.total, 0)::int AS lead_count,
+      COALESCE(ld.open, 0)::int AS open_lead_count,
+      COALESCE(bd.total, 0)::int AS bid_count,
+      COALESCE(bd.open, 0)::int AS open_bid_count,
+      COALESCE(bd.won, 0)::int AS won_count,
+      COALESCE(bd.lost, 0)::int AS lost_count,
+      COALESCE(bd.won_value, 0) AS lifetime,
+      bd.open_bid_line,
+      GREATEST(ld.last_contacted, ae.last_at) AS last_touch_at,
+      COALESCE(dm.is_dm, false) AS is_dm
+    FROM contacts c
+    LEFT JOIN accounts a ON a.id = c.account_id
+    LEFT JOIN LATERAL (
+      SELECT min(e.start_date) AS since FROM contact_employment e
+      WHERE e.contact_id = c.id AND e.end_date IS NULL
+    ) ce ON true
+    LEFT JOIN LATERAL (
+      SELECT acc.name AS prev_name FROM contact_employment e
+      INNER JOIN accounts acc ON acc.id = e.account_id
+      WHERE e.contact_id = c.id AND e.end_date IS NOT NULL
+      ORDER BY e.end_date DESC LIMIT 1
+    ) pe ON true
+    LEFT JOIN LATERAL (
+      SELECT count(*) AS n FROM property_contacts p
+      WHERE p.contact_id = c.id AND p.active = true
+    ) pc ON true
+    LEFT JOIN LATERAL (
+      SELECT count(*) FILTER (WHERE l.status <> 'quoted') AS total,
+        count(*) FILTER (WHERE l.status IN ('needs_takeoff','takeoff_scheduled','on_hold')) AS open,
+        max(l.last_contacted_at) AS last_contacted
+      FROM leads l WHERE l.primary_contact_id = c.id
+    ) ld ON true
+    LEFT JOIN LATERAL (
+      SELECT count(*) AS total,
+        count(*) FILTER (WHERE b.status IN ('draft','sent')) AS open,
+        count(*) FILTER (WHERE b.status = 'won') AS won,
+        count(*) FILTER (WHERE b.status = 'lost') AS lost,
+        sum(b.contract_value::numeric) FILTER (WHERE b.contract_value IS NOT NULL) AS won_value,
+        (array_agg(b.property_name ORDER BY b.updated_at DESC)
+          FILTER (WHERE b.status = 'sent'))[1] AS open_bid_line
+      FROM bids b WHERE b.primary_contact_id = c.id
+    ) bd ON true
+    LEFT JOIN LATERAL (
+      SELECT max(ev.occurred_at) AS last_at FROM activity_events ev
+      WHERE ev.contact_id = c.id
+    ) ae ON true
+    LEFT JOIN LATERAL (
+      SELECT true AS is_dm FROM property_contacts p
+      WHERE p.contact_id = c.id AND p.active = true
+        AND (p.role ILIKE '%decision%' OR p.decision_influence ILIKE '%decision%'
+             OR p.decision_influence ILIKE '%approver%')
+      LIMIT 1
+    ) dm ON true
+    WHERE c.user_id = ${user.ownerUserId} ${search}
+    ORDER BY COALESCE(bd.won_value, 0) DESC, c.name ASC
+    LIMIT ${limit} OFFSET ${offset}
+  `);
+  type Row = {
+    id: string;
+    name: string;
+    title: string | null;
+    preferred_contact_method: string | null;
+    company: string | null;
+    since_year: number | null;
+    prev_name: string | null;
+    props_count: number;
+    lead_count: number;
+    open_lead_count: number;
+    bid_count: number;
+    open_bid_count: number;
+    won_count: number;
+    lost_count: number;
+    lifetime: string | number;
+    open_bid_line: string | null;
+    last_touch_at: string | Date | null;
+    is_dm: boolean;
+  };
+  const mapped = (rows as unknown as Row[]).map((r) => ({
+    id: r.id,
+    name: r.name,
+    title: r.title,
+    company: r.company,
+    preferredMethod: (r.preferred_contact_method ?? null) as ContactMethod | null,
+    sinceYear: r.since_year == null ? null : Number(r.since_year),
+    prevEmployer: r.prev_name,
+    propsCount: Number(r.props_count),
+    dealsCount: Number(r.lead_count) + Number(r.bid_count),
+    wonCount: Number(r.won_count),
+    decidedCount: Number(r.won_count) + Number(r.lost_count),
+    lifetime: Number(r.lifetime ?? 0),
+    openLeadCount: Number(r.open_lead_count),
+    openBidCount: Number(r.open_bid_count),
+    openLine: r.open_bid_line ? `Quote out · ${r.open_bid_line}` : null,
+    lastTouchAt: r.last_touch_at ? new Date(r.last_touch_at) : null,
+    isDecisionMaker: Boolean(r.is_dm),
+  }));
+  return { rows: mapped, total };
+}
+
+/** Every deal that ever ran through a contact — same shape as PropertyDeal. */
+export async function getContactDeals(
+  contactId: string,
+): Promise<PropertyDeal[]> {
+  const user = await requireUser();
+  const [leadRows, bidRows] = await Promise.all([
+    db
+      .select()
+      .from(leads)
+      .where(
+        and(
+          eq(leads.userId, user.ownerUserId),
+          eq(leads.primaryContactId, contactId),
+          ne(leads.status, "quoted"),
+        ),
+      ),
+    db
+      .select()
+      .from(bids)
+      .where(
+        and(
+          eq(bids.userId, user.ownerUserId),
+          eq(bids.primaryContactId, contactId),
+        ),
+      ),
+  ]);
+  const deals: PropertyDeal[] = [
+    ...leadRows.map((l) => ({
+      kind: "lead" as const,
+      id: l.id,
+      href: `/leads/${l.id}`,
+      name: l.name,
+      status: l.status,
+      value: l.estValue == null ? null : Number(l.estValue),
+      createdAt: l.createdAt,
+      acceptedAt: null,
+    })),
+    ...bidRows.map((b) => ({
+      kind: (b.deliveryStatus ? "job" : "bid") as "job" | "bid",
+      id: b.id,
+      href: b.deliveryStatus ? `/projects/${b.id}` : `/bids/${b.id}`,
+      name: b.label ?? b.propertyName,
+      status: b.deliveryStatus ?? b.status,
+      value: b.contractValue == null ? null : Number(b.contractValue),
+      createdAt: b.createdAt,
+      acceptedAt: b.acceptedAt,
+    })),
+  ];
+  return deals.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
 // ── Relationship editing (dated rows; one current per property/contact) ────
 
 const PROPERTY_RELATIONSHIP_TABLES = {
