@@ -161,6 +161,7 @@ export default async function BidPage({
         <OsmFootprintsSection
           latitude={bid.latitude}
           longitude={bid.longitude}
+          bidId={bid.id}
         />
       </Suspense>
 

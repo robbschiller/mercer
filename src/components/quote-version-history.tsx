@@ -65,6 +65,12 @@ function shareMeta(share: ProposalShare | null): string | null {
   if (share.declinedAt && share.declineReason) {
     parts.push(`Declined — ${share.declineReason}`);
   }
+  if (!share.acceptedAt && !share.declinedAt && share.expiresAt) {
+    const expired = new Date(share.expiresAt).getTime() < Date.now();
+    parts.push(
+      `${expired ? "Expired" : "Expires"} ${new Date(share.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,
+    );
+  }
   return parts.join(" · ");
 }
 

@@ -16,6 +16,7 @@ export function PublicProposalResponse({
   acceptedByName,
   acceptedByTitle,
   declineReason,
+  clientName,
 }: {
   slug: string;
   isAccepted: boolean;
@@ -23,6 +24,7 @@ export function PublicProposalResponse({
   acceptedByName: string | null;
   acceptedByTitle: string | null;
   declineReason: string | null;
+  clientName?: string;
 }) {
   const [isPending, startTransition] = useTransition();
   const [accepted, setAccepted] = useState(isAccepted);
@@ -31,6 +33,7 @@ export function PublicProposalResponse({
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
   const [reason, setReason] = useState("");
+  const [agreed, setAgreed] = useState(false);
 
   function onAccept() {
     setError(null);
@@ -99,9 +102,39 @@ export function PublicProposalResponse({
           disabled={isPending}
         />
       </div>
+      {name.trim().length > 0 && (
+        <div className="rounded-md border bg-muted/30 px-4 py-3">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            Signature
+          </p>
+          <p
+            className="mt-0.5 text-2xl italic leading-snug"
+            style={{ fontFamily: "var(--font-instrument), ui-serif, serif" }}
+          >
+            {name.trim()}
+          </p>
+        </div>
+      )}
+      <label className="flex items-start gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={agreed}
+          onChange={(e) => setAgreed(e.target.checked)}
+          disabled={isPending}
+          className="mt-0.5 size-4 rounded border-input"
+        />
+        <span className="text-muted-foreground">
+          I&apos;m authorized to accept this proposal
+          {clientName ? ` on behalf of ${clientName}` : ""}, and my typed name
+          above serves as my electronic signature.
+        </span>
+      </label>
       <div className="flex flex-wrap gap-2">
-        <Button onClick={onAccept} disabled={isPending || name.trim().length === 0}>
-          Accept proposal
+        <Button
+          onClick={onAccept}
+          disabled={isPending || name.trim().length === 0 || !agreed}
+        >
+          Accept &amp; sign
         </Button>
       </div>
 

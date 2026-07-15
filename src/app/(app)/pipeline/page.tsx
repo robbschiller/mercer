@@ -6,6 +6,7 @@ import {
   type PipelineStage,
 } from "@/lib/store";
 import { scheduleTakeoffAction } from "@/lib/actions";
+import { FollowUpNudge } from "@/components/follow-up-nudge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -243,14 +244,7 @@ function NextCell({ row }: { row: PipelineRow }) {
     );
   }
   if (row.kind === "bid" && row.stage === "sent") {
-    return (
-      <Link
-        href={row.href}
-        className="text-xs text-muted-foreground hover:underline"
-      >
-        Follow up →
-      </Link>
-    );
+    return <FollowUpNudge bidId={row.id} />;
   }
   return null;
 }
