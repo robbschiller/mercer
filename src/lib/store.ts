@@ -4902,6 +4902,12 @@ export type PipelineRow = {
   takeoffScheduledAt: Date | null;
   followUpAt: string | null;
   updatedAt: Date;
+  /** Sent rows: link telemetry for the going-quiet lens. */
+  sentDaysAgo: number | null;
+  neverOpened: boolean;
+  silentDays: number | null;
+  /** Anything that moved in the last 24h gets the blue dot. */
+  advancedToday: boolean;
 };
 
 const OPEN_LEAD_PIPELINE_STATUSES = [
@@ -4947,11 +4953,14 @@ export async function getPipeline(): Promise<PipelineRow[]> {
         s.declined_at IS NOT NULL AS declined,
         s.id IS NOT NULL AS sent,
         COALESCE(s.view_count, 0)::int AS view_count,
+        s.created_at AS sent_at,
+        s.accessed_at,
         COALESCE(p.snapshot->'pricing'->>'grandTotal', p.snapshot->>'grandTotal') AS total
       FROM proposals p
       INNER JOIN bids b ON b.id = p.bid_id AND b.user_id = ${user.ownerUserId}
       LEFT JOIN LATERAL (
-        SELECT ps.id, ps.accepted_at, ps.declined_at, ps.view_count
+        SELECT ps.id, ps.accepted_at, ps.declined_at, ps.view_count,
+               ps.created_at, ps.accessed_at
         FROM proposal_shares ps
         WHERE ps.proposal_id = p.id
         ORDER BY ps.created_at DESC
@@ -4968,6 +4977,8 @@ export async function getPipeline(): Promise<PipelineRow[]> {
     declined: boolean;
     sent: boolean;
     view_count: number;
+    sent_at: string | Date | null;
+    accessed_at: string | Date | null;
     total: string | null;
   };
   const quoteByBid = new Map(
@@ -4983,10 +4994,15 @@ export async function getPipeline(): Promise<PipelineRow[]> {
               ? "sent"
               : "ready") as "accepted" | "declined" | "sent" | "ready",
         viewCount: Number(q.view_count),
+        sentAt: q.sent_at ? new Date(q.sent_at) : null,
+        accessedAt: q.accessed_at ? new Date(q.accessed_at) : null,
         total: q.total == null ? null : Number(q.total),
       },
     ]),
   );
+  const dayAge = (d: Date | null) =>
+    d == null ? null : Math.max(0, Math.round((Date.now() - d.getTime()) / 86_400_000));
+  const isToday = (d: Date) => Date.now() - d.getTime() < 86_400_000;
 
   const rows: PipelineRow[] = [
     ...leadRows.map(({ lead, propertyDisplayName, accountName }) => ({
@@ -5002,6 +5018,10 @@ export async function getPipeline(): Promise<PipelineRow[]> {
       takeoffScheduledAt: lead.takeoffScheduledAt,
       followUpAt: lead.followUpAt,
       updatedAt: lead.updatedAt,
+      sentDaysAgo: null,
+      neverOpened: false,
+      silentDays: null,
+      advancedToday: isToday(lead.updatedAt),
     })),
     ...bidRows.map((bid) => {
       const quote = quoteByBid.get(bid.id) ?? null;
@@ -5024,6 +5044,14 @@ export async function getPipeline(): Promise<PipelineRow[]> {
         takeoffScheduledAt: null,
         followUpAt: null,
         updatedAt: bid.updatedAt,
+        sentDaysAgo: bid.status === "sent" ? dayAge(quote?.sentAt ?? null) : null,
+        neverOpened:
+          bid.status === "sent" && quote != null && quote.accessedAt == null,
+        silentDays:
+          bid.status === "sent"
+            ? dayAge(quote?.accessedAt ?? quote?.sentAt ?? null)
+            : null,
+        advancedToday: isToday(bid.updatedAt),
       };
     }),
   ];

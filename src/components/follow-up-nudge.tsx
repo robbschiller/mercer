@@ -31,9 +31,9 @@ export function FollowUpNudge({ bidId }: { bidId: string }) {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:underline"
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border bg-card px-3 text-xs font-medium text-foreground/80 transition-colors hover:border-foreground hover:bg-foreground hover:text-background"
         >
-          <Sparkles className="size-3" />
+          <Sparkles className="size-3.5" />
           Draft follow-up
         </button>
       </PopoverTrigger>
