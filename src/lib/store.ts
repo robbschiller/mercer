@@ -5623,6 +5623,10 @@ export type DeclineReasonRow = {
   propertyName: string;
   company: string;
   reason: string;
+  /** True when the customer actually wrote something. */
+  hasReason: boolean;
+  /** The declined quote's grand total — what walked away. */
+  value: number | null;
   declinedAt: Date;
 };
 
@@ -5634,6 +5638,9 @@ export async function getDeclineReasons(): Promise<DeclineReasonRow[]> {
       company: bids.clientName,
       reason: proposalShares.declineReason,
       declinedAt: proposalShares.declinedAt,
+      value: sql<
+        string | null
+      >`COALESCE(${proposals.snapshot}->'pricing'->>'grandTotal', ${proposals.snapshot}->>'grandTotal')`,
     })
     .from(proposalShares)
     .innerJoin(proposals, eq(proposalShares.proposalId, proposals.id))
@@ -5652,8 +5659,110 @@ export async function getDeclineReasons(): Promise<DeclineReasonRow[]> {
       propertyName: r.propertyName,
       company: r.company,
       reason: r.reason?.trim() || "No reason given",
+      hasReason: Boolean(r.reason?.trim()),
+      value: r.value == null ? null : Number(r.value),
       declinedAt: r.declinedAt!,
     }));
+}
+
+/**
+ * Reports redesign extras: the awaiting-response stat and the per-job
+ * delivered-margin breakdown (headline margin derives from these rows so
+ * the stat card and the table can never disagree).
+ */
+export type ReportsExtras = {
+  awaiting: {
+    count: number;
+    totalValue: number;
+    oldestDays: number | null;
+  };
+  deliveredJobs: Array<{
+    bidId: string;
+    job: string;
+    company: string;
+    /** contract_value + approved additional work. */
+    contracted: number;
+    /** All expenses incl. tax — same math the job page shows. */
+    spent: number;
+  }>;
+};
+
+export async function getReportsExtras(): Promise<ReportsExtras> {
+  const user = await requireUser();
+  const [awaitRows, jobRows] = await Promise.all([
+    db.execute(sql`
+      WITH latest AS (
+        SELECT DISTINCT ON (p.bid_id)
+          COALESCE(p.snapshot->'pricing'->>'grandTotal', p.snapshot->>'grandTotal')::numeric AS total,
+          s.created_at AS sent_at
+        FROM proposals p
+        INNER JOIN bids b ON b.id = p.bid_id
+          AND b.user_id = ${user.ownerUserId} AND b.status = 'sent'
+        LEFT JOIN LATERAL (
+          SELECT ps.created_at FROM proposal_shares ps
+          WHERE ps.proposal_id = p.id
+          ORDER BY ps.created_at DESC LIMIT 1
+        ) s ON true
+        ORDER BY p.bid_id, p.version DESC
+      )
+      SELECT count(*)::int AS count,
+        coalesce(sum(total), 0)::text AS total_value,
+        min(sent_at) AS oldest_sent_at
+      FROM latest
+    `),
+    db.execute(sql`
+      SELECT b.id,
+        COALESCE(NULLIF(b.label, ''), b.property_name) AS job,
+        b.client_name AS company,
+        (b.contract_value::numeric + co.total)::text AS contracted,
+        e.total::text AS spent
+      FROM bids b
+      LEFT JOIN LATERAL (
+        SELECT coalesce(sum(amount::numeric), 0) AS total
+        FROM change_orders WHERE bid_id = b.id AND status = 'approved'
+      ) co ON true
+      LEFT JOIN LATERAL (
+        SELECT coalesce(sum(amount::numeric + coalesce(tax::numeric, 0)), 0) AS total
+        FROM expenses WHERE bid_id = b.id
+      ) e ON true
+      WHERE b.user_id = ${user.ownerUserId}
+        AND b.contract_value IS NOT NULL
+        AND b.delivery_status IN ('complete', 'warranty_watch')
+      ORDER BY (b.contract_value::numeric + co.total) DESC
+    `),
+  ]);
+  const a = (
+    awaitRows as unknown as Array<{
+      count: number;
+      total_value: string;
+      oldest_sent_at: string | Date | null;
+    }>
+  )[0];
+  const oldest = a?.oldest_sent_at ? new Date(a.oldest_sent_at) : null;
+  return {
+    awaiting: {
+      count: Number(a?.count ?? 0),
+      totalValue: Number(a?.total_value ?? 0),
+      oldestDays: oldest
+        ? Math.floor((Date.now() - oldest.getTime()) / 86_400_000)
+        : null,
+    },
+    deliveredJobs: (
+      jobRows as unknown as Array<{
+        id: string;
+        job: string;
+        company: string;
+        contracted: string;
+        spent: string;
+      }>
+    ).map((r) => ({
+      bidId: r.id,
+      job: r.job,
+      company: r.company,
+      contracted: Number(r.contracted),
+      spent: Number(r.spent),
+    })),
+  };
 }
 
 // ── Integrations (BYO Claude API key) ───────────────────────────────────────
