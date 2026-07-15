@@ -1,4 +1,4 @@
-# Design prompts — Home · Pipeline · Jobs · Properties · Reports · Contacts
+# Design prompts — Home · Pipeline · Jobs · Properties · Reports · Contacts · New Lead · New Bid
 
 *2026-07-14. Paste the SYSTEM block plus ONE page block per Claude Design session
 (same project as the sidebar: `mercer`, d3b4b34a). Grounded in Jordan's AQP canon
@@ -265,6 +265,108 @@ Implementation notes (for Claude Code, not the designer): everything maps to
 real data except "previously at X" — we track current `accountId`, not
 employment history, so render tenure only when known; days-since-touch derives
 from `contact_attempts`. Neither blocks the design.
+
+---
+
+## 7 — NEW LEAD
+
+*Starter: build on `Sidebar Redesign - Direction A Final.html` — its sidebar
+is the left column of every frame (Pipeline active). Save as
+`New Lead Redesign - Direction A.html` (data in `intake-data.js`, logic in
+`intake.js`, 7a/7b frame switcher top-right).*
+
+This is the front door of the entire system — every dollar Mercer ever tracks
+enters through this screen or New Bid. Today it's a ten-field vertical form
+with a bare text input for the address. Kill the form. The redesign has ONE
+organizing idea: **finding the building must feel exactly like using Google
+Maps.** Type, see the building, done.
+
+**THE PROPERTY FINDER (the shared pattern — design it once, both intake
+screens reuse it).** A single oversized search field is the hero of the page —
+Maps-style: pill-shaped, prominent, auto-focused, placeholder "Property name
+or address…". As the user types, one merged suggestion dropdown:
+- **Buildings we know** (top, marked with a small history chip): "Westgate
+  Commons — Winter Park · 2 jobs · $181k lifetime · Repaint due". Picking one
+  attaches the existing property record — never a duplicate.
+- **Google Maps results** below (pin icon, address lines, exactly the Places
+  suggestion feel — that's the muscle memory we're borrowing).
+Picking either one flips the hero into the **building card**: a wide
+satellite/aerial view with the pin dropped (use `image-slot`), the resolved
+name + formatted address over it, and a quiet "not it? ⌫ search again"
+escape. If we know the building, the aerial is bannered with its history
+("Painted Jul 2019 · $84k · Yvonne Alvarez decided") — the moment of delight:
+*Mercer already knows this building.* No separate name/address/lat/lng
+fields anywhere; the card IS the value.
+
+Two frames:
+
+**7a — Finder open.** The page at first paint: big search hero mid-viewport,
+suggestions dropdown open on a half-typed query ("nona ") showing 1 known
+building + 3 Maps results, and below the fold a ghost row of what comes next
+(Who / What / Send-off, dimmed). Header eyebrow: "New lead · the front door".
+
+**7b — Building locked, 20 seconds to done.** Aerial building card on top
+(known-building banner variant), then ONE compact band each for:
+- **Who**: contact autocomplete (existing contacts surface with their company
+  chip + "3 deals" spark), else free name + phone/email inline; company
+  autocomplete beside it.
+- **What**: scope as toggle chips (Full exterior · Breezeways · Stairs ·
+  Wood rot · Interior common), rough $ (mono input), Large-job toggle
+  (≥ 2 weeks — drives templates), source chip-select (recent sources as
+  chips + free text).
+- **Notes & files**: one quiet drop zone line ("Drop the RFP, paint spec, or
+  referral email — they ride along"), collapsed textarea.
+Primary action bottom-right: solid [Add lead]; secondary [Add & schedule
+takeoff]. The whole 7b should read as ~20 seconds of work: pick building,
+pick person, tap two chips, done.
+
+---
+
+## 8 — NEW BID
+
+*Starter: build on `Sidebar Redesign - Direction A Final.html` — sidebar left,
+Pipeline active. Save as `New Bid Redesign - Direction A.html` (reuse
+`intake-data.js`/`intake.js` patterns from §7; frames 8a/8b).*
+
+The other front door — and the on-ramp to the quote engine, which is the crux
+of the product. Same PROPERTY FINDER pattern as §7 (identical component,
+identical feel — a user who's used one has used both). What differs is what
+happens after the building locks.
+
+**8a — Finder, bid flavor.** Same Maps-style search hero. The known-building
+suggestions here surface bid-relevant history ("Miura Village · quote v1
+$146,700 · declined Mar" / "Nona Terrace · won $1.2M · specs on file").
+Arriving from a lead (?leadId=) skips 8a entirely — show that as a note.
+
+**8b — Confirm & launch.** The aerial building card locked on top. Below it,
+two bands and a launchpad:
+- **The deal**: client/company autocomplete (prefilled from the property's
+  management company with a "from property record" hint), bid label
+  (defaulting to "<Property> – Full Exterior Repaint"), small/large fork as
+  two fat radio cards (Small · days, deposit+final vs Large · weeks,
+  draw billing) — not a checkbox.
+- **What we already know** (only when the property has history): specs strip
+  pulled from the property record — paintable sqft, breezeways, stair
+  systems, last colors — each as a chip with a "reuses takeoff" note. This is
+  the repeat-business payoff rendered at the exact moment it saves work.
+- **Launchpad**: the primary action is not "Create bid" — it's
+  [Create & draft quote with AI] (solid, with a sparkle icon and a sub-line
+  "scope + photos → priced lines in ~60s"), with a quiet secondary
+  [Create empty bid]. The screen should make the AI path feel like the
+  default on-ramp, because it is.
+
+Interactions (preview-only): typing filters the merged dropdown; picking a
+suggestion animates the search hero into the building card; the ⌫ escape
+returns to search; the small/large cards toggle; toasts on the primary
+actions.
+
+Implementation notes (for Claude Code, not the designer): the Places
+autocomplete, geo fields, enrichment runner, and `satellite_image_url` all
+exist (`address-autocomplete.tsx`, `enrichment-runner.ts`) — the finder is a
+re-skin + merged-suggestions layer, not new infrastructure. Known-building
+matches come from `properties` (name/address ILIKE + trigram later); specs
+strip from the AQP property fields; EagleView measurement
+(docs/eagleview-integration-plan.md) slots into the specs strip later.
 
 ---
 
