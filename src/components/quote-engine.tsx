@@ -8,11 +8,13 @@ import {
   Check,
   CheckCircle2,
   Download,
+  FileText,
   History,
   Info,
   Link2,
   Loader2,
   Lock,
+  MessageCircleQuestion,
   Mic,
   Plus,
   RotateCcw,
@@ -28,11 +30,20 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   createProposalShareAction,
   generateProposalAction,
+  uploadAttachmentAction,
   uploadPhotoAction,
 } from "@/lib/actions";
 import { generateQuoteDraft } from "@/lib/actions/generate-quote-draft";
+import type { DraftClarification } from "@/lib/quote-draft";
 import { formatCurrency } from "@/lib/pricing";
-import type { Bid, LineItem, Photo, Proposal, ProposalShare } from "@/lib/store";
+import type {
+  Attachment,
+  Bid,
+  LineItem,
+  Photo,
+  Proposal,
+  ProposalShare,
+} from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { QuoteReviewCard } from "@/components/quote-review-card";
 import {
@@ -132,6 +143,7 @@ function DictateButton({ onTranscript }: { onTranscript: (t: string) => void }) 
 function Composer({
   bid,
   photos,
+  attachments,
   totalSqft,
   buildingsCount,
   catalogCount,
@@ -143,6 +155,7 @@ function Composer({
 }: {
   bid: Bid;
   photos: Photo[];
+  attachments: Attachment[];
   totalSqft: number;
   buildingsCount: number;
   catalogCount: number;
@@ -157,6 +170,8 @@ function Composer({
   const shown = photos.slice(0, 8);
   const extra = photos.length - shown.length;
 
+  // Drop anything: images become takeoff photos, documents (spec PDFs,
+  // RFPs, dimension notes) become bid attachments — both feed the draft.
   const uploadFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const list = Array.from(files);
@@ -165,10 +180,14 @@ function Composer({
         const fd = new FormData();
         fd.set("contextType", "bid");
         fd.set("contextId", bid.id);
-        fd.set("kind", "takeoff");
         fd.set("returnTo", `/bids/${bid.id}`);
         fd.set("file", file);
-        await uploadPhotoAction(fd);
+        if (file.type.startsWith("image/")) {
+          fd.set("kind", "takeoff");
+          await uploadPhotoAction(fd);
+        } else {
+          await uploadAttachmentAction(fd);
+        }
       }
     });
   };
@@ -213,16 +232,24 @@ function Composer({
           </div>
         </div>
 
-        {/* takeoff photos */}
+        {/* takeoff photos + documents */}
         <div>
           <div className="mb-2 flex items-center justify-between">
             <span className="inline-flex items-center gap-2 text-sm">
               <Camera className="size-4 text-muted-foreground" />
-              {photos.length > 0 ? (
+              {photos.length > 0 || attachments.length > 0 ? (
                 <>
                   <span className="font-medium">
-                    {photos.length} takeoff photo
-                    {photos.length !== 1 ? "s" : ""}
+                    {[
+                      photos.length > 0
+                        ? `${photos.length} photo${photos.length !== 1 ? "s" : ""}`
+                        : null,
+                      attachments.length > 0
+                        ? `${attachments.length} document${attachments.length !== 1 ? "s" : ""}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </span>
                   <span className="text-muted-foreground">
                     will be referenced
@@ -230,8 +257,8 @@ function Composer({
                 </>
               ) : (
                 <span className="text-muted-foreground">
-                  No takeoff photos yet — add some so the draft can cite
-                  evidence
+                  Drop photos, aerials, spec PDFs, dimension notes — the draft
+                  cites what it reads
                 </span>
               )}
             </span>
@@ -259,6 +286,21 @@ function Composer({
                 +{extra}
               </div>
             )}
+            {attachments.map((att) => (
+              <a
+                key={att.id}
+                href={att.url}
+                target="_blank"
+                rel="noreferrer"
+                title={att.fileName}
+                className="flex size-16 flex-col items-center justify-center gap-1 overflow-hidden rounded-md border bg-muted/30 px-1 text-muted-foreground"
+              >
+                <FileText className="size-5" />
+                <span className="w-full truncate text-center text-[9px] leading-tight">
+                  {att.fileName}
+                </span>
+              </a>
+            ))}
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
@@ -275,7 +317,7 @@ function Composer({
             <input
               ref={fileRef}
               type="file"
-              accept="image/*"
+              accept="image/*,application/pdf,.pdf,.txt,.csv,.eml,.msg,.doc,.docx,.xls,.xlsx"
               multiple
               className="hidden"
               onChange={(e) => {
@@ -342,17 +384,26 @@ function Composer({
 
 function Generating({
   photoCount,
+  documentCount,
   catalogCount,
   propertyName,
 }: {
   photoCount: number;
+  documentCount: number;
   catalogCount: number;
   propertyName: string;
 }) {
   const steps = [
     {
-      label: "Reading takeoff photos",
-      meta: `${photoCount} photo${photoCount !== 1 ? "s" : ""}`,
+      label: "Reading photos, aerials & documents",
+      meta: [
+        photoCount > 0 ? `${photoCount} photo${photoCount !== 1 ? "s" : ""}` : null,
+        documentCount > 0
+          ? `${documentCount} doc${documentCount !== 1 ? "s" : ""}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
     },
     {
       label: "Matching scope against price list",
@@ -434,6 +485,85 @@ function Generating({
   );
 }
 
+// ── State 2.5: clarifying questions ──────────────────────────────────────────
+
+function Clarify({
+  questions,
+  onSubmit,
+  onSkip,
+}: {
+  questions: DraftClarification[];
+  onSubmit: (answered: DraftClarification[]) => void;
+  onSkip: () => void;
+}) {
+  const [answers, setAnswers] = useState<string[]>(
+    questions.map((q) => q.answer ?? ""),
+  );
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-start justify-between space-y-0 border-b py-4">
+        <div className="flex items-center gap-2.5">
+          <span className="flex size-8 items-center justify-center rounded-lg border border-primary/40 bg-primary/5 text-primary">
+            <MessageCircleQuestion className="size-4" />
+          </span>
+          <div>
+            <CardTitle className="text-base">
+              Quick question{questions.length !== 1 ? "s" : ""} before drafting
+            </CardTitle>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              The answers change the numbers — Mercer asks instead of guessing.
+            </p>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4 pt-5">
+        {questions.map((q, i) => (
+          <div key={i} className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium" htmlFor={`clarify-${i}`}>
+              {q.question}
+            </label>
+            <p className="text-xs text-muted-foreground">{q.why}</p>
+            <Textarea
+              id={`clarify-${i}`}
+              value={answers[i]}
+              onChange={(e) =>
+                setAnswers((prev) =>
+                  prev.map((a, j) => (j === i ? e.target.value : a)),
+                )
+              }
+              rows={1}
+              className="min-h-9"
+              placeholder="Your answer…"
+            />
+          </div>
+        ))}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+          <Button
+            variant="ghost"
+            onClick={onSkip}
+            className="text-muted-foreground"
+          >
+            Skip — draft with assumptions
+          </Button>
+          <Button
+            onClick={() =>
+              onSubmit(
+                questions.map((q, i) => ({ ...q, answer: answers[i].trim() })),
+              )
+            }
+            disabled={answers.every((a) => !a.trim())}
+          >
+            <Sparkles className="size-4" />
+            Answer & draft
+            <ArrowRight className="size-4" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── State 4/5: stamped quote ────────────────────────────────────────────────
 
 function DoneCard({
@@ -442,6 +572,8 @@ function DoneCard({
   changeLog,
   pdfUrl,
   contactName,
+  recipient,
+  onRecipientChange,
   onCopyLink,
   copied,
   shareBusy,
@@ -452,6 +584,8 @@ function DoneCard({
   changeLog: string | null;
   pdfUrl: string;
   contactName: string;
+  recipient: string;
+  onRecipientChange: (v: string) => void;
   onCopyLink: () => void;
   copied: boolean;
   shareBusy: boolean;
@@ -509,6 +643,22 @@ function DoneCard({
           Shared via a secure customer link that supports online acceptance.
         </p>
 
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor="share-recipient"
+            className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+          >
+            Prepared for (optional)
+          </label>
+          <input
+            id="share-recipient"
+            value={recipient}
+            onChange={(e) => onRecipientChange(e.target.value)}
+            placeholder="Yvonne Alvarez — personalizes the cover letter"
+            className="h-9 max-w-sm rounded-md border border-input bg-transparent px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          />
+        </div>
+
         <div className="flex flex-wrap items-center gap-2 border-t pt-4">
           <Button onClick={onCopyLink} disabled={shareBusy}>
             {shareBusy ? (
@@ -538,10 +688,21 @@ function DoneCard({
 
 // ── Orchestrator ─────────────────────────────────────────────────────────────
 
+function parseClarifications(raw: unknown): DraftClarification[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (c): c is DraftClarification =>
+      c != null &&
+      typeof c === "object" &&
+      typeof (c as DraftClarification).question === "string",
+  );
+}
+
 export function QuoteEngine({
   bid,
   lineItems,
   photos,
+  attachments,
   proposals,
   proposalShares,
   totalSqft,
@@ -552,6 +713,7 @@ export function QuoteEngine({
   bid: Bid;
   lineItems: LineItem[];
   photos: Photo[];
+  attachments: Attachment[];
   proposals: Proposal[];
   proposalShares: { proposalId: string; share: ProposalShare }[];
   totalSqft: number;
@@ -561,9 +723,17 @@ export function QuoteEngine({
 }) {
   const aiLines = lineItems.filter((li) => li.source === "ai");
   const hasDraft = bid.draftScopeText != null && aiLines.length > 0;
+  // Unanswered questions persisted mid-flight survive a refresh.
+  const pendingQuestions = !hasDraft
+    ? parseClarifications(bid.draftClarifications)
+    : [];
   const maxVersion = proposals.reduce((m, p) => Math.max(m, p.version), 0);
 
-  const [phase, setPhase] = useState<QuotePhase>(hasDraft ? "review" : "compose");
+  const [phase, setPhase] = useState<QuotePhase>(
+    hasDraft ? "review" : pendingQuestions.length > 0 ? "clarify" : "compose",
+  );
+  const [questions, setQuestions] =
+    useState<DraftClarification[]>(pendingQuestions);
   const [scope, setScope] = useState(
     bid.draftScopeText ?? proposals[0]?.scopeText ?? "",
   );
@@ -583,6 +753,7 @@ export function QuoteEngine({
   const [approving, startApprove] = useTransition();
   const [shareBusy, startShare] = useTransition();
   const [copied, setCopied] = useState(false);
+  const [recipient, setRecipient] = useState("");
 
   const nextVersion = maxVersion + 1;
   const liveTotal = lineItems.reduce((s, li) => s + Number(li.amount), 0);
@@ -594,18 +765,33 @@ export function QuoteEngine({
     }
   }
 
-  const onGenerate = () => {
+  const onGenerate = (clarifications?: DraftClarification[]) => {
     setError(null);
     setPhase("generating");
     startGenerate(async () => {
-      const result = await generateQuoteDraft({ bidId: bid.id, scopeText: scope });
-      if (result.ok) {
-        setChangeLog(result.changeLog);
-        setPhase("review");
-      } else {
+      const result = await generateQuoteDraft({
+        bidId: bid.id,
+        scopeText: scope,
+        clarifications,
+      });
+      if (!result.ok) {
         setError(result.error);
         setPhase("compose");
+        return;
       }
+      if (result.kind === "questions") {
+        setQuestions(
+          result.questions.map((q) => ({
+            question: q.question,
+            why: q.why,
+            answer: q.suggestion ?? "",
+          })),
+        );
+        setPhase("clarify");
+        return;
+      }
+      setChangeLog(result.changeLog);
+      setPhase("review");
     });
   };
 
@@ -633,6 +819,7 @@ export function QuoteEngine({
     startShare(async () => {
       const result = await createProposalShareAction({
         proposalId: done.proposalId,
+        recipientName: recipient.trim() || null,
       });
       if (result.shareUrl) {
         try {
@@ -661,21 +848,32 @@ export function QuoteEngine({
             <Composer
               bid={bid}
               photos={photos}
+              attachments={attachments}
               totalSqft={totalSqft}
               buildingsCount={buildingsCount}
               catalogCount={catalogCount}
               isLargeJob={isLargeJob}
               scope={scope}
               setScope={setScope}
-              onGenerate={onGenerate}
+              onGenerate={() => onGenerate()}
               error={error}
             />
           )}
           {phase === "generating" && (
             <Generating
               photoCount={photos.length}
+              documentCount={attachments.length}
               catalogCount={catalogCount}
               propertyName={bid.propertyName || bid.clientName || "this bid"}
+            />
+          )}
+          {phase === "clarify" && (
+            <Clarify
+              questions={questions}
+              onSubmit={(answered) => onGenerate(answered)}
+              onSkip={() =>
+                onGenerate(questions.map((q) => ({ ...q, answer: "" })))
+              }
             />
           )}
           {phase === "review" && (
@@ -683,6 +881,7 @@ export function QuoteEngine({
               bidId={bid.id}
               items={lineItems}
               photos={photos}
+              attachments={attachments}
               nextVersion={nextVersion}
               onApprove={onApprove}
               approving={approving}
@@ -696,6 +895,8 @@ export function QuoteEngine({
               changeLog={done.changeLog}
               pdfUrl={done.pdfUrl}
               contactName={bid.clientName || "your customer"}
+              recipient={recipient}
+              onRecipientChange={setRecipient}
               onCopyLink={onCopyLink}
               copied={copied}
               shareBusy={shareBusy}

@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronUp,
   ClipboardList,
+  FileText,
   Loader2,
   Lock,
   Paintbrush,
@@ -19,6 +20,7 @@ import {
   Package,
   Pencil,
   Plus,
+  Scale,
   Trash2,
   TriangleAlert,
 } from "lucide-react";
@@ -36,7 +38,7 @@ import {
   PRICE_LIST_CATEGORIES,
   priceListCategoryLabel,
 } from "@/lib/status-meta";
-import type { LineItem, Photo } from "@/lib/store";
+import type { Attachment, LineItem, Photo } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 const CATEGORY_ICONS: Record<string, LucideIcon> = {
@@ -51,23 +53,35 @@ const CATEGORY_ICONS: Record<string, LucideIcon> = {
   access: ArrowUpDown,
   other: Package,
   __manual: Plus,
+  __rates: Scale,
 };
 
 const fmtQty = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
 
 function lineGroups(items: LineItem[]) {
+  const committed = items.filter((li) => !li.rateOnly);
   const groups: { key: string; label: string; items: LineItem[] }[] = [];
   for (const cat of PRICE_LIST_CATEGORIES) {
-    const inCat = items.filter(
+    const inCat = committed.filter(
       (li) => (li.category ?? "other") === cat && li.source !== "manual",
     );
     if (inCat.length > 0) {
       groups.push({ key: cat, label: priceListCategoryLabel(cat), items: inCat });
     }
   }
-  const manual = items.filter((li) => li.source === "manual");
+  const manual = committed.filter((li) => li.source === "manual");
   if (manual.length > 0) {
     groups.push({ key: "__manual", label: "Added by you", items: manual });
+  }
+  // Rate-only lines always trail: priced per unit, billed as found,
+  // excluded from the subtotal.
+  const rates = items.filter((li) => li.rateOnly);
+  if (rates.length > 0) {
+    groups.push({
+      key: "__rates",
+      label: "Unit rates — billed as found",
+      items: rates,
+    });
   }
   return groups;
 }
@@ -135,7 +149,15 @@ function EditableCell({
   );
 }
 
-function EvidenceDrawer({ line, photo }: { line: LineItem; photo: Photo | null }) {
+function EvidenceDrawer({
+  line,
+  photo,
+  attachment,
+}: {
+  line: LineItem;
+  photo: Photo | null;
+  attachment: Attachment | null;
+}) {
   return (
     <div className="mx-4 mb-3 flex gap-3 rounded-lg border bg-muted/40 p-3 sm:mx-12">
       {photo && (
@@ -166,12 +188,26 @@ function EvidenceDrawer({ line, photo }: { line: LineItem; photo: Photo | null }
         {photo?.caption && (
           <p className="mt-1 text-muted-foreground">Photo: {photo.caption}</p>
         )}
+        {attachment && (
+          <p className="mt-1 text-muted-foreground">
+            From{" "}
+            <a
+              href={attachment.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline"
+            >
+              <FileText className="size-3" />
+              {attachment.fileName}
+            </a>
+          </p>
+        )}
         {line.sku && (
           <p className="mt-1 text-muted-foreground">
             Priced from SKU <span className="font-medium">{line.sku}</span>
           </p>
         )}
-        {!line.flagNote && !line.aiRationale && !line.sku && (
+        {!line.flagNote && !line.aiRationale && !line.sku && !attachment && (
           <p className="text-muted-foreground">No evidence recorded.</p>
         )}
       </div>
@@ -182,31 +218,38 @@ function EvidenceDrawer({ line, photo }: { line: LineItem; photo: Photo | null }
 function LineRow({
   line,
   photo,
+  attachment,
   expanded,
   onToggle,
   onEdit,
+  onToggleRate,
   onRemove,
 }: {
   line: LineItem;
   photo: Photo | null;
+  attachment: Attachment | null;
   expanded: boolean;
   onToggle: () => void;
   onEdit: (
     patch: { name?: string; qty?: number; unitPrice?: number },
   ) => void;
+  onToggleRate: () => void;
   onRemove: () => void;
 }) {
   const flagged = line.confidence === "low";
-  const hasEvidence = Boolean(photo || line.flagNote || line.aiRationale);
+  const hasEvidence = Boolean(
+    photo || attachment || line.flagNote || line.aiRationale,
+  );
   const qty = line.qty != null ? Number(line.qty) : null;
   const unitPrice = line.unitPrice != null ? Number(line.unitPrice) : null;
   const amount = Number(line.amount);
+  const rate = line.rateOnly;
 
   return (
     <>
       <div
         className={cn(
-          "group grid grid-cols-[1fr_auto] items-start gap-x-3 border-t px-4 py-2.5 sm:grid-cols-[minmax(0,1fr)_5.5rem_5.5rem_6rem_2rem]",
+          "group grid grid-cols-[1fr_auto] items-start gap-x-3 border-t px-4 py-2.5 sm:grid-cols-[minmax(0,1fr)_5.5rem_5.5rem_6rem_3.5rem]",
           flagged && "bg-amber-500/[0.04]",
         )}
       >
@@ -262,7 +305,16 @@ function LineRow({
 
         {/* qty + unit */}
         <div className="hidden text-right sm:block">
-          {qty != null ? (
+          {rate ? (
+            <>
+              <span className="pr-1 text-xs italic text-muted-foreground">
+                as found
+              </span>
+              <div className="pr-1 text-[11px] text-muted-foreground">
+                {line.unit ?? ""}
+              </div>
+            </>
+          ) : qty != null ? (
             <>
               <EditableCell
                 className="text-sm tabular-nums"
@@ -301,11 +353,32 @@ function LineRow({
 
         {/* total */}
         <div className="pt-0.5 text-right text-sm font-medium tabular-nums">
-          {formatCurrency(amount)}
+          {rate ? (
+            <span className="text-xs font-normal text-muted-foreground">
+              {unitPrice != null ? `$${fmtQty.format(unitPrice)}/${line.unit ?? "unit"}` : "—"}
+            </span>
+          ) : (
+            formatCurrency(amount)
+          )}
         </div>
 
-        {/* remove */}
-        <div className="hidden justify-end sm:flex">
+        {/* rate toggle + remove */}
+        <div className="hidden items-start justify-end gap-0.5 sm:flex">
+          <button
+            type="button"
+            onClick={onToggleRate}
+            className={cn(
+              "rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent group-hover:opacity-100",
+              rate && "text-primary opacity-100",
+            )}
+            title={
+              rate
+                ? "Make committed — set a quantity"
+                : "Make rate-only — billed as found"
+            }
+          >
+            <Scale className="size-3.5" />
+          </button>
           <button
             type="button"
             onClick={onRemove}
@@ -316,7 +389,9 @@ function LineRow({
           </button>
         </div>
       </div>
-      {expanded && hasEvidence && <EvidenceDrawer line={line} photo={photo} />}
+      {expanded && hasEvidence && (
+        <EvidenceDrawer line={line} photo={photo} attachment={attachment} />
+      )}
     </>
   );
 }
@@ -325,6 +400,7 @@ export function QuoteReviewCard({
   bidId,
   items,
   photos,
+  attachments,
   nextVersion,
   onApprove,
   approving,
@@ -333,6 +409,7 @@ export function QuoteReviewCard({
   bidId: string;
   items: LineItem[];
   photos: Photo[];
+  attachments: Attachment[];
   nextVersion: number;
   onApprove: () => void;
   approving: boolean;
@@ -350,9 +427,47 @@ export function QuoteReviewCard({
     () => new Map(photos.map((p) => [p.id, p])),
     [photos],
   );
+  const attachmentsById = useMemo(
+    () => new Map(attachments.map((a) => [a.id, a])),
+    [attachments],
+  );
   const groups = useMemo(() => lineGroups(lines), [lines]);
   const subtotal = lines.reduce((s, li) => s + Number(li.amount), 0);
+  const rateCount = lines.filter((li) => li.rateOnly).length;
   const flagged = lines.filter((li) => li.confidence === "low").length;
+
+  const toggleRate = (line: LineItem) => {
+    const makeRate = !line.rateOnly;
+    setLines((xs) =>
+      xs.map((x) =>
+        x.id === line.id
+          ? {
+              ...x,
+              rateOnly: makeRate,
+              qty: makeRate ? null : "1",
+              amount: makeRate
+                ? "0"
+                : String(1 * (x.unitPrice != null ? Number(x.unitPrice) : 0)),
+              confidence: "high",
+              flagNote: null,
+            }
+          : x,
+      ),
+    );
+    startTransition(async () => {
+      await updateQuoteLineAction(
+        makeRate
+          ? { id: line.id, bidId, rateOnly: true }
+          : {
+              id: line.id,
+              bidId,
+              rateOnly: false,
+              qty: 1,
+              unitPrice: line.unitPrice != null ? Number(line.unitPrice) : 0,
+            },
+      );
+    });
+  };
 
   const editLine = (
     line: LineItem,
@@ -364,6 +479,15 @@ export function QuoteReviewCard({
         if (x.id !== line.id) return x;
         const next = { ...x };
         if (patch.name !== undefined) next.name = patch.name;
+        if (x.rateOnly) {
+          // Rate lines only ever edit the unit price; no amount to recompute.
+          if (patch.unitPrice !== undefined) {
+            next.unitPrice = String(patch.unitPrice);
+            next.confidence = "high";
+            next.flagNote = null;
+          }
+          return next;
+        }
         const qty = patch.qty ?? (x.qty != null ? Number(x.qty) : null);
         const unitPrice =
           patch.unitPrice ?? (x.unitPrice != null ? Number(x.unitPrice) : null);
@@ -382,6 +506,7 @@ export function QuoteReviewCard({
       }),
     );
     // Persist: qty/unitPrice travel together so the server recomputes amount
+    // (rate lines send the flag instead of a qty).
     const qty = patch.qty ?? (line.qty != null ? Number(line.qty) : undefined);
     const unitPrice =
       patch.unitPrice ??
@@ -392,9 +517,11 @@ export function QuoteReviewCard({
         id: line.id,
         bidId,
         ...(patch.name !== undefined ? { name: patch.name } : {}),
-        ...(sendPrice && qty !== undefined && unitPrice !== undefined
-          ? { qty, unitPrice }
-          : {}),
+        ...(line.rateOnly && patch.unitPrice !== undefined
+          ? { rateOnly: true, unitPrice: patch.unitPrice }
+          : sendPrice && qty !== undefined && unitPrice !== undefined
+            ? { qty, unitPrice }
+            : {}),
       });
     });
   };
@@ -445,7 +572,7 @@ export function QuoteReviewCard({
       </CardHeader>
 
       {/* column headers */}
-      <div className="hidden grid-cols-[minmax(0,1fr)_5.5rem_5.5rem_6rem_2rem] gap-x-3 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:grid">
+      <div className="hidden grid-cols-[minmax(0,1fr)_5.5rem_5.5rem_6rem_3.5rem] gap-x-3 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:grid">
         <span>Line item</span>
         <span className="text-right">Qty</span>
         <span className="text-right">Unit price</span>
@@ -468,7 +595,13 @@ export function QuoteReviewCard({
                   · {g.items.length} line{g.items.length !== 1 ? "s" : ""}
                 </span>
                 <span className="ml-auto text-xs font-medium tabular-nums">
-                  {formatCurrency(groupTotal)}
+                  {g.key === "__rates" ? (
+                    <span className="font-normal text-muted-foreground">
+                      priced per unit
+                    </span>
+                  ) : (
+                    formatCurrency(groupTotal)
+                  )}
                 </span>
               </div>
               {g.items.map((line) => (
@@ -480,11 +613,17 @@ export function QuoteReviewCard({
                       ? (photosById.get(line.evidencePhotoId) ?? null)
                       : null
                   }
+                  attachment={
+                    line.evidenceAttachmentId
+                      ? (attachmentsById.get(line.evidenceAttachmentId) ?? null)
+                      : null
+                  }
                   expanded={Boolean(expanded[line.id])}
                   onToggle={() =>
                     setExpanded((e) => ({ ...e, [line.id]: !e[line.id] }))
                   }
                   onEdit={(patch) => editLine(line, patch)}
+                  onToggleRate={() => toggleRate(line)}
                   onRemove={() => removeLine(line)}
                 />
               ))}
@@ -502,6 +641,12 @@ export function QuoteReviewCard({
           <div className="text-lg font-bold tracking-tight tabular-nums">
             {formatCurrency(subtotal)}
           </div>
+          {rateCount > 0 && (
+            <div className="text-[11px] text-muted-foreground">
+              + {rateCount} unit rate{rateCount !== 1 ? "s" : ""} billed as
+              found
+            </div>
+          )}
         </div>
         <div className="ml-auto flex items-center gap-3">
           {error && (

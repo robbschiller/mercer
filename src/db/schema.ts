@@ -279,6 +279,9 @@ export const bids = pgTable("bids", {
         page refresh mid-review. ── */
   draftScopeText: text("draft_scope_text"),
   draftChangeLog: text("draft_change_log"),
+  // Clarifying Q&A for the in-flight draft — [{question, why, answer}] —
+  // cleared at approve alongside draftScopeText.
+  draftClarifications: jsonb("draft_clarifications"),
   /* ── Delivery phase (the project) — null until won. Folds in what used to
         live on the separate `projects` table; see 018_project_spine.sql. ── */
   deliveryStatus: text("delivery_status", { enum: PROJECT_STATUSES }),
@@ -378,10 +381,17 @@ export const lineItems = pgTable("line_items", {
   source: text("source", { enum: LINE_ITEM_SOURCES })
     .notNull()
     .default("manual"),
+  // Unit-rate ("as found") line: priced per unit with no committed qty.
+  // amount stays 0 so totals exclude it; rendered as a rate card.
+  rateOnly: boolean("rate_only").notNull().default(false),
   confidence: text("confidence", { enum: LINE_ITEM_CONFIDENCES }),
   evidencePhotoId: uuid("evidence_photo_id").references(() => photos.id, {
     onDelete: "set null",
   }),
+  evidenceAttachmentId: uuid("evidence_attachment_id").references(
+    () => attachments.id,
+    { onDelete: "set null" },
+  ),
   aiRationale: text("ai_rationale"),
   flagNote: text("flag_note"),
   sortOrder: integer("sort_order").notNull().default(0),
@@ -444,6 +454,8 @@ export const proposalShares = pgTable("proposal_shares", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  /** "Prepared for …" — personalizes the cover letter on this link. */
+  recipientName: text("recipient_name"),
   accessedAt: timestamp("accessed_at", { withTimezone: true }),
   viewCount: integer("view_count").notNull().default(0),
   acceptedAt: timestamp("accepted_at", { withTimezone: true }),
@@ -807,6 +819,11 @@ export const companyProfiles = pgTable("company_profiles", {
   primaryColor: text("primary_color"),
   accentColor: text("accent_color"),
   bodyFont: text("body_font"),
+  aboutBlurb: text("about_blurb"),
+  /** License / insurance line rendered on proposals. */
+  credentials: text("credentials"),
+  /** Cover-letter template; {recipient}, {property}, {total} merge fields. */
+  coverLetterTemplate: text("cover_letter_template"),
   enrichmentStatus: text("enrichment_status"),
   enrichmentError: text("enrichment_error"),
   enrichmentRaw: jsonb("enrichment_raw"),
