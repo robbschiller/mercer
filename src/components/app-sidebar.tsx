@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useTransition } from "react";
+import { useTransition } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Building2,
@@ -80,7 +80,6 @@ export function AppSidebar({
 }) {
   const { isMobile, setOpenMobile, toggleSidebar } = useSidebar();
   const pathname = usePathname();
-  const router = useRouter();
 
   const dismissOnMobile = () => {
     if (isMobile) setOpenMobile(false);
