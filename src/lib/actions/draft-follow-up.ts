@@ -7,7 +7,8 @@ import { db } from "@/db";
 import { bids, proposals, proposalShares } from "@/db/schema";
 import { getOrgContext } from "@/lib/org-context";
 import { resolveAnthropicKey } from "@/lib/integrations";
-import { getCompanyProfile } from "@/lib/store";
+import { getCompanyProfile, logLeadContact } from "@/lib/store";
+import { activityEvents } from "@/db/schema";
 
 /**
  * Draft a follow-up nudge for a sent quote — short enough to paste into a
@@ -93,5 +94,48 @@ export async function draftFollowUpAction(data: {
       text: null,
       error: err instanceof Error ? err.message : "Draft failed",
     };
+  }
+}
+
+/**
+ * Copying a drafted nudge IS the outreach moment — record it so contact
+ * attempts and the activity trail reflect the chase.
+ */
+export async function logFollowUpCopiedAction(data: {
+  bidId: string;
+}): Promise<void> {
+  const ctx = await getOrgContext();
+  if (!ctx) return;
+  const rows = await db
+    .select({
+      id: bids.id,
+      leadId: bids.leadId,
+      propertyId: bids.propertyId,
+      propertyName: bids.propertyName,
+      primaryContactId: bids.primaryContactId,
+    })
+    .from(bids)
+    .where(and(eq(bids.id, data.bidId), eq(bids.userId, ctx.ownerUserId)))
+    .limit(1);
+  const bid = rows[0];
+  if (!bid) return;
+  await db.insert(activityEvents).values({
+    userId: ctx.ownerUserId,
+    bidId: bid.id,
+    leadId: bid.leadId,
+    propertyId: bid.propertyId,
+    contactId: bid.primaryContactId,
+    type: "note",
+    title: `Follow-up sent — ${bid.propertyName}`,
+    body: "Drafted with Mercer and copied to send.",
+    occurredAt: new Date(),
+  });
+  if (bid.leadId) {
+    // Bumps contact_attempts + last_contacted_at (and its own call event).
+    try {
+      await logLeadContact(bid.leadId);
+    } catch {
+      // Best-effort — the activity event above already recorded the moment.
+    }
   }
 }

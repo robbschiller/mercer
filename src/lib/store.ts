@@ -4867,6 +4867,17 @@ export async function getTakeoffQueue(): Promise<TakeoffQueueRow[]> {
   }));
 }
 
+/** Display name of one contact (org-scoped) — for prefill affordances. */
+export async function getContactName(id: string): Promise<string | null> {
+  const user = await requireUser();
+  const rows = await db
+    .select({ name: contacts.name })
+    .from(contacts)
+    .where(and(eq(contacts.id, id), eq(contacts.userId, user.ownerUserId)))
+    .limit(1);
+  return rows[0]?.name ?? null;
+}
+
 // ── Pipeline (IA rework: one view over every open deal) ─────────────────────
 
 /**

@@ -8,7 +8,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { draftFollowUpAction } from "@/lib/actions/draft-follow-up";
+import {
+  draftFollowUpAction,
+  logFollowUpCopiedAction,
+} from "@/lib/actions/draft-follow-up";
 
 /** Pipeline "Next" action for sent quotes: draft the chase message. */
 export function FollowUpNudge({ bidId }: { bidId: string }) {
@@ -58,6 +61,8 @@ export function FollowUpNudge({ bidId }: { bidId: string }) {
                 await navigator.clipboard.writeText(text);
                 setCopied(true);
                 setTimeout(() => setCopied(false), 2000);
+                // Copying is the send moment — log the contact attempt.
+                void logFollowUpCopiedAction({ bidId });
               }}
             >
               {copied ? (

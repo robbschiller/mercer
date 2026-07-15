@@ -86,17 +86,12 @@ export function AppSidebar({
     if (isMobile) setOpenMobile(false);
   };
 
-  // ⌘K from anywhere in the app → the Home composer.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        router.push("/dashboard#ask");
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [router]);
+  // ⌘K is handled by <GlobalSearch/> (mounted in the app layout); the
+  // sidebar button just asks it to open.
+  const openSearch = () => {
+    dismissOnMobile();
+    window.dispatchEvent(new Event("mercer:search"));
+  };
 
   return (
     <Sidebar collapsible="icon">
@@ -126,9 +121,9 @@ export function AppSidebar({
 
         {/* tools: search + new */}
         <div className="mt-2 flex gap-2 group-data-[collapsible=icon]:mt-2 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center">
-          <Link
-            href="/dashboard#ask"
-            onClick={dismissOnMobile}
+          <button
+            type="button"
+            onClick={openSearch}
             className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-[9px] border border-transparent bg-muted/70 px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-muted group-data-[collapsible=icon]:size-9 group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
           >
             <Search className="size-4 shrink-0" />
@@ -138,7 +133,7 @@ export function AppSidebar({
             <kbd className="shrink-0 rounded-[5px] border bg-background px-1.5 py-0.5 font-mono text-[10.5px] tracking-wide text-muted-foreground group-data-[collapsible=icon]:hidden">
               ⌘K
             </kbd>
-          </Link>
+          </button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
