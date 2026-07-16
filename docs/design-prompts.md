@@ -370,6 +370,118 @@ strip from the AQP property fields; EagleView measurement
 
 ---
 
+## 9 — OPPORTUNITY: THE PROPOSAL COMPOSER
+
+*Starter: build on `Sidebar Redesign - Direction A Final.html` — sidebar left,
+**Opportunities** active. Save as `Proposal Composer - Direction A.html`
+(frames 9a/9b/9c). Companion plan:
+`docs/build-plans/proposal_composer.plan.md`; Jordan's own artifacts are the
+fidelity bar — `docs/jordan/Alhambra_Village_No_1_Exterior_Repaint_Proposal.pdf`
+(customer face) and `docs/jordan/Azur_at_Metrowest_Take_Off_Budget.xlsx`
+(internal face).*
+
+The crux screen of the whole product. Jordan already prototyped this UX in a
+claude.ai project: he drops a pile (notes screenshot with shorthand takeoff
+math like "Style 1 (23) – 10222", aerials, ground photos, a prior proposal)
+plus one casual sentence ("proposal for Gaston, 311 units, include wood rot
+and stucco rates, ask me if you need something") and gets back a 7-page
+branded sales document AND an internal takeoff budget. Mercer's version is
+that conversation with consequences: CRM writeback, an enforceable pricing
+gate, a signable link, and a budget that becomes the job's baseline. Design
+rule: **creating is always the conversation; pages are for finding and
+reviewing.** He should never fill out a form.
+
+**9a — The composer thread.** The opportunity detail's primary surface is a
+chat thread (not a wizard, not a form): a big drop-friendly input at the
+bottom ("Drop the takeoff notes, photos, spec — then tell me who it's for"),
+turns above it. Show a mid-conversation state: Jordan's pile of thumbnails +
+his one sentence, then Mercer's single round of clarifying questions as
+compact chips/inline answers (his rule: ask once; what he can't answer
+becomes a labeled best-estimate). Generation is a turn: a progress card
+("Reading the notes… pricing 34 buildings… checking supplier costs") that
+resolves into 9b.
+
+**9b — The package, two faces.** The generated result rendered as a document
+preview card stack — the PROPOSAL first (cover with hero photo, "one number"
+investment block with per-SF/per-door stats in mono, payment schedule,
+published-rates section, acceptance CTA — visually the Alhambra PDF, in-app),
+with a quiet fold beneath it: **"Show the working" → the takeoff budget**
+(materials table with basis column "1 gal per 200 SF", labor $/SF, admin 30%,
+commission 4%, build-up total / per SF / per door). Two governance elements
+must be unmissable:
+- **Amber unconfirmed-price chips** on any line the AI estimated or pulled
+  from market reference ("$36/SF — market ref, tap to confirm"). The Stamp &
+  send button is disabled while any remain, with a count ("2 prices need
+  your confirmation").
+- **The margin banner** across the top of the budget fold: quote vs build-up
+  ("Quote $251,129 · Build-up $290,210 · **–$39,081 under your cost**") in
+  red/amber/emerald states. Sending under build-up needs an explicit
+  override. This exact scenario is real — use these numbers.
+Edits happen two ways, both shown: a message in the thread ("hold the price
+through December") and click-to-edit on the document itself.
+
+**9c — Stamp & send.** The confirm step: version chip (v1 → v2 with a change
+log line, his versioning ask), price-held-through date, recipient (Gaston H.
+Correa · GrandManors, from the CRM), and one primary action [Stamp & send
+link]. After: the telemetry state on the opportunity — "Sent · viewed 3× ·
+last opened 2h ago" with the signature status. The win moment ("Signed ✓")
+shows the handoff: "Job created — budget carried over as the baseline."
+
+Sample data: property **Azur at Metrowest** (6432 Raleigh St, Orlando · 311
+units · 34 buildings), contact **Gaston H. Correa** (GrandManors), quote
+$251,129, build-up $290,210. Secondary: Alhambra Village No 1 (Yvonne
+Kamara · Soaring Management · $81,273 · 55 units · $0.90/SF · $1,478/door).
+
+Implementation notes (for Claude Code, not the designer): the quote engine
+already does doc blocks, dimension math, one-round clarifications, rate-only
+lines, and line provenance/confidence — 9a is a chat shell over it, 9b's gate
+is enforcement over existing flags, the budget is new (`bid_budgets`), and
+the document sections come from org knowledge (settings upload: messaging
+guide, pricing spreadsheet, example takeoff, sample proposal — the claude.ai
+"project knowledge" equivalent).
+
+---
+
+## 10 — JOB: DELIVERY COMMAND
+
+*Starter: build on `Sidebar Redesign - Direction A Final.html` — sidebar left,
+**Jobs** active. Save as `Job Delivery - Direction A.html` (frames 10a/10b).
+Source: Jordan's notes §7 (`docs/jordan/AQP-OS-Engineering-Notes.md`) — his
+words: "Budget clones over from the opportunity"; "do NOT call these change
+orders, only additional work."*
+
+The won side of the same loop — where the proposal's internal budget becomes
+the job's baseline and the AI keeps working after the sale.
+
+**10a — The job page, money spine.** Header: contract value, draws timeline
+(Draw 1 paid · Draw 2 sent · Final pending) against the total, assigned PM +
+crew. The centerpiece: **budget vs actual by category** — planned (cloned
+from the opportunity's build-up) vs spent (live expenses) per category
+(paint, primer, caulk, lifts, labor, housing, mobilization…), with a
+remaining-budget number that reads at a glance and ambers when a category
+runs hot. This is the live view his notes ask for ("expenses deduct against
+budget in real time").
+
+**10b — The AI keeps working.** Three cards, all composer-shaped (photos +
+a sentence in, document out — same interaction grammar as §9):
+- **Weekly site update**: PM drops site photos + a voice note → AI drafts
+  the weekly report → [Send to customer]. Show one drafted report inline.
+- **Additional work** (never "change order"): PM drops damage photos +
+  "found rot on building 4 rafter tails, about 60 LF of 2×6" → AI prices it
+  at the PUBLISHED rates from the proposal ($12/LF × 60 = $720) → approval
+  link to the customer; approved quantities flow into the budget and
+  invoicing. The published-rates page from §9 is the contract here — show
+  that continuity.
+- **Closeout packet**: one button at completion — confirmation, colors used
+  and where, care instructions — filed to the property forever (the next
+  repaint quote starts from it).
+
+Sample data: **Avalon Somerville Station** (AvalonBay, won $12,080, in
+progress, Draw 1 paid) and a large job at Azur at Metrowest ($251,129,
+budget cloned, paint category at 62% with 55% of schedule elapsed).
+
+---
+
 *Sync-back note: export each page as `<page>-redesign/<Name>.html` in the
 design project and tell Claude Code which files to implement — same flow as
 the sidebar.*
