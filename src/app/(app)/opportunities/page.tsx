@@ -9,7 +9,7 @@ export default async function BidsPage() {
   const bids = await getBidsWithSummary();
 
   return (
-    <div className="flex h-[calc(100svh-3.5rem)] min-h-0 w-full flex-col overflow-hidden">
+    <div className="flex h-svh min-h-0 w-full flex-col overflow-hidden pt-12">
       <PageHeaderActions>
         <Button variant="amber" size="sm" asChild>
           <Link href="/opportunities/new">New opportunity</Link>

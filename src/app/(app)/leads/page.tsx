@@ -148,7 +148,7 @@ export default async function LeadsPage({
   );
 
   return (
-    <div className="flex h-[calc(100svh-3.5rem)] min-h-0 w-full flex-col overflow-hidden">
+    <div className="flex h-svh min-h-0 w-full flex-col overflow-hidden pt-12">
       <LeadsToolbar />
 
       {params.imported && (
