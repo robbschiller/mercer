@@ -33,7 +33,11 @@ import {
   onboardings,
   orgMemberships,
   tasks,
+  orgKnowledgeFiles,
+  bidBudgets,
 } from "@/db/schema";
+import type { BidBudgetData } from "@/lib/budget";
+import { parseBudgetData } from "@/lib/budget";
 import {
   eq,
   desc,
@@ -8384,6 +8388,80 @@ export async function attachmentPathInUse(storagePath: string): Promise<boolean>
     )
     .limit(1);
   return rows.length > 0;
+}
+
+// ── Proposal brain: org knowledge files + bid budgets (043) ────────────────
+
+export type OrgKnowledgeFile = typeof orgKnowledgeFiles.$inferSelect;
+
+export async function getOrgKnowledgeFiles(): Promise<OrgKnowledgeFile[]> {
+  const user = await requireUser();
+  return db
+    .select()
+    .from(orgKnowledgeFiles)
+    .where(eq(orgKnowledgeFiles.userId, user.ownerUserId))
+    .orderBy(asc(orgKnowledgeFiles.kind), asc(orgKnowledgeFiles.createdAt));
+}
+
+export async function createOrgKnowledgeFile(data: {
+  kind: OrgKnowledgeFile["kind"];
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  storagePath: string;
+  url: string;
+  notes?: string;
+}): Promise<OrgKnowledgeFile> {
+  const user = await requireUser();
+  const rows = await db
+    .insert(orgKnowledgeFiles)
+    .values({ ...data, notes: data.notes ?? "", userId: user.ownerUserId })
+    .returning();
+  return rows[0];
+}
+
+export async function deleteOrgKnowledgeFile(
+  id: string,
+): Promise<OrgKnowledgeFile | null> {
+  const user = await requireUser();
+  const rows = await db
+    .delete(orgKnowledgeFiles)
+    .where(
+      and(
+        eq(orgKnowledgeFiles.id, id),
+        eq(orgKnowledgeFiles.userId, user.ownerUserId),
+      ),
+    )
+    .returning();
+  return rows[0] ?? null;
+}
+
+export async function getBidBudget(
+  bidId: string,
+): Promise<BidBudgetData | null> {
+  const user = await requireUser();
+  const rows = await db
+    .select({ data: bidBudgets.data })
+    .from(bidBudgets)
+    .where(
+      and(eq(bidBudgets.bidId, bidId), eq(bidBudgets.userId, user.ownerUserId)),
+    )
+    .limit(1);
+  return rows[0] ? parseBudgetData(rows[0].data) : null;
+}
+
+export async function upsertBidBudget(
+  bidId: string,
+  data: BidBudgetData,
+): Promise<void> {
+  const user = await requireUser();
+  await db
+    .insert(bidBudgets)
+    .values({ bidId, userId: user.ownerUserId, data })
+    .onConflictDoUpdate({
+      target: bidBudgets.bidId,
+      set: { data, updatedAt: new Date() },
+    });
 }
 
 // ── Service catalog + supplier pricing (Phase 3) ────────────────────────────

@@ -570,6 +570,59 @@ export const activityEvents = pgTable("activity_events", {
     .defaultNow(),
 });
 
+export const ORG_KNOWLEDGE_KINDS = [
+  "pricing",
+  "supplier_pricing",
+  "takeoff_template",
+  "sample_proposal",
+  "messaging",
+  "testimonials",
+  "company_facts",
+  "other",
+] as const;
+
+/**
+ * The proposal brain (043): raw org knowledge files — the claude.ai
+ * "project knowledge" equivalent. Uploaded once in settings, fed to
+ * proposal/budget generation as-is; no structured data entry required.
+ */
+export const orgKnowledgeFiles = pgTable("org_knowledge_files", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  kind: text("kind", { enum: ORG_KNOWLEDGE_KINDS }).notNull().default("other"),
+  fileName: text("file_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  storagePath: text("storage_path").notNull(),
+  url: text("url").notNull(),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * The internal face of a proposal (043): the takeoff budget — materials
+ * with spread-rate bases, labor, admin/commission build-up. One live row
+ * per bid; the margin guardrail compares its build-up to the quote total,
+ * and stamping snapshots it into the proposal.
+ */
+export const bidBudgets = pgTable("bid_budgets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  bidId: uuid("bid_id")
+    .notNull()
+    .unique()
+    .references(() => bids.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull(),
+  data: jsonb("data").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const TASK_STATUSES = ["open", "done", "cancelled"] as const;
 
 /**

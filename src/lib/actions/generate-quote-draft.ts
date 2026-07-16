@@ -5,14 +5,18 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { revalidatePath } from "next/cache";
 import {
+  getOrgKnowledgeFiles,
   getQuoteDraftContext,
   replaceAiDraftLines,
   saveDraftClarifications,
+  upsertBidBudget,
   type Attachment,
   type DraftLineInsert,
   type LineItem,
+  type OrgKnowledgeFile,
   type QuoteDraftContext,
 } from "@/lib/store";
+import { parseBudgetData } from "@/lib/budget";
 import {
   QuoteDraftSchema,
   type DraftClarification,
@@ -47,7 +51,9 @@ Rules:
 - CATEGORIES: assign each line the best-fitting category from the enum; group your output ordered by category (painting, then repairs, then prep, then access).
 - CHANGELOG: if a previous quote version is provided, write changeLog as one sentence describing what this draft changes versus it and why (e.g. "Restored clubhouse stucco per board feedback; trimmed carport scope."). If there is no previous version, changeLog is null.
 - "summary": one line describing the draft (e.g. "27 lines across 6 categories for the full exterior repaint").
-- Amounts are customer prices. Never output totals — the app computes qty × unitPrice.`;
+- Amounts are customer prices. Never output totals — the app computes qty × unitPrice.
+- ORG KNOWLEDGE: when the org's own files are attached (pricing spreadsheets, supplier price sheets, takeoff templates, sample proposals, messaging guides), they are the source of truth for HOW this company prices — carry their rates, spread rates, and markups over market guesses, and cross-check material unit costs against the supplier sheets.
+- THE BUDGET: alongside the customer lines (kind="draft" only), draft the INTERNAL takeoff budget — what the work costs the contractor. Materials with an explicit spread-rate basis per line ("1 gal per 200 SF", "1 tube per unit") and OUR unit costs from supplier pricing; labor from the org's $/SF rate (state where the rate came from in budget.notes); admin and commission percentages from the org's takeoff template (defaults 30 and 4 when its files are silent). Budget costs are supplier costs, never customer prices. If the inputs can't support a budget, set budget to null and say why in the summary. When kind="questions", budget is null.`;
 
 const MODEL_TIMEOUT_MS = 120_000;
 const MAX_PHOTOS = 20;
@@ -260,6 +266,7 @@ function mockDraft(ctx: QuoteDraftContext, scopeText: string): QuoteDraft {
     kind: "draft",
     lines,
     questions: [],
+    budget: null,
     changeLog: ctx.latestProposal
       ? `Re-drafted from new scope (offline mock): "${scopeText.slice(0, 80)}…"`
       : null,
@@ -339,6 +346,12 @@ export async function generateQuoteDraft(data: {
       clarifications: clarifications.length > 0 ? clarifications : null,
     },
   );
+  // The internal face rides along (proposal composer Phase 1): persist the
+  // takeoff budget so the margin guardrail can compare it to the quote.
+  if (draft.budget) {
+    const budget = parseBudgetData(draft.budget);
+    if (budget) await upsertBidBudget(data.bidId, budget);
+  }
   revalidatePath(`/opportunities/${data.bidId}`);
 
   return {
@@ -378,6 +391,92 @@ function pickDocuments(ctx: QuoteDraftContext): {
     }
   }
   return { docs, skipped };
+}
+
+const SPREADSHEET_MIMES = new Set([
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+]);
+const MAX_KNOWLEDGE_FILES = 6;
+const MAX_KNOWLEDGE_TEXT = 15_000;
+
+const KNOWLEDGE_KIND_LABELS: Record<OrgKnowledgeFile["kind"], string> = {
+  pricing: "Pricing model",
+  supplier_pricing: "Supplier pricing",
+  takeoff_template: "Takeoff / budget template",
+  sample_proposal: "Sample proposal",
+  messaging: "Messaging guide",
+  testimonials: "Testimonials",
+  company_facts: "Company facts",
+  other: "Reference",
+};
+
+/**
+ * Org knowledge → model blocks: PDFs as document blocks, spreadsheets
+ * converted to CSV text (the API can't read xlsx natively — this keeps
+ * "drop your pricing spreadsheet as-is" true), text inlined, images as
+ * image blocks. Pricing-ish files get priority under the cap.
+ */
+async function buildKnowledgeBlocks(
+  files: OrgKnowledgeFile[],
+): Promise<Anthropic.ContentBlockParam[]> {
+  const priority: Record<string, number> = {
+    pricing: 0,
+    supplier_pricing: 1,
+    takeoff_template: 2,
+    sample_proposal: 3,
+    messaging: 4,
+    company_facts: 5,
+    testimonials: 6,
+    other: 7,
+  };
+  const picked = [...files]
+    .sort((a, b) => (priority[a.kind] ?? 9) - (priority[b.kind] ?? 9))
+    .slice(0, MAX_KNOWLEDGE_FILES);
+  const blocks: Anthropic.ContentBlockParam[] = [];
+  for (const f of picked) {
+    const header = `${KNOWLEDGE_KIND_LABELS[f.kind]} — ${f.fileName}${f.notes ? ` (${f.notes})` : ""}:`;
+    try {
+      const res = await fetch(f.url);
+      if (!res.ok) continue;
+      if (f.mimeType === "application/pdf") {
+        const bytes = Buffer.from(await res.arrayBuffer());
+        blocks.push({ type: "text", text: header });
+        blocks.push({
+          type: "document",
+          source: {
+            type: "base64",
+            media_type: "application/pdf",
+            data: bytes.toString("base64"),
+          },
+        });
+      } else if (SPREADSHEET_MIMES.has(f.mimeType)) {
+        const { read, utils } = await import("xlsx");
+        const wb = read(Buffer.from(await res.arrayBuffer()), {
+          type: "buffer",
+        });
+        const csv = wb.SheetNames.map(
+          (name) =>
+            `--- sheet: ${name} ---\n${utils.sheet_to_csv(wb.Sheets[name])}`,
+        )
+          .join("\n")
+          .slice(0, MAX_KNOWLEDGE_TEXT);
+        blocks.push({ type: "text", text: `${header}\n${csv}` });
+      } else if (f.mimeType.startsWith("image/")) {
+        blocks.push({ type: "text", text: header });
+        blocks.push({
+          type: "image",
+          source: { type: "url", url: f.url },
+        });
+      } else {
+        const text = (await res.text()).slice(0, MAX_KNOWLEDGE_TEXT);
+        blocks.push({ type: "text", text: `${header}\n${text}` });
+      }
+    } catch {
+      // A knowledge file that fails to load must not sink the draft.
+    }
+  }
+  return blocks;
 }
 
 async function buildDocumentBlocks(
@@ -439,7 +538,10 @@ async function callClaude(
   );
 
   const { docs, skipped } = pickDocuments(ctx);
-  const documentBlocks = await buildDocumentBlocks(docs);
+  const [documentBlocks, knowledgeBlocks] = await Promise.all([
+    buildDocumentBlocks(docs),
+    getOrgKnowledgeFiles().then(buildKnowledgeBlocks),
+  ]);
 
   const specs = ctx.property;
   const contextText = [
@@ -500,6 +602,15 @@ async function callClaude(
             role: "user",
             content: [
               { type: "text", text: contextText },
+              ...(knowledgeBlocks.length > 0
+                ? [
+                    {
+                      type: "text" as const,
+                      text: "ORG KNOWLEDGE — how this company prices and talks (source of truth for rates, spread rates, markups):",
+                    },
+                    ...knowledgeBlocks,
+                  ]
+                : []),
               ...(documentBlocks.length > 0
                 ? [
                     {

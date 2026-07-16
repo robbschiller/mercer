@@ -9,7 +9,9 @@ import {
   getAttachments,
   getJobScheduleContext,
   getContactName,
+  getBidBudget,
 } from "@/lib/store";
+import { BudgetCard } from "@/components/budget-card";
 import { QuoteEngine } from "@/components/quote-engine";
 import { addCatalogLineItemAction } from "@/lib/actions";
 import { Input } from "@/components/ui/input";
@@ -45,15 +47,23 @@ export default async function BidPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const [{ id }, { error }] = await Promise.all([params, searchParams]);
-  const [data, project, catalog, bidPhotos, bidAttachments, scheduleContext] =
-    await Promise.all([
-      getBidPageData(id),
-      getProjectByBidId(id),
-      getPriceListItems({ activeOnly: true }),
-      getPhotos("bid", id),
-      getAttachments("bid", id),
-      getJobScheduleContext(id),
-    ]);
+  const [
+    data,
+    project,
+    catalog,
+    bidPhotos,
+    bidAttachments,
+    scheduleContext,
+    budget,
+  ] = await Promise.all([
+    getBidPageData(id),
+    getProjectByBidId(id),
+    getPriceListItems({ activeOnly: true }),
+    getPhotos("bid", id),
+    getAttachments("bid", id),
+    getJobScheduleContext(id),
+    getBidBudget(id),
+  ]);
 
   if (!data) {
     notFound();
@@ -163,6 +173,10 @@ export default async function BidPage({
         isLargeJob={scheduleContext.isLargeJob}
         catalogCount={catalog.length}
       />
+
+      {budget && (
+        <BudgetCard budget={budget} quoteTotal={pricing.grandTotal} />
+      )}
 
       <Suspense fallback={<OsmFootprintsSkeleton />}>
         <OsmFootprintsSection

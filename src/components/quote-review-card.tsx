@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
+  Check,
   ChevronDown,
   ChevronUp,
   ClipboardList,
@@ -29,6 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  confirmQuoteLineAction,
   createQuoteLineAction,
   deleteLineItemAction,
   updateQuoteLineAction,
@@ -224,6 +226,7 @@ function LineRow({
   onEdit,
   onToggleRate,
   onRemove,
+  onConfirm,
 }: {
   line: LineItem;
   photo: Photo | null;
@@ -235,6 +238,7 @@ function LineRow({
   ) => void;
   onToggleRate: () => void;
   onRemove: () => void;
+  onConfirm: () => void;
 }) {
   const flagged = line.confidence === "low";
   const hasEvidence = Boolean(
@@ -284,6 +288,17 @@ function LineRow({
               >
                 <TriangleAlert className="size-2.5" />
                 Verify
+              </button>
+            )}
+            {flagged && (
+              <button
+                type="button"
+                onClick={onConfirm}
+                title="I checked this number — confirm it as-is"
+                className="inline-flex items-center gap-1 rounded-md border border-emerald-600/40 bg-emerald-600/10 px-1.5 py-px text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-600/20 dark:text-emerald-400"
+              >
+                <Check className="size-2.5" />
+                Confirm
               </button>
             )}
             {hasEvidence && (
@@ -533,6 +548,19 @@ export function QuoteReviewCard({
     });
   };
 
+  // "I checked it — the AI's number stands." Clears the flag so the stamp
+  // gate (no unconfirmed price reaches the customer) passes.
+  const confirmLine = (line: LineItem) => {
+    setLines((xs) =>
+      xs.map((x) =>
+        x.id === line.id ? { ...x, confidence: "high", flagNote: null } : x,
+      ),
+    );
+    startTransition(async () => {
+      await confirmQuoteLineAction({ id: line.id, bidId });
+    });
+  };
+
   const addManual = () => {
     setAdding(true);
     startTransition(async () => {
@@ -625,6 +653,7 @@ export function QuoteReviewCard({
                   onEdit={(patch) => editLine(line, patch)}
                   onToggleRate={() => toggleRate(line)}
                   onRemove={() => removeLine(line)}
+                  onConfirm={() => confirmLine(line)}
                 />
               ))}
             </div>
@@ -653,12 +682,21 @@ export function QuoteReviewCard({
             <span className="max-w-xs text-xs text-destructive">{error}</span>
           )}
           {flagged > 0 && (
-            <span className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:inline-flex">
+            <span className="hidden items-center gap-1.5 text-xs font-medium text-amber-700 sm:inline-flex dark:text-amber-400">
               <TriangleAlert className="size-3.5 text-amber-500" />
-              {flagged} flagged
+              {flagged} price{flagged !== 1 ? "s" : ""} need
+              {flagged === 1 ? "s" : ""} confirmation
             </span>
           )}
-          <Button onClick={onApprove} disabled={approving || lines.length === 0}>
+          <Button
+            onClick={onApprove}
+            disabled={approving || lines.length === 0 || flagged > 0}
+            title={
+              flagged > 0
+                ? "Confirm or edit the flagged prices first — unconfirmed prices never reach the customer."
+                : undefined
+            }
+          >
             {approving ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (

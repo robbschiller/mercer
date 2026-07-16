@@ -250,12 +250,20 @@ export const createQuoteLineSchema = z.object({
   bidId: z.string().uuid("Invalid opportunity ID"),
 });
 
+export const idWithBidSchema = z.object({
+  id: z.string().uuid("Invalid ID"),
+  bidId: z.string().uuid("Invalid opportunity ID"),
+});
+
 export const generateProposalSchema = z.object({
   bidId: z.string().uuid("Invalid opportunity ID"),
   // Quote engine: AI-written changelog + the scope text the draft came from,
   // stamped onto the versioned proposal at approval.
   changeLog: z.string().max(2000).nullish(),
   scopeText: z.string().max(4000).nullish(),
+  // Margin guardrail: stamping a quote priced UNDER the internal build-up
+  // requires this explicit override (see proposal_composer.plan.md A5).
+  acceptBelowBuildUp: z.boolean().optional(),
 });
 
 export const createProposalShareSchema = z.object({

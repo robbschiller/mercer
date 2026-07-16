@@ -94,6 +94,16 @@ export interface ProposalSnapshot {
   brand?: SnapshotBrand;
   /** Hero image for the branded proposal (best bid photo, else satellite). */
   coverPhotoUrl?: string | null;
+  /**
+   * INTERNAL ONLY — the takeoff budget frozen with this version (proposal
+   * composer Phase 1). Never rendered on the customer PDF or share page;
+   * it's the cost basis this quote was judged against.
+   */
+  internalBudget?: {
+    data: unknown;
+    buildUpTotal: number;
+    marginOverBuildUp: number;
+  };
   generatedAt: string;
   /** In-memory only for PDF render; never persist to `proposals.snapshot`. */
   satelliteImageDataUri?: string;
