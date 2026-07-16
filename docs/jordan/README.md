@@ -25,6 +25,15 @@ In the order they arrived:
   spec (prepared by Ruthie Dichamp) for Nona Terrace, 11095 Savannah Landing
   Cir, Orlando. The acceptance-test document for AI lead intake (D1/D2); also
   attached to the live lead in-app.
+- **jordan-claude-project-prompt.png** + **Alhambra_Village_No_1_Exterior_Repaint_Proposal.pdf**
+  — Jordan's own claude.ai "creating proposals" project in action (2026-07-13,
+  a real proposal for Yvonne Kamara / Soaring Management): input is a notes
+  screenshot with shorthand takeoff math ("Bldg type 1 (3) – 700*22"), aerials,
+  ground photos, a prior proposal, plus one casual sentence — output is the
+  7-page branded, board-forwardable sales document. His words: "That's exactly
+  what we need for the 'Create Proposal' section of the opportunity… it just
+  needs to be set up to CRM." This pair is the UX north star for the
+  opportunity → proposal flow.
 
 ## Related material elsewhere
 
