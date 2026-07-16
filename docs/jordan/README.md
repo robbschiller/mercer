@@ -7,6 +7,15 @@ build plans; this folder keeps the originals.
 
 ## Contents
 
+In the order they arrived:
+
+- **AQP-OS-Engineering-Notes.md** — Jordan's original data-model & build notes
+  for the "AQP operating system": Account → Property → Lead/Opportunity → Job
+  hierarchy, per-object fields, AI features, workflows. The
+  Lead → Opportunity → Job naming that Build List 01 asked for was already
+  spelled out here.
+- **AQP-Software-Fix-List.pdf** — the follow-up fix list (2026-07-13, 8 items);
+  outcomes shipped same-day in bfbd635.
 - **Mercer_Build_List_01_July16_2026.pdf** — 17-item fix/feature list from his
   first working field pass (2026-07-16), tested against the real Nona Terrace
   lead. Sections: A bugs · B renames (Bids→Opportunities, deal→project) ·
@@ -21,8 +30,5 @@ build plans; this folder keeps the originals.
 
 - `docs/interview001–003.md` — early discovery interviews.
 - `docs/Laurel Hills Villas - Full Exterior Repaint.pdf` — sample proposal.
-- The AQP "operating system" blueprint PDF + companion files (SCHEMA.md,
-  aqp-alpha.html) were shared in an earlier session and are NOT archived here
-  yet — backfill when they resurface.
-- Jordan's 2026-07-13 fix list (8 items) arrived as messages/screenshots and
-  was never archived; outcomes are in the worklog and git history (bfbd635).
+- The AQP blueprint's other companions (SCHEMA.md, aqp-alpha.html) from an
+  earlier session are still unarchived — backfill if they resurface.
