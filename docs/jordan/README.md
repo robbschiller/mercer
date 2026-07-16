@@ -34,6 +34,14 @@ In the order they arrived:
   what we need for the 'Create Proposal' section of the opportunity… it just
   needs to be set up to CRM." This pair is the UX north star for the
   opportunity → proposal flow.
+- **jordan-claude-project-instructions.md** — the verbatim system prompt of
+  his claude.ai project. Encodes his operating rules: ask-then-estimate
+  fallback for missing inputs; market-rate research allowed only as flagged
+  reference, never unconfirmed prices in the customer-facing version; sample
+  proposal as structural template with creative liberty; messaging-guide
+  tone; two deliverables (customer PDF + internal takeoff xlsx); no em dashes.
+  Still to collect for project knowledge parity: his messaging guide, the
+  example takeoff template, and the pricing spreadsheet example.
 - **Azur_at_Metrowest_Take_Off_Budget.xlsx** — the proposal's internal twin,
   also produced by his Claude project ("Internal use only. Do not send to
   customer."): customer/property block, takeoff by building style, schedule,
