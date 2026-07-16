@@ -118,7 +118,7 @@ export const createBidSchema = z.object({
 });
 
 export const updateBidSchema = z.object({
-  id: z.string().uuid("Invalid bid ID"),
+  id: z.string().uuid("Invalid opportunity ID"),
   propertyName: z.string().min(1, "Property name is required"),
   label: optionalText,
   address: z.string().min(1, "Address is required"),
@@ -131,13 +131,13 @@ export const updateBidSchema = z.object({
 });
 
 export const deleteBidSchema = z.object({
-  id: z.string().uuid("Invalid bid ID"),
+  id: z.string().uuid("Invalid opportunity ID"),
 });
 
 // ── Buildings ──
 
 export const createBuildingSchema = z.object({
-  bidId: z.string().uuid("Invalid bid ID"),
+  bidId: z.string().uuid("Invalid opportunity ID"),
   label: z.string().min(1, "Label is required"),
   count: z.coerce.number().int().min(1, "Count must be at least 1").default(1),
 });
@@ -151,7 +151,7 @@ export const updateBuildingSchema = z.object({
 
 export const deleteBuildingSchema = z.object({
   id: z.string().uuid("Invalid building ID"),
-  bidId: z.string().uuid("Invalid bid ID"),
+  bidId: z.string().uuid("Invalid opportunity ID"),
 });
 
 // ── Surfaces ──
@@ -160,21 +160,21 @@ const dimensionGroup = z.array(z.number().positive());
 
 export const createSurfaceSchema = z.object({
   buildingId: z.string().uuid("Invalid building ID"),
-  bidId: z.string().uuid("Invalid bid ID"),
+  bidId: z.string().uuid("Invalid opportunity ID"),
   name: z.string().min(1, "Surface name is required"),
   dimensions: z.array(dimensionGroup).min(1, "At least one dimension group is required"),
 });
 
 export const updateSurfaceSchema = z.object({
   id: z.string().uuid("Invalid surface ID"),
-  bidId: z.string().uuid("Invalid bid ID"),
+  bidId: z.string().uuid("Invalid opportunity ID"),
   name: z.string().min(1, "Surface name is required"),
   dimensions: z.array(dimensionGroup).min(1, "At least one dimension group is required"),
 });
 
 export const deleteSurfaceSchema = z.object({
   id: z.string().uuid("Invalid surface ID"),
-  bidId: z.string().uuid("Invalid bid ID"),
+  bidId: z.string().uuid("Invalid opportunity ID"),
 });
 
 // ── Pricing ──
@@ -188,7 +188,7 @@ const optionalNumeric = z
   });
 
 export const updateBidPricingSchema = z.object({
-  id: z.string().uuid("Invalid bid ID"),
+  id: z.string().uuid("Invalid opportunity ID"),
   coverageSqftPerGallon: optionalNumeric,
   pricePerGallon: optionalNumeric,
   laborRatePerUnit: optionalNumeric,
@@ -198,21 +198,21 @@ export const updateBidPricingSchema = z.object({
 // ── Line Items ──
 
 export const createLineItemSchema = z.object({
-  bidId: z.string().uuid("Invalid bid ID"),
+  bidId: z.string().uuid("Invalid opportunity ID"),
   name: z.string().min(1, "Name is required"),
   amount: z.coerce.number({ message: "Amount must be a number" }).transform(String),
 });
 
 export const updateLineItemSchema = z.object({
   id: z.string().uuid("Invalid line item ID"),
-  bidId: z.string().uuid("Invalid bid ID"),
+  bidId: z.string().uuid("Invalid opportunity ID"),
   name: z.string().min(1, "Name is required"),
   amount: z.coerce.number({ message: "Amount must be a number" }).transform(String),
 });
 
 export const deleteLineItemSchema = z.object({
   id: z.string().uuid("Invalid line item ID"),
-  bidId: z.string().uuid("Invalid bid ID"),
+  bidId: z.string().uuid("Invalid opportunity ID"),
 });
 
 // ── User Defaults ──
@@ -231,7 +231,7 @@ export const updateUserDefaultsSchema = z.object({
 export const updateQuoteLineSchema = z
   .object({
     id: z.string().uuid("Invalid line item ID"),
-    bidId: z.string().uuid("Invalid bid ID"),
+    bidId: z.string().uuid("Invalid opportunity ID"),
     name: z.string().min(1, "Name is required").max(300).optional(),
     qty: z.coerce.number().nonnegative("Qty must be ≥ 0").optional(),
     unitPrice: z.coerce
@@ -247,11 +247,11 @@ export const updateQuoteLineSchema = z
   });
 
 export const createQuoteLineSchema = z.object({
-  bidId: z.string().uuid("Invalid bid ID"),
+  bidId: z.string().uuid("Invalid opportunity ID"),
 });
 
 export const generateProposalSchema = z.object({
-  bidId: z.string().uuid("Invalid bid ID"),
+  bidId: z.string().uuid("Invalid opportunity ID"),
   // Quote engine: AI-written changelog + the scope text the draft came from,
   // stamped onto the versioned proposal at approval.
   changeLog: z.string().max(2000).nullish(),
@@ -460,7 +460,7 @@ export const createSupplierProductSchema = z.object({
 });
 
 export const addCatalogLineItemSchema = z.object({
-  bidId: z.string().uuid("Invalid bid ID"),
+  bidId: z.string().uuid("Invalid opportunity ID"),
   priceListItemId: z.string().uuid("Pick a catalog item"),
   quantity: z.coerce.number().positive().default(1),
 });
@@ -481,7 +481,9 @@ export const scheduleTakeoffSchema = z.object({
 
 export const updateLeadSchema = z.object({
   id: z.string().uuid("Invalid lead ID"),
-  name: z.string().trim().min(1, "Name is required"),
+  name: z.string().trim().min(1, "Project name is required"),
+  contactFirstName: optionalText,
+  contactLastName: optionalText,
   email: optionalEmail,
   phone: optionalText,
   company: optionalText,
@@ -512,6 +514,9 @@ export const setLeadFollowUpSchema = z.object({
     .refine((v) => v === null || /^\d{4}-\d{2}-\d{2}$/.test(v), {
       message: "Date must be YYYY-MM-DD",
     }),
+  // C7: required for a NEW follow-up (enforced in the store, where the
+  // existing task is known — snoozing keeps the current assignee).
+  assignedTo: formOptionalUuid,
 });
 
 // ── Projects ──
@@ -766,7 +771,7 @@ const optionalInt = z.preprocess(
 );
 
 export const createAccessItemSchema = z.object({
-  bidId: z.string().uuid("Invalid bid ID"),
+  bidId: z.string().uuid("Invalid opportunity ID"),
   type: z.enum(ACCESS_TYPES),
   method: optionalText,
   quantity: optionalNumericString,
@@ -778,7 +783,7 @@ export const createAccessItemSchema = z.object({
 
 export const updateAccessItemSchema = z.object({
   id: z.string().uuid("Invalid access item ID"),
-  bidId: z.string().uuid("Invalid bid ID"),
+  bidId: z.string().uuid("Invalid opportunity ID"),
   type: z.enum(ACCESS_TYPES),
   method: optionalText,
   quantity: optionalNumericString,
@@ -790,5 +795,5 @@ export const updateAccessItemSchema = z.object({
 
 export const deleteAccessItemSchema = z.object({
   id: z.string().uuid("Invalid access item ID"),
-  bidId: z.string().uuid("Invalid bid ID"),
+  bidId: z.string().uuid("Invalid opportunity ID"),
 });

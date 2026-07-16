@@ -37,7 +37,7 @@ export async function draftFollowUpAction(data: {
     .orderBy(desc(proposals.version), desc(proposalShares.createdAt))
     .limit(1);
   const r = rows[0];
-  if (!r) return { text: null, error: "Bid not found." };
+  if (!r) return { text: null, error: "Opportunity not found." };
 
   const snapshot = r.total as { grandTotal?: number } | null;
   const total = snapshot?.grandTotal ?? null;

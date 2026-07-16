@@ -180,7 +180,7 @@ function Composer({
         const fd = new FormData();
         fd.set("contextType", "bid");
         fd.set("contextId", bid.id);
-        fd.set("returnTo", `/bids/${bid.id}`);
+        fd.set("returnTo", `/opportunities/${bid.id}`);
         fd.set("file", file);
         if (file.type.startsWith("image/")) {
           fd.set("kind", "takeoff");
@@ -866,7 +866,7 @@ export function QuoteEngine({
               photoCount={photos.length}
               documentCount={attachments.length}
               catalogCount={catalogCount}
-              propertyName={bid.propertyName || bid.clientName || "this bid"}
+              propertyName={bid.propertyName || bid.clientName || "this opportunity"}
             />
           )}
           {phase === "clarify" && (

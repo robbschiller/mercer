@@ -332,7 +332,7 @@ function ContactCard({ c }: { c: ContactRegisterRow }) {
   const openLine =
     c.openLine ??
     (c.openBidCount > 0
-      ? `${c.openBidCount} open bid${c.openBidCount === 1 ? "" : "s"}`
+      ? `${c.openBidCount} open opportunit${c.openBidCount === 1 ? "y" : "ies"}`
       : c.openLeadCount > 0
         ? `${c.openLeadCount} open lead${c.openLeadCount === 1 ? "" : "s"}`
         : null);
@@ -419,7 +419,7 @@ function ContactCard({ c }: { c: ContactRegisterRow }) {
             n={c.propsCount}
             label={c.propsCount === 1 ? "property" : "properties"}
           />
-          <Spark n={c.dealsCount} label={c.dealsCount === 1 ? "deal" : "deals"} />
+          <Spark n={c.dealsCount} label={c.dealsCount === 1 ? "project" : "projects"} />
           {c.decidedCount >= 2 && (
             <span className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground">
               <b className="font-mono font-medium tabular-nums text-emerald-600">
@@ -484,7 +484,7 @@ function ContactCard({ c }: { c: ContactRegisterRow }) {
             ) : hasOpenWork(c) ? (
               <>
                 <FileText className="size-3.5" />
-                Open deal
+                Open project
               </>
             ) : (
               <>

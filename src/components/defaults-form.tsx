@@ -46,8 +46,8 @@ export function DefaultsForm({ initialValues }: DefaultsFormProps) {
   return (
     <div className="flex flex-col gap-5">
       <p className="text-sm text-muted-foreground">
-        These values pre-populate pricing on every new bid. They also update
-        automatically each time you save pricing on a bid.
+        These values pre-populate pricing on every new opportunity. They also update
+        automatically each time you save pricing on an opportunity.
       </p>
 
       <div className="grid grid-cols-2 gap-4">

@@ -11,14 +11,14 @@ export const BID_STATUSES = ["draft", "sent", "won", "lost"] as const;
 export type BidStatus = (typeof BID_STATUSES)[number];
 
 /**
- * Lead pipeline statuses (AQP reconciliation, Phase 4). The takeoff stages
- * come from AQP's operating flow; `quoted`/`won`/`lost` keep their original
- * values so the bid-create and proposal-accept write paths are untouched
- * (migration 028 maps the retired `new` → `needs_takeoff`).
+ * Lead pipeline statuses. One `takeoff` stage (041 merged the old
+ * needs_takeoff/takeoff_scheduled pair — whether the site walk is booked is
+ * `leads.takeoffScheduledAt`, not a stage); `quoted`/`won`/`lost` keep their
+ * original values so the bid-create and proposal-accept write paths are
+ * untouched.
  */
 export const LEAD_STATUSES = [
-  "needs_takeoff",
-  "takeoff_scheduled",
+  "takeoff",
   "quoted",
   "won",
   "lost",
@@ -42,8 +42,7 @@ export function isClosedLeadStatus(status: string): boolean {
 
 /** Statuses that put a lead on the takeoff queue. */
 export const TAKEOFF_QUEUE_STATUSES = [
-  "needs_takeoff",
-  "takeoff_scheduled",
+  "takeoff",
 ] as const satisfies readonly LeadStatus[];
 
 export const ENRICHMENT_STATUSES = [
@@ -511,8 +510,7 @@ export const BID_STATUS_VARIANTS: Record<BidStatus, BadgeVariant> = {
 };
 
 export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
-  needs_takeoff: "Needs takeoff",
-  takeoff_scheduled: "Takeoff scheduled",
+  takeoff: "Takeoff",
   quoted: "Quote sent",
   won: "Won",
   lost: "Lost",
@@ -522,8 +520,7 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
 };
 
 export const LEAD_STATUS_VARIANTS: Record<LeadStatus, BadgeVariant> = {
-  needs_takeoff: "secondary",
-  takeoff_scheduled: "outline",
+  takeoff: "secondary",
   quoted: "outline",
   won: "default",
   lost: "secondary",

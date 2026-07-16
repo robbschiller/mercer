@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useFormStatus } from "react-dom";
 import {
   ArrowRight,
   BadgeCheck,
@@ -13,6 +14,7 @@ import {
   FilePlus,
   GitBranch,
   Info,
+  Loader2,
   MapPin,
   Pencil,
   Receipt,
@@ -42,6 +44,8 @@ import { cn } from "@/lib/utils";
 
 export type BidLeadPrefill = {
   id: string;
+  /** The lead's project name — flows through as the opportunity's name (B3). */
+  name: string;
   propertyName: string;
   address: string;
   clientName: string;
@@ -87,9 +91,12 @@ export function NewBidIntake({
       : null,
   );
   const [client, setClient] = useState(initialLead?.clientName ?? "");
+  // From a lead, the project name travels as-is — it's the same field the
+  // lead carries, not a second auto-built name (B3).
   const [label, setLabel] = useState(
     initialLead
-      ? `${initialLead.propertyName || initialLead.address} – Full Exterior Repaint`
+      ? initialLead.name ||
+          `${initialLead.propertyName || initialLead.address} – Full Exterior Repaint`
       : "",
   );
   const [size, setSize] = useState<"small" | "large">(
@@ -132,12 +139,12 @@ export function NewBidIntake({
     if (!building) return null;
     const name = buildingName(building);
     if (initialLead)
-      return "The building came over with the lead. Confirm the deal, then let the quote draft itself.";
+      return "The building came over with the lead. Confirm the project, then let the quote draft itself.";
     if (known && hasSpecs)
-      return `The client, the contact, and the last takeoff came with ${name}. Confirm the deal, then let the quote draft itself from what's on file.`;
+      return `The client, the contact, and the last takeoff came with ${name}. Confirm the project, then let the quote draft itself from what's on file.`;
     if (known)
-      return "The building and the client are on file. Confirm the deal and hand it to the quote engine to price.";
-    return "The building's pinned. Set the deal, then the AI drafts the first quote straight from your site photos.";
+      return "The building and the client are on file. Confirm the project and hand it to the quote engine to price.";
+    return "The building's pinned. Set the project, then the AI drafts the first quote straight from your site photos.";
   }, [building, initialLead, known, hasSpecs]);
 
   /* ═══════════ 8a — FINDER ═══════════ */
@@ -146,16 +153,16 @@ export function NewBidIntake({
       <div className="relative mx-auto w-full max-w-[860px] px-6 pb-28 pt-7">
         <header className="mb-5">
           <p className="mb-2.5 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">
-            New bid
+            New opportunity
             <span className="size-[5px] rounded-full bg-muted-foreground/40" />
             the on-ramp to your quote
           </p>
           <h1 className="text-[27px] font-semibold leading-tight tracking-tight">
-            Which building are we bidding?
+            Which building are we quoting?
           </h1>
           <p className="mt-1.5 max-w-[580px] text-sm text-muted-foreground">
             Type a name or an address — same finder as a new lead. If
-            you&apos;ve bid it before, Mercer already has the client, the
+            you&apos;ve quoted it before, Mercer already has the client, the
             specs, and the takeoff, so the quote can draft itself.
           </p>
         </header>
@@ -170,7 +177,7 @@ export function NewBidIntake({
           <div className="mb-5 text-center">
             <span className="inline-flex items-center gap-1.5 rounded-full border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
               <MapPin className="size-3.5 text-muted-foreground/70" />
-              Start with the property — the bid, the quote, and the money all
+              Start with the property — the opportunity, the quote, and the money all
               hang off it
             </span>
           </div>
@@ -185,7 +192,7 @@ export function NewBidIntake({
               <b className="font-semibold text-foreground/80">
                 Came in from a lead?
               </b>{" "}
-              Opening New Bid from a pipeline card carries the building with it
+              Opening New Opportunity from a pipeline card carries the building with it
               — Mercer skips this search and drops you straight on{" "}
               <b className="font-semibold text-foreground/80">
                 Confirm &amp; launch
@@ -196,7 +203,7 @@ export function NewBidIntake({
 
           <GhostSteps
             steps={[
-              { n: "1", t: "The deal", w: [150, 150] },
+              { n: "1", t: "The project", w: [150, 150] },
               { n: "2", t: "What we already know", w: [90, 90, 90, 110] },
               { n: "★", t: "Draft the quote with AI", w: [230] },
             ]}
@@ -212,7 +219,7 @@ export function NewBidIntake({
     <div className="relative mx-auto w-full max-w-[860px] px-6 pb-28 pt-7">
       <header className="mb-5">
         <p className="mb-2.5 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">
-          New bid
+          New opportunity
           <span className="size-[5px] rounded-full bg-muted-foreground/40" />
           confirm &amp; launch
         </p>
@@ -296,7 +303,7 @@ export function NewBidIntake({
                     Started from a lead
                   </span>
                   <span className="mt-0.5 block truncate text-[12.5px] text-amber-800/80 dark:text-amber-300/80">
-                    Creating this bid moves the lead to quoted — the pipeline
+                    Creating this opportunity moves the lead to quoted — the pipeline
                     stays honest.
                   </span>
                 </span>
@@ -311,12 +318,11 @@ export function NewBidIntake({
                     A quote is already out
                   </span>
                   <span className="mt-0.5 block truncate text-[12.5px] text-blue-800/80 dark:text-blue-300/80">
-                    {known.liveBidLabel} — a new bid is a separate scope, not a
-                    revision.
+                    {known.liveBidLabel} — a new opportunity is a separate scope, not a                    revision.
                   </span>
                 </span>
                 <a
-                  href={`/bids/${known.liveBidId}`}
+                  href={`/opportunities/${known.liveBidId}`}
                   target="_blank"
                   rel="noreferrer"
                   className="shrink-0 text-[12.5px] font-semibold text-blue-700 hover:underline dark:text-blue-400"
@@ -366,7 +372,7 @@ export function NewBidIntake({
                     Known building
                   </span>
                   <span className="mt-0.5 block text-[12.5px] text-muted-foreground">
-                    The property record is attached — the first bid here starts
+                    The property record is attached — the first opportunity here starts
                     the money story.
                   </span>
                 </span>
@@ -382,7 +388,7 @@ export function NewBidIntake({
                   </span>
                   <span className="mt-0.5 block text-[12.5px] text-muted-foreground">
                     We&apos;ll create the property record when you create the
-                    bid — no duplicate.
+                    opportunity — no duplicate.
                   </span>
                 </span>
               </div>
@@ -427,10 +433,10 @@ export function NewBidIntake({
           }
         />
 
-        {/* ── band 1: the deal ── */}
+        {/* ── band 1: the project ── */}
         <Band
           num="1"
-          title="The deal"
+          title="The project"
           note={
             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/80">
               <Pencil className="size-[13px]" />
@@ -466,18 +472,18 @@ export function NewBidIntake({
             <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
               <Info className="mt-px size-[13px] shrink-0" />
               New client — we&apos;ll save it to the property record when the
-              bid is created.
+              opportunity is created.
             </p>
           )}
 
-          <FieldLabel className="mt-[18px]">Bid label</FieldLabel>
+          <FieldLabel className="mt-[18px]">Project name</FieldLabel>
           <div className="flex h-[46px] items-center gap-2.5 rounded-[11px] border bg-card px-3.5 transition-[border-color,box-shadow] focus-within:border-foreground/35 focus-within:shadow-[0_0_0_3px_rgb(0_0_0/0.06)]">
             <Tag className="size-4 shrink-0 text-muted-foreground" />
             <input
               name="label"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder="Name this bid…"
+              placeholder="Name this project…"
               autoComplete="off"
               className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
             />
@@ -600,7 +606,7 @@ export function NewBidIntake({
         <div className="overflow-hidden rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
           <div className="flex items-baseline gap-3 border-b border-border/60 bg-muted/20 px-5 py-3.5">
             <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
-              This bid
+              This opportunity
             </span>
             <span className="min-w-0 truncate text-[13px] text-foreground/80">
               <b className="font-semibold text-foreground">
@@ -615,67 +621,101 @@ export function NewBidIntake({
             </span>
           </div>
           <div className="p-5">
-            <button
-              type="submit"
-              name="next"
-              value="draft"
-              className="flex w-full items-center gap-4 rounded-[14px] border-none bg-foreground p-[16px_18px] text-left text-background shadow-[0_10px_26px_-12px_rgb(24_24_27/0.55)] transition-[background-color,transform,box-shadow] hover:opacity-95 hover:shadow-[0_14px_32px_-12px_rgb(24_24_27/0.62)] active:translate-y-px"
-            >
-              <span className="grid size-[42px] shrink-0 place-items-center rounded-xl bg-background/15">
-                <Sparkles className="size-[21px]" />
-              </span>
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="text-base font-semibold tracking-tight">
-                  Create &amp; draft quote with AI
-                </span>
-                <span className="font-mono text-[12.5px] text-background/65">
-                  Scope + photos → priced lines in ~60s
-                </span>
-              </span>
-              <span className="grid size-[34px] shrink-0 place-items-center rounded-full bg-background/10 transition-transform group-hover:translate-x-0.5">
-                <ArrowRight className="size-[17px]" />
-              </span>
-            </button>
-            <p className="mt-3 flex items-center gap-2 text-[12.5px] text-muted-foreground">
-              <WandSparkles className="size-3.5 shrink-0 text-muted-foreground/70" />
-              {known && hasSpecs ? (
-                <span>
-                  Opens the quote engine with the specs
-                  {known.photoCount > 0
-                    ? ` and ${known.photoCount} photos`
-                    : ""}{" "}
-                  on file loaded — describe the scope and it prices.
-                </span>
-              ) : known ? (
-                <span>
-                  Opens the quote engine with the property record attached —
-                  add photos and the AI prices them.
-                </span>
-              ) : (
-                <span>
-                  Opens the quote engine — add scope and photos, the AI prices
-                  them in ~60s.
-                </span>
-              )}
-            </p>
-            <div className="mt-4 flex items-center gap-2.5 border-t border-border/60 pt-3.5">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
-                or
-              </span>
-              <button
-                type="submit"
-                name="next"
-                value="empty"
-                className="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
-              >
-                <FilePlus className="size-3.5" />
-                Create an empty bid — I&apos;ll price it by hand
-              </button>
-            </div>
+            <LaunchButtons
+              helper={
+                <p className="mt-3 flex items-center gap-2 text-[12.5px] text-muted-foreground">
+                  <WandSparkles className="size-3.5 shrink-0 text-muted-foreground/70" />
+                  {known && hasSpecs ? (
+                    <span>
+                      Opens the quote engine with the specs
+                      {known.photoCount > 0
+                        ? ` and ${known.photoCount} photos`
+                        : ""}{" "}
+                      on file loaded — describe the scope and it prices.
+                    </span>
+                  ) : known ? (
+                    <span>
+                      Opens the quote engine with the property record attached
+                      — add photos and the AI prices them.
+                    </span>
+                  ) : (
+                    <span>
+                      Opens the quote engine — add scope and photos, the AI
+                      prices them in ~60s.
+                    </span>
+                  )}
+                </p>
+              }
+            />
           </div>
         </div>
       </form>
     </div>
+  );
+}
+
+/**
+ * Launchpad that goes dead once clicked — the create action takes a few
+ * seconds, and live buttons during that window minted duplicate bids
+ * (Jordan A1, same failure as the lead form).
+ */
+function LaunchButtons({ helper }: { helper: React.ReactNode }) {
+  const { pending } = useFormStatus();
+  const [clicked, setClicked] = useState<"draft" | "empty" | null>(null);
+
+  return (
+    <>
+      <button
+        type="submit"
+        name="next"
+        value="draft"
+        disabled={pending}
+        onClick={() => setClicked("draft")}
+        className="flex w-full items-center gap-4 rounded-[14px] border-none bg-foreground p-[16px_18px] text-left text-background shadow-[0_10px_26px_-12px_rgb(24_24_27/0.55)] transition-[background-color,transform,box-shadow] hover:opacity-95 hover:shadow-[0_14px_32px_-12px_rgb(24_24_27/0.62)] active:translate-y-px disabled:pointer-events-none disabled:opacity-70"
+      >
+        <span className="grid size-[42px] shrink-0 place-items-center rounded-xl bg-background/15">
+          {pending && clicked !== "empty" ? (
+            <Loader2 className="size-[21px] animate-spin" />
+          ) : (
+            <Sparkles className="size-[21px]" />
+          )}
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-base font-semibold tracking-tight">
+            {pending && clicked !== "empty"
+              ? "Creating…"
+              : "Create & draft quote with AI"}
+          </span>
+          <span className="font-mono text-[12.5px] text-background/65">
+            Scope + photos → priced lines in ~60s
+          </span>
+        </span>
+        <span className="grid size-[34px] shrink-0 place-items-center rounded-full bg-background/10 transition-transform group-hover:translate-x-0.5">
+          <ArrowRight className="size-[17px]" />
+        </span>
+      </button>
+      {helper}
+      <div className="mt-4 flex items-center gap-2.5 border-t border-border/60 pt-3.5">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
+          or
+        </span>
+        <button
+          type="submit"
+          name="next"
+          value="empty"
+          disabled={pending}
+          onClick={() => setClicked("empty")}
+          className="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-60"
+        >
+          {pending && clicked === "empty" ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <FilePlus className="size-3.5" />
+          )}
+          Create an empty opportunity — I&apos;ll price it by hand
+        </button>
+      </div>
+    </>
   );
 }
 

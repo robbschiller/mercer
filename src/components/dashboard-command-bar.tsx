@@ -15,7 +15,7 @@ const SUGGESTIONS = [
   "Create lead",
   "Log call",
   "Set follow-up",
-  "Start draft bid",
+  "Start draft opportunity",
   "Show overdue",
 ];
 
@@ -117,13 +117,13 @@ function suggestionPrompt(suggestion: string) {
     case "Add contact":
       return "Add Sarah Chen at Highmark as a contact";
     case "Create lead":
-      return "Sarah at Greystar asked us to bid Vista Palms";
+      return "Sarah at Greystar asked us to quote Vista Palms";
     case "Log call":
       return "Log that I called Sarah at Greystar today";
     case "Set follow-up":
       return "Remind me to follow up with Sarah Friday";
-    case "Start draft bid":
-      return "Start a draft bid for Pura Vida blue section";
+    case "Start draft opportunity":
+      return "Start a draft opportunity for Pura Vida blue section";
     case "Show overdue":
       return "Show overdue follow-ups";
     default:

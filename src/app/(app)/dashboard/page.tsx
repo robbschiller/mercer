@@ -105,8 +105,8 @@ export default async function DashboardPage() {
 }
 
 function RecentIcon({ kind }: { kind: string }) {
-  if (kind === "Project") return <HardHat className="size-4" />;
-  if (kind === "Bid") return <FileText className="size-4" />;
+  if (kind === "Job") return <HardHat className="size-4" />;
+  if (kind === "Opportunity") return <FileText className="size-4" />;
   return <ContactRound className="size-4" />;
 }
 
@@ -130,7 +130,7 @@ function FeedRow({ item }: { item: NotificationItem }) {
       : "viewed";
   return (
     <Link
-      href={item.bidId ? `/bids/${item.bidId}` : "/pipeline"}
+      href={item.bidId ? `/opportunities/${item.bidId}` : "/pipeline"}
       className="flex items-center gap-3 border-t px-4 py-3 first:border-t-0 hover:bg-muted/30"
     >
       <span

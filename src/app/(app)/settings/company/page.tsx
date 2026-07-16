@@ -38,7 +38,7 @@ export default async function SettingsCompanyPage({
         <CardHeader>
           <CardTitle className="text-lg">Company details</CardTitle>
           <CardDescription>
-            Pulled from your website during onboarding. These power your bid
+            Pulled from your website during onboarding. These power your proposal
             PDFs and shareable proposal pages.
           </CardDescription>
         </CardHeader>

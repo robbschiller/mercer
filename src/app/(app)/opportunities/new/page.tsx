@@ -23,6 +23,7 @@ export default async function NewBidPage({
         prefillLead
           ? {
               id: prefillLead.id,
+              name: prefillLead.name,
               propertyName:
                 prefillLead.propertyName?.trim() || prefillLead.name,
               address: prefillLead.resolvedAddress ?? "",

@@ -94,14 +94,14 @@ export default async function BidPage({
     })),
   });
 
-  const bidLabel = bid.propertyName || bid.clientName || "Untitled bid";
+  const bidLabel = bid.propertyName || bid.clientName || "Untitled opportunity";
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8 flex flex-col gap-6">
       <BreadcrumbLabel segment={id} label={bidLabel} />
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" asChild>
-          <Link href="/bids">&larr; Bids</Link>
+          <Link href="/opportunities">&larr; Opportunities</Link>
         </Button>
       </div>
 
@@ -138,7 +138,7 @@ export default async function BidPage({
                       : ""}
                   </>
                 ) : (
-                  "Bid moved into delivery."
+                  "Opportunity moved into delivery."
                 )}
               </p>
             </div>
@@ -187,7 +187,7 @@ export default async function BidPage({
           <CardHeader>
             <CardTitle className="text-base">Add from catalog</CardTitle>
             <CardDescription>
-              Pull a standardized SKU from your service catalog into this bid as
+              Pull a standardized SKU from your service catalog into this opportunity as
               a line item (charge × quantity). Manage the catalog in Settings →
               Catalog &amp; suppliers.
             </CardDescription>
@@ -240,7 +240,7 @@ export default async function BidPage({
       <Card className="border-destructive/50">
         <CardContent className="flex items-center justify-between pt-6">
           <div>
-            <p className="text-sm font-medium">Delete bid</p>
+            <p className="text-sm font-medium">Delete opportunity</p>
             <p className="text-sm text-muted-foreground">
               This action cannot be undone.
             </p>

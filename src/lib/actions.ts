@@ -44,6 +44,7 @@ import {
   deletePhoto,
   createAttachment,
   deleteAttachment,
+  attachmentPathInUse,
   logLeadContact,
   setLeadFollowUp,
   setPropertyOwnerContact,
@@ -282,23 +283,23 @@ export async function updateBidAction(formData: FormData) {
   if (!result.success) {
     const message = result.error.issues[0]?.message ?? "Invalid input";
     const id = formData.get("id") as string;
-    redirect(`/bids/${id}?error=${encodeURIComponent(message)}`);
+    redirect(`/opportunities/${id}?error=${encodeURIComponent(message)}`);
   }
 
   const { id, ...data } = result.data;
   await updateBid(id, data);
-  redirect(`/bids/${id}`);
+  redirect(`/opportunities/${id}`);
 }
 
 export async function deleteBidAction(formData: FormData) {
   const result = deleteBidSchema.safeParse(formDataToObject(formData));
 
   if (!result.success) {
-    redirect("/bids");
+    redirect("/opportunities");
   }
 
   await deleteBid(result.data.id);
-  redirect("/bids");
+  redirect("/opportunities");
 }
 
 // ── Buildings ──
@@ -308,12 +309,12 @@ export async function createBuildingAction(formData: FormData) {
 
   if (!result.success) {
     const bidId = formData.get("bidId") as string;
-    redirect(`/bids/${bidId}?error=${encodeURIComponent(result.error.issues[0]?.message ?? "Invalid input")}`);
+    redirect(`/opportunities/${bidId}?error=${encodeURIComponent(result.error.issues[0]?.message ?? "Invalid input")}`);
   }
 
   const { bidId, ...data } = result.data;
   await createBuilding(bidId, data);
-  revalidatePath(`/bids/${bidId}`);
+  revalidatePath(`/opportunities/${bidId}`);
 }
 
 export async function updateBuildingAction(formData: FormData) {
@@ -321,13 +322,13 @@ export async function updateBuildingAction(formData: FormData) {
 
   if (!result.success) {
     const bidId = formData.get("bidId") as string;
-    redirect(`/bids/${bidId}?error=${encodeURIComponent(result.error.issues[0]?.message ?? "Invalid input")}`);
+    redirect(`/opportunities/${bidId}?error=${encodeURIComponent(result.error.issues[0]?.message ?? "Invalid input")}`);
   }
 
   const { id, ...data } = result.data;
   const bidId = formData.get("bidId") as string;
   await updateBuilding(id, data);
-  revalidatePath(`/bids/${bidId}`);
+  revalidatePath(`/opportunities/${bidId}`);
 }
 
 export async function deleteBuildingAction(formData: FormData) {
@@ -338,7 +339,7 @@ export async function deleteBuildingAction(formData: FormData) {
   }
 
   await deleteBuilding(result.data.id);
-  revalidatePath(`/bids/${result.data.bidId}`);
+  revalidatePath(`/opportunities/${result.data.bidId}`);
 }
 
 // ── Surfaces ──
@@ -357,7 +358,7 @@ export async function createSurfaceAction(data: {
 
   const { buildingId, bidId, ...surfaceData } = result.data;
   await createSurface(buildingId, surfaceData);
-  revalidatePath(`/bids/${bidId}`);
+  revalidatePath(`/opportunities/${bidId}`);
   return { error: null };
 }
 
@@ -375,7 +376,7 @@ export async function updateSurfaceAction(data: {
 
   const { id, bidId, ...surfaceData } = result.data;
   await updateSurface(id, surfaceData);
-  revalidatePath(`/bids/${bidId}`);
+  revalidatePath(`/opportunities/${bidId}`);
   return { error: null };
 }
 
@@ -390,7 +391,7 @@ export async function deleteSurfaceAction(data: {
   }
 
   await deleteSurface(result.data.id);
-  revalidatePath(`/bids/${result.data.bidId}`);
+  revalidatePath(`/opportunities/${result.data.bidId}`);
   return { error: null };
 }
 
@@ -417,7 +418,7 @@ export async function updateBidPricingAction(data: {
     upsertUserDefaults(pricingData),
   ]);
 
-  revalidatePath(`/bids/${id}`);
+  revalidatePath(`/opportunities/${id}`);
   return { error: null };
 }
 
@@ -436,7 +437,7 @@ export async function createLineItemAction(data: {
 
   const { bidId, ...itemData } = result.data;
   await createLineItem(bidId, itemData);
-  revalidatePath(`/bids/${bidId}`);
+  revalidatePath(`/opportunities/${bidId}`);
   return { error: null };
 }
 
@@ -454,7 +455,7 @@ export async function updateLineItemAction(data: {
 
   const { id, bidId, ...itemData } = result.data;
   await updateLineItem(id, itemData);
-  revalidatePath(`/bids/${bidId}`);
+  revalidatePath(`/opportunities/${bidId}`);
   return { error: null };
 }
 
@@ -496,7 +497,7 @@ export async function updateQuoteLineAction(data: {
     patch.flagNote = null;
   }
   await updateLineItem(id, patch);
-  revalidatePath(`/bids/${bidId}`);
+  revalidatePath(`/opportunities/${bidId}`);
   return { error: null };
 }
 
@@ -515,7 +516,7 @@ export async function createQuoteLineAction(data: { bidId: string }) {
     unitPrice: "0",
     source: "manual",
   });
-  revalidatePath(`/bids/${result.data.bidId}`);
+  revalidatePath(`/opportunities/${result.data.bidId}`);
   return { error: null, line };
 }
 
@@ -530,7 +531,7 @@ export async function deleteLineItemAction(data: {
   }
 
   await deleteLineItem(result.data.id);
-  revalidatePath(`/bids/${result.data.bidId}`);
+  revalidatePath(`/opportunities/${result.data.bidId}`);
   return { error: null };
 }
 
@@ -550,7 +551,7 @@ export async function createAccessItemAction(data: {
   }
   const { bidId, ...itemData } = result.data;
   await createAccessItem(bidId, itemData);
-  revalidatePath(`/bids/${bidId}`);
+  revalidatePath(`/opportunities/${bidId}`);
   return { error: null };
 }
 
@@ -569,7 +570,7 @@ export async function updateAccessItemAction(data: {
   }
   const { id, bidId, ...itemData } = result.data;
   await updateAccessItem(id, itemData);
-  revalidatePath(`/bids/${bidId}`);
+  revalidatePath(`/opportunities/${bidId}`);
   return { error: null };
 }
 
@@ -582,7 +583,7 @@ export async function deleteAccessItemAction(data: {
     return { error: result.error.issues[0]?.message ?? "Invalid input" };
   }
   await deleteAccessItem(result.data.id);
-  revalidatePath(`/bids/${result.data.bidId}`);
+  revalidatePath(`/opportunities/${result.data.bidId}`);
   return { error: null };
 }
 
@@ -619,7 +620,7 @@ export async function generateProposalAction(data: {
 
   const pageData = await getBidPageData(result.data.bidId);
   if (!pageData) {
-    return { error: "Bid not found", pdfUrl: null };
+    return { error: "Opportunity not found", pdfUrl: null };
   }
 
   const { bid, buildings, surfacesByBuilding, lineItems, accessItems, totalSqft } =
@@ -779,8 +780,8 @@ export async function generateProposalAction(data: {
     await updateLeadStatus(bid.leadId, "quoted");
   }
 
-  revalidatePath(`/bids/${bid.id}`);
-  revalidatePath("/bids");
+  revalidatePath(`/opportunities/${bid.id}`);
+  revalidatePath("/opportunities");
   revalidatePath("/dashboard");
   if (bid.leadId) {
     revalidatePath(`/leads/${bid.leadId}`);
@@ -809,8 +810,8 @@ export async function createProposalShareAction(data: {
       recipientName: result.data.recipientName,
     });
     const siteUrl = getAppOrigin();
-    revalidatePath(`/bids/${share.bidId}`);
-    revalidatePath("/bids");
+    revalidatePath(`/opportunities/${share.bidId}`);
+    revalidatePath("/opportunities");
     return { error: null, shareUrl: `${siteUrl}/p/${share.id}` };
   } catch (error) {
     const message =
@@ -830,8 +831,8 @@ export async function acceptProposalShareAction(formData: FormData) {
       acceptedByTitle: result.data.acceptedByTitle,
     });
     revalidatePath(`/p/${result.data.slug}`);
-    revalidatePath(`/bids/${bidId}`);
-    revalidatePath("/bids");
+    revalidatePath(`/opportunities/${bidId}`);
+    revalidatePath("/opportunities");
     revalidatePath("/dashboard");
     // Accept moves the bid into delivery (the bid row is the project), so the
     // projects list + detail must refresh too.
@@ -858,8 +859,8 @@ export async function declineProposalShareAction(formData: FormData) {
       reason: result.data.reason,
     });
     revalidatePath(`/p/${result.data.slug}`);
-    revalidatePath(`/bids/${bidId}`);
-    revalidatePath("/bids");
+    revalidatePath(`/opportunities/${bidId}`);
+    revalidatePath("/opportunities");
     revalidatePath("/dashboard");
     revalidatePath("/projects");
     if (leadId) {
@@ -1154,7 +1155,7 @@ export async function addCatalogLineItemAction(formData: FormData) {
   if (!result.success) {
     const bidId = (formData.get("bidId") as string) || "";
     const message = result.error.issues[0]?.message ?? "Invalid input";
-    redirect(`/bids/${bidId}?error=${encodeURIComponent(message)}`);
+    redirect(`/opportunities/${bidId}?error=${encodeURIComponent(message)}`);
   }
   const { bidId, priceListItemId, quantity } = result.data;
   try {
@@ -1162,10 +1163,10 @@ export async function addCatalogLineItemAction(formData: FormData) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to add catalog item";
-    redirect(`/bids/${bidId}?error=${encodeURIComponent(message)}`);
+    redirect(`/opportunities/${bidId}?error=${encodeURIComponent(message)}`);
   }
-  revalidatePath(`/bids/${bidId}`);
-  redirect(`/bids/${bidId}`);
+  revalidatePath(`/opportunities/${bidId}`);
+  redirect(`/opportunities/${bidId}`);
 }
 
 /**
@@ -1580,7 +1581,9 @@ export async function deleteAttachmentAction(formData: FormData) {
   }
   try {
     const attachment = await deleteAttachment(result.data.id);
-    if (attachment) {
+    // Converted leads share storage objects with their opportunity's rows —
+    // only remove the object once no row references it.
+    if (attachment && !(await attachmentPathInUse(attachment.storagePath))) {
       const supabase = await createClient();
       await supabase.storage
         .from("attachments")
@@ -1605,9 +1608,12 @@ export async function updateLeadAction(formData: FormData) {
         : `/leads?error=${encodeURIComponent(message)}`,
     );
   }
-  const { id, ...patch } = result.data;
+  const { id, contactFirstName, contactLastName, ...patch } = result.data;
+  const contactName =
+    [contactFirstName, contactLastName].filter(Boolean).join(" ").trim() ||
+    null;
   try {
-    await updateLead(id, patch);
+    await updateLead(id, { ...patch, contactName });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to update lead";
@@ -1648,17 +1654,21 @@ export async function setLeadFollowUpAction(formData: FormData) {
     const message = result.error.issues[0]?.message ?? "Invalid input";
     redirect(
       id
-        ? `/leads?lead=${id}&error=${encodeURIComponent(message)}`
+        ? `/leads/${id}?error=${encodeURIComponent(message)}`
         : `/leads?error=${encodeURIComponent(message)}`,
     );
   }
   try {
-    await setLeadFollowUp(result.data.id, result.data.followUpAt);
+    await setLeadFollowUp(
+      result.data.id,
+      result.data.followUpAt,
+      result.data.assignedTo,
+    );
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to set follow-up";
     redirect(
-      `/leads?lead=${result.data.id}&error=${encodeURIComponent(message)}`,
+      `/leads/${result.data.id}?error=${encodeURIComponent(message)}`,
     );
   }
   revalidatePath("/leads");
@@ -1750,7 +1760,7 @@ async function revalidateProjectAndShares(
 ): Promise<void> {
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/projects");
-  revalidatePath(`/bids/${bidId}`);
+  revalidatePath(`/opportunities/${bidId}`);
   const slugs = await getShareSlugsForBid(bidId);
   for (const slug of slugs) {
     revalidatePath(`/p/${slug}`);
@@ -1936,12 +1946,12 @@ export async function confirmOnboardingThemeAction(formData: FormData) {
   }
   await upsertCompanyProfile(result.data);
   await markOnboardingComplete();
-  redirect("/bids");
+  redirect("/opportunities");
 }
 
 export async function skipOnboardingAction() {
   await skipOnboarding();
-  redirect("/bids");
+  redirect("/opportunities");
 }
 
 export async function updateCompanyProfileAction(formData: FormData) {

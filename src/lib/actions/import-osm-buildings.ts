@@ -23,9 +23,9 @@ export async function importOsmBuildingsAction(data: {
   bidId: string;
 }): Promise<{ created: number; error: string | null }> {
   const bid = await getBid(data.bidId);
-  if (!bid) return { created: 0, error: "Bid not found." };
+  if (!bid) return { created: 0, error: "Opportunity not found." };
   if (bid.latitude == null || bid.longitude == null) {
-    return { created: 0, error: "This bid has no map coordinates." };
+    return { created: 0, error: "This opportunity has no map coordinates." };
   }
 
   const result = await getCachedOsmFootprints(
@@ -74,6 +74,6 @@ export async function importOsmBuildingsAction(data: {
     created += 1;
   }
 
-  revalidatePath(`/bids/${data.bidId}`);
+  revalidatePath(`/opportunities/${data.bidId}`);
   return { created, error: null };
 }

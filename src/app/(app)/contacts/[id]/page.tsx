@@ -166,7 +166,7 @@ export default async function ContactDetailPage({
   const openLead = deals.find(
     (d) =>
       d.kind === "lead" &&
-      ["needs_takeoff", "takeoff_scheduled", "on_hold"].includes(d.status),
+      ["takeoff", "on_hold"].includes(d.status),
   );
   const openWork = openBid ?? openLead ?? null;
   const goneQuiet =
@@ -344,7 +344,7 @@ export default async function ContactDetailPage({
             <span className="text-[13.5px] font-semibold">{firstMet}</span>
           </div>
           <div className="flex items-baseline justify-between gap-2.5">
-            <span className="text-xs text-muted-foreground">Deals won</span>
+            <span className="text-xs text-muted-foreground">Projects won</span>
             <span className="text-[13.5px] font-semibold">{wonCount}</span>
           </div>
           <div className="my-0.5 flex items-baseline justify-between gap-2.5 border-y py-2.5">
@@ -408,10 +408,10 @@ export default async function ContactDetailPage({
         <div className="flex min-w-0 flex-col gap-5">
           <Panel
             icon={<GitCommitVertical className="size-[15px]" />}
-            title={`Deals through ${firstName}`}
+            title={`Projects through ${firstName}`}
             note={
               deals.length > 0
-                ? `every lead, bid & job since ${firstMet}`
+                ? `every lead, opportunity & job since ${firstMet}`
                 : "nothing here yet"
             }
             right={
@@ -429,7 +429,7 @@ export default async function ContactDetailPage({
             <div className="px-4 pb-2 pt-4">
               {deals.length === 0 ? (
                 <p className="pb-3 text-sm text-muted-foreground">
-                  No deals through this contact yet — link them to a lead and
+                  No projects through this contact yet — link them to a lead and
                   the story starts here.
                 </p>
               ) : (
@@ -511,7 +511,7 @@ export default async function ContactDetailPage({
             {detail.properties.length === 0 ? (
               <p className="p-4 text-sm text-muted-foreground">
                 Not linked to any properties yet — attach them from a property
-                page so the next bid knows who decides.
+                page so the next opportunity knows who decides.
               </p>
             ) : (
               <div className="flex flex-col">
@@ -721,7 +721,7 @@ export default async function ContactDetailPage({
                   </div>
                   {employment.length > 1 && (
                     <p className="mt-3 border-t pt-3 text-xs leading-relaxed text-muted-foreground">
-                      {firstName} changed companies — the deals above moved{" "}
+                      {firstName} changed companies — the projects above moved{" "}
                       <b className="font-semibold text-foreground/80">
                         with them
                       </b>

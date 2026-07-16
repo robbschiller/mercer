@@ -55,8 +55,7 @@ export default async function ReportsPage() {
   const bidLost = bc("lost");
   const decided = bidWon + bidLost;
   const openDeals =
-    lc("needs_takeoff") + lc("takeoff_scheduled") + lc("on_hold") +
-    bc("draft") + bc("sent");
+    lc("takeoff") + lc("on_hold") + bc("draft") + bc("sent");
 
   // Headline margin derives from the same per-job rows the table shows.
   const delivered = extras.deliveredJobs;
@@ -115,14 +114,14 @@ export default async function ReportsPage() {
         },
         {
           label: "Reached takeoff",
-          count: lc("takeoff_scheduled") + lc("quoted") + lc("won"),
+          count: data.takeoffBooked + lc("quoted") + lc("won"),
         },
         { label: "Quoted", count: lc("quoted") + lc("won") },
         { label: "Won", count: lc("won") },
       ],
     },
     {
-      title: "Bid funnel",
+      title: "Opportunity funnel",
       sub: "drafted → sent → decided → won",
       stages: [
         { label: "Drafted", count: bc("draft") + bc("sent") + decided },
@@ -162,21 +161,21 @@ export default async function ReportsPage() {
         >
           <StatValue big={moneyK(data.pipeline.openPipelineUsd)} />
           <StatSub>
-            {openDeals} open deal{openDeals === 1 ? "" : "s"} ·{" "}
+            {openDeals} open project{openDeals === 1 ? "" : "s"} ·{" "}
             {bc("draft") + bc("sent")} at quote stage
           </StatSub>
         </StatCard>
         <StatCard
           href="#winByCo"
           icon={<Target className="size-[15px]" />}
-          label="Bid win rate"
+          label="Win rate"
           hint="Win rate by company"
         >
           <StatValue big={decided > 0 ? `${pct(bidWon, decided)}%` : "—"} />
           <StatSub>
             {decided > 0
-              ? `${bidWon} won of ${decided} decided bid${decided === 1 ? "" : "s"}`
-              : "no decided bids yet"}
+              ? `${bidWon} won of ${decided} decided opportunit${decided === 1 ? "y" : "ies"}`
+              : "no decided opportunities yet"}
           </StatSub>
         </StatCard>
         <StatCard
@@ -241,7 +240,7 @@ export default async function ReportsPage() {
               <span className="hidden items-center gap-3.5 sm:flex">
                 <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/80">
                   <span className="size-[11px] rounded-[3px] bg-foreground/25" />
-                  Bids won
+                  Won
                 </span>
                 <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/80">
                   <span className="relative h-0 w-3.5 border-t-2 border-foreground">
@@ -513,7 +512,7 @@ export default async function ReportsPage() {
           {/* why deals declined */}
           <Panel
             icon={<MessageSquareQuote className="size-[15px]" />}
-            title="Why deals declined"
+            title="Why quotes declined"
             note="newest first"
           >
             {declines.length === 0 ? (

@@ -250,7 +250,7 @@ export function LeadsTable({
         size: 180,
         enableSorting: false,
         enableColumnFilter: false,
-        header: () => <HeaderLabel>Name</HeaderLabel>,
+        header: () => <HeaderLabel>Project name</HeaderLabel>,
         cell: ({ row }) => {
           const lead = row.original
           return (

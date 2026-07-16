@@ -49,7 +49,7 @@ function enrich(p: PropertyRegisterRow): Register {
   if (p.activeJobStatus) {
     dealNote = `Job ${projectStatusLabel(p.activeJobStatus as ProjectStatus).toLowerCase()}`;
   } else if (p.openBidCount > 0) {
-    dealNote = `${p.openBidCount} open bid${p.openBidCount === 1 ? "" : "s"}`;
+    dealNote = `${p.openBidCount} open opportunit${p.openBidCount === 1 ? "y" : "ies"}`;
   } else if (p.openLeadCount > 0) {
     dealNote = `${p.openLeadCount} open lead${p.openLeadCount === 1 ? "" : "s"}`;
   }
@@ -79,7 +79,7 @@ export default async function PropertiesPage({
   const grouped = group === "mgmt";
 
   const all = (await getPropertiesRegister()).map(enrich);
-  // Repaint-due first — those are the calls that mint the next deal.
+  // Repaint-due first — those are the calls that mint the next project.
   all.sort((a, b) => Number(b.repaintDue) - Number(a.repaintDue));
 
   const counts = {
@@ -127,7 +127,7 @@ export default async function PropertiesPage({
             Properties
           </h1>
           <p className="mt-1 text-[13.5px] text-muted-foreground">
-            Buildings outlast every deal and every management company. This is
+            Buildings outlast every project and every management company. This is
             where repeat work is born.
           </p>
         </div>
@@ -170,7 +170,7 @@ export default async function PropertiesPage({
               <Count n={counts.all} />
             </Chip>
             <Chip href="/properties?show=open" active={filter === "open" && !grouped}>
-              Has open deal
+              Has open project
               <Count n={counts.open} />
             </Chip>
             <Chip href="/properties?show=due" active={filter === "due" && !grouped}>
@@ -292,7 +292,7 @@ export default async function PropertiesPage({
             ) : p.hasOpenDeal ? (
               <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-blue-600/20 bg-blue-600/10 px-2.5 py-[3px] text-xs font-semibold text-blue-700 dark:text-blue-400">
                 <span className="size-1.5 rounded-full bg-blue-600" />
-                Active deal
+                Active project
               </span>
             ) : null}
             {p.managementName &&

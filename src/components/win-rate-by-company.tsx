@@ -80,7 +80,7 @@ export function WinRateByCompany({ rows }: { rows: WinLossByCompany[] }) {
 
       {decided.length === 0 ? (
         <p className="px-4 py-5 text-sm text-muted-foreground">
-          No decided bids yet — win rates appear once the first quote comes
+          No decided opportunities yet — win rates appear once the first quote comes
           back accepted or declined.
         </p>
       ) : (

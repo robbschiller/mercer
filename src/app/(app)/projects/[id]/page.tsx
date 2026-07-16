@@ -324,10 +324,10 @@ export default async function ProjectPage({
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Bid context</CardTitle>
+              <CardTitle className="text-base">Opportunity context</CardTitle>
               <CardDescription>
-                The accepted bid is the contract artifact — frozen, read-only.
-                Scope changes need a new bid.
+                The accepted opportunity is the contract artifact — frozen, read-only.
+                Scope changes need a new opportunity.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap items-center gap-3 text-sm">
@@ -335,8 +335,8 @@ export default async function ProjectPage({
                 {bidStatusLabel(bid.status)}
               </Badge>
               <Button variant="outline" size="sm" asChild>
-                <Link href={`/bids/${bid.id}`}>
-                  Open bid
+                <Link href={`/opportunities/${bid.id}`}>
+                  Open opportunity
                   <ArrowUpRight className="size-3.5" />
                 </Link>
               </Button>
@@ -751,7 +751,7 @@ function PreStartCard({
           <CardTitle className="text-base">Pre-start checklist</CardTitle>
           <CardDescription>
             This project isn&apos;t attached to a property, so Notice to Owner
-            can&apos;t be captured here. Link the bid to a property to enable
+            can&apos;t be captured here. Link the opportunity to a property to enable
             the checklist.
           </CardDescription>
         </CardHeader>
@@ -1252,7 +1252,7 @@ function ChangeOrdersCard({
             the customer accepts, the contract value updates to the new total.
           </p>
           <Button variant="outline" size="sm" asChild className="shrink-0">
-            <Link href={`/bids/${projectId}`}>Draft with AI</Link>
+            <Link href={`/opportunities/${projectId}`}>Draft with AI</Link>
           </Button>
         </div>
         <form

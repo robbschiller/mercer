@@ -31,7 +31,7 @@ export function AccessItemsSection({
       <p className="text-xs text-muted-foreground">
         Lifts, scaffold, swing stage, and safety — how crews reach the surfaces.
         Cost scales by height and building type, not square footage, and is
-        included in the bid total.
+        included in the quote total.
       </p>
       {items.length > 0 && (
         <div className="flex flex-col gap-1">

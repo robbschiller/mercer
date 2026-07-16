@@ -44,7 +44,7 @@ export function CompanyDetailsForm({
           id="tagline"
           name="tagline"
           defaultValue={profile?.tagline ?? ""}
-          placeholder="One-line pitch shown on your bid PDF"
+          placeholder="One-line pitch shown on your proposal PDF"
         />
       </div>
 

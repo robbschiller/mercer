@@ -47,7 +47,7 @@ function renderContext(packs: ContextPack[]): string {
 function mockAnswer(message: string, packs: ContextPack[]): string {
   const found = packs.filter((p) => p.found);
   if (found.length === 0) {
-    return "Tag a record with the + button (a property, bid/project, lead, contact, or company) and I'll answer using its live data. Right now I don't have anything in context.\n\n(Offline mode: live AI answers are off until an API key is added.)";
+    return "Tag a record with the + button (a property, opportunity/job, lead, contact, or company) and I'll answer using its live data. Right now I don't have anything in context.\n\n(Offline mode: live AI answers are off until an API key is added.)";
   }
   const body = found
     .map((p) => `${p.label} (${p.type})\n${p.markdown}`)

@@ -229,11 +229,11 @@ export function PropertyDetailPanel({
             <>
               <p>
                 Work the property through the strongest available contact, then
-                create a one-property bid from that lead.
+                create a one-property opportunity from that lead.
               </p>
               <Button variant="amber" asChild>
-                <Link href={`/bids/new?leadId=${primaryLead.id}`}>
-                  Create bid for this property
+                <Link href={`/opportunities/new?leadId=${primaryLead.id}`}>
+                  Create opportunity for this property
                 </Link>
               </Button>
             </>

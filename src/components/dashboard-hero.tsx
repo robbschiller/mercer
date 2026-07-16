@@ -7,10 +7,14 @@ import {
   useState,
   useTransition,
 } from "react";
-import { ArrowUp, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowUp, FileText, Loader2, Paperclip } from "lucide-react";
 import { parseDashboardIntent } from "@/lib/actions/parse-dashboard-intent";
 import { askMercer } from "@/lib/actions/ask";
+import { extractLeadDraftAction } from "@/lib/actions/extract-lead";
+import { stashLeadDraft } from "@/lib/lead-draft";
 import type { DashboardIntent } from "@/lib/dashboard-intent";
+import { cn } from "@/lib/utils";
 
 type DashboardHeroProps = {
   firstName: string | null;
@@ -33,6 +37,7 @@ function greetingFor(hour: number) {
  * above the input — one box, no wrong door.
  */
 export function DashboardHero({ firstName, briefSlot }: DashboardHeroProps) {
+  const router = useRouter();
   const [now, setNow] = useState<Date | null>(null);
   const [value, setValue] = useState("");
   const [pending, startTransition] = useTransition();
@@ -40,7 +45,42 @@ export function DashboardHero({ firstName, briefSlot }: DashboardHeroProps) {
   const [status, setStatus] = useState<
     { kind: "idle" } | { kind: "error"; text: string }
   >({ kind: "idle" });
+  const [reading, setReading] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const dropInputRef = useRef<HTMLInputElement>(null);
+
+  // D1: a dropped spec/RFP/email screenshot becomes a draft lead — AI
+  // extracts the fields, then the New Lead form opens pre-filled for review.
+  const readFiles = useCallback(
+    (list: FileList | File[]) => {
+      const files = Array.from(list).slice(0, 5);
+      if (files.length === 0 || reading) return;
+      setStatus({ kind: "idle" });
+      setReading(
+        files.length === 1
+          ? `Reading ${files[0].name}…`
+          : `Reading ${files.length} files…`,
+      );
+      startTransition(async () => {
+        try {
+          const fd = new FormData();
+          for (const f of files) fd.append("files", f);
+          if (value.trim()) fd.append("note", value.trim());
+          const result = await extractLeadDraftAction(fd);
+          if (!result.ok) {
+            setStatus({ kind: "error", text: result.error });
+            return;
+          }
+          stashLeadDraft(result.draft, files);
+          router.push("/leads/new");
+        } finally {
+          setReading(null);
+        }
+      });
+    },
+    [reading, value, router],
+  );
 
   useEffect(() => setNow(new Date()), []);
 
@@ -131,7 +171,37 @@ export function DashboardHero({ firstName, briefSlot }: DashboardHeroProps) {
 
       {briefSlot}
 
-      <div className="overflow-hidden rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-[border-color,box-shadow] focus-within:border-foreground/25 focus-within:shadow-[0_0_0_4px] focus-within:shadow-foreground/5">
+      <div
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes("Files")) {
+            e.preventDefault();
+            setDragOver(true);
+          }
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          if (e.dataTransfer.files.length === 0) return;
+          e.preventDefault();
+          setDragOver(false);
+          readFiles(e.dataTransfer.files);
+        }}
+        className={cn(
+          "overflow-hidden rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-[border-color,box-shadow] focus-within:border-foreground/25 focus-within:shadow-[0_0_0_4px] focus-within:shadow-foreground/5",
+          dragOver &&
+            "border-blue-600/60 shadow-[0_0_0_4px] shadow-blue-600/10",
+        )}
+      >
+        {(dragOver || reading) && (
+          <div className="flex items-center gap-2 border-b bg-blue-600/5 px-4 py-2 text-[12.5px] text-blue-700 dark:text-blue-400">
+            {reading ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <FileText className="size-3.5" />
+            )}
+            {reading ??
+              "Drop it — a spec, RFP, or email screenshot becomes a draft lead."}
+          </div>
+        )}
         {answer && (
           <div className="border-b bg-muted/40 px-4 pb-3 pt-3.5">
             <div className="mb-2.5 flex items-baseline gap-2 text-[13px] text-muted-foreground">
@@ -189,6 +259,27 @@ export function DashboardHero({ firstName, briefSlot }: DashboardHeroProps) {
             disabled={pending}
             className="max-h-40 min-h-9 w-full resize-none border-0 bg-transparent py-1.5 text-base leading-6 outline-none placeholder:text-muted-foreground/70 disabled:opacity-60"
           />
+          <input
+            ref={dropInputRef}
+            type="file"
+            multiple
+            accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.eml,image/*,application/pdf"
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files?.length) readFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => dropInputRef.current?.click()}
+            disabled={pending}
+            aria-label="Upload a spec or email — AI drafts the lead"
+            title="Upload a spec or email — AI drafts the lead"
+            className="mb-0.5 flex size-[34px] shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
+          >
+            <Paperclip className="size-4" />
+          </button>
           <button
             type="submit"
             disabled={!canSubmit}

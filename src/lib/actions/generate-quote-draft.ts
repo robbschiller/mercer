@@ -218,7 +218,7 @@ function mockDraft(ctx: QuoteDraftContext, scopeText: string): QuoteDraft {
         evidenceDocumentIndex: null,
         rationale: rateOnly
           ? "Rate-only line — billed as found (offline draft)."
-          : "Offline draft — quantity estimated from bid measurements.",
+          : "Offline draft — quantity estimated from opportunity measurements.",
       } as QuoteDraftLine;
     });
 
@@ -286,7 +286,7 @@ export async function generateQuoteDraft(data: {
 
   const ctx = await getQuoteDraftContext(data.bidId);
   if (!ctx) {
-    return { ok: false, error: "Bid not found." };
+    return { ok: false, error: "Opportunity not found." };
   }
   const nextVersion = (ctx.latestProposal?.version ?? 0) + 1;
   const clarifications = data.clarifications ?? [];
@@ -313,7 +313,7 @@ export async function generateQuoteDraft(data: {
       .slice(0, 3)
       .map((q) => ({ question: q.question, why: q.why, answer: "" }));
     await saveDraftClarifications(data.bidId, persisted);
-    revalidatePath(`/bids/${data.bidId}`);
+    revalidatePath(`/opportunities/${data.bidId}`);
     return {
       ok: true,
       kind: "questions",
@@ -339,7 +339,7 @@ export async function generateQuoteDraft(data: {
       clarifications: clarifications.length > 0 ? clarifications : null,
     },
   );
-  revalidatePath(`/bids/${data.bidId}`);
+  revalidatePath(`/opportunities/${data.bidId}`);
 
   return {
     ok: true,
