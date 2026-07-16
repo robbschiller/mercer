@@ -32,7 +32,6 @@ import type { KnownBuilding } from "@/lib/store";
 import {
   AerialBuildingCard,
   Fact,
-  GhostSteps,
   PropertyFinder,
   buildingAddress,
   buildingName,
@@ -201,13 +200,6 @@ export function NewBidIntake({
             </p>
           </div>
 
-          <GhostSteps
-            steps={[
-              { n: "1", t: "The project", w: [150, 150] },
-              { n: "2", t: "What we already know", w: [90, 90, 90, 110] },
-              { n: "★", t: "Draft the quote with AI", w: [230] },
-            ]}
-          />
         </div>
       </div>
     );

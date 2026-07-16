@@ -31,7 +31,6 @@ import type { ContactRegisterRow, KnownBuilding } from "@/lib/store";
 import {
   AerialBuildingCard,
   Fact,
-  GhostSteps,
   PropertyFinder,
   buildingAddress,
   buildingName,
@@ -298,14 +297,6 @@ export function NewLeadIntake({
           </div>
 
           <PropertyFinder flavor="lead" onLock={lock} />
-
-          <GhostSteps
-            steps={[
-              { n: "A", t: "Who", w: [150, 150] },
-              { n: "B", t: "What", w: [110, 90, 90, 120] },
-              { n: "C", t: "Send-off", w: [220] },
-            ]}
-          />
         </div>
       </div>
     );
