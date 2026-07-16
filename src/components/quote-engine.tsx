@@ -565,6 +565,90 @@ function Clarify({
   );
 }
 
+// ── The exchange transcript (composer plan A1, lean form) ──────────────────
+// The review phase reads as the conversation that produced it: your scope,
+// its questions, your answers, what it drafted. The full chat-thread shell
+// is §9's design pass; this makes the surface read conversational today.
+
+function ExchangeTranscript({
+  scope,
+  questions,
+  summary,
+  changeLog,
+  photoCount,
+  documentCount,
+}: {
+  scope: string;
+  questions: DraftClarification[];
+  summary: string | null;
+  changeLog: string | null;
+  photoCount: number;
+  documentCount: number;
+}) {
+  if (!scope.trim() && questions.length === 0) return null;
+  const attached = [
+    photoCount > 0 ? `${photoCount} photo${photoCount === 1 ? "" : "s"}` : null,
+    documentCount > 0
+      ? `${documentCount} document${documentCount === 1 ? "" : "s"}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const answered = questions.filter((q) => q.question);
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border bg-muted/20 px-4 py-3 text-sm">
+      {scope.trim() && (
+        <div className="flex gap-2.5">
+          <span className="mt-0.5 shrink-0 rounded-[5px] bg-muted px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+            You
+          </span>
+          <p className="min-w-0 text-foreground/85">
+            {scope.length > 280 ? `${scope.slice(0, 280)}…` : scope}
+            {attached && (
+              <span className="ml-2 text-xs text-muted-foreground">
+                + {attached}
+              </span>
+            )}
+          </p>
+        </div>
+      )}
+      {answered.map((q, i) => (
+        <div key={i} className="flex flex-col gap-1 pl-1">
+          <div className="flex gap-2.5">
+            <span className="mt-0.5 shrink-0 rounded-[5px] bg-foreground px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-background">
+              M
+            </span>
+            <p className="min-w-0 text-xs text-foreground/75">{q.question}</p>
+          </div>
+          <div className="flex gap-2.5">
+            <span className="mt-0.5 shrink-0 rounded-[5px] bg-muted px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+              You
+            </span>
+            <p className="min-w-0 text-xs text-foreground/85">
+              {q.answer.trim() || (
+                <span className="italic text-muted-foreground">
+                  (skipped — it used its best assumption and flagged it)
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+      ))}
+      {(summary || changeLog) && (
+        <div className="flex gap-2.5">
+          <span className="mt-0.5 shrink-0 rounded-[5px] bg-foreground px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-background">
+            M
+          </span>
+          <p className="min-w-0 text-xs text-foreground/75">
+            {[summary, changeLog].filter(Boolean).join(" · ")}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── State 4/5: stamped quote ────────────────────────────────────────────────
 
 function DoneCard({
@@ -743,6 +827,7 @@ export function QuoteEngine({
   const [changeLog, setChangeLog] = useState<string | null>(
     bid.draftChangeLog ?? null,
   );
+  const [draftSummary, setDraftSummary] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
   const [marginWarning, setMarginWarning] = useState<{
@@ -799,6 +884,7 @@ export function QuoteEngine({
         return;
       }
       setChangeLog(result.changeLog);
+      setDraftSummary(result.summary);
       setPhase("review");
     });
   };
@@ -896,6 +982,14 @@ export function QuoteEngine({
           )}
           {phase === "review" && (
             <>
+              <ExchangeTranscript
+                scope={scope}
+                questions={questions}
+                summary={draftSummary}
+                changeLog={changeLog}
+                photoCount={photos.length}
+                documentCount={attachments.length}
+              />
               {marginWarning && (
                 <div className="flex flex-wrap items-center gap-3 rounded-xl border border-red-600/40 bg-red-600/5 px-4 py-3">
                   <TriangleAlert className="size-5 shrink-0 text-red-600" />

@@ -14,7 +14,11 @@ export type AiFeature =
   | "morning_brief"
   | "follow_up"
   | "composer"
-  | "lead_intake";
+  | "lead_intake"
+  | "proposal_writer"
+  | "site_report"
+  | "additional_work"
+  | "closeout";
 
 export const AI_FEATURE_LABELS: Record<AiFeature, string> = {
   quote_engine: "Quote engine",
@@ -23,6 +27,10 @@ export const AI_FEATURE_LABELS: Record<AiFeature, string> = {
   follow_up: "Follow-up drafts",
   composer: "Home composer",
   lead_intake: "Lead intake",
+  proposal_writer: "Proposal writer",
+  site_report: "Weekly site reports",
+  additional_work: "Additional work quotes",
+  closeout: "Closeout packets",
 };
 
 /**

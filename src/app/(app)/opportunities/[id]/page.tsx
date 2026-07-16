@@ -11,7 +11,7 @@ import {
   getContactName,
   getBidBudget,
 } from "@/lib/store";
-import { BudgetCard } from "@/components/budget-card";
+import { TakeoffBudgetCard } from "@/components/budget-card";
 import { QuoteEngine } from "@/components/quote-engine";
 import { addCatalogLineItemAction } from "@/lib/actions";
 import { Input } from "@/components/ui/input";
@@ -175,7 +175,7 @@ export default async function BidPage({
       />
 
       {budget && (
-        <BudgetCard budget={budget} quoteTotal={pricing.grandTotal} />
+        <TakeoffBudgetCard bidId={id} budget={budget} quoteTotal={pricing.grandTotal} />
       )}
 
       <Suspense fallback={<OsmFootprintsSkeleton />}>
