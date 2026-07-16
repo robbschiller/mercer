@@ -1232,7 +1232,13 @@ export async function createProposalShare(
   return { ...rows[0], bidId: proposalRow.bidId };
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function getProposalShareBySlug(slug: string) {
+  // Slugs are share ids (uuid). A malformed one must 404, not blow up the
+  // customer-facing page with a uuid-cast 500.
+  if (!UUID_RE.test(slug)) return null;
   const rows = await db
     .select({
       share: proposalShares,
