@@ -123,6 +123,23 @@ export default async function SharedProposalPage({
     );
   const accessItems = snapshot.accessItems ?? [];
   const archetypeBuildings = snapshot.buildings.filter((b) => b.archetype);
+  // Sales-document copy layer (§A2) — absent on older snapshots, and any
+  // slot may be null. Every section below degrades to the pre-A2 layout.
+  const doc = snapshot.document ?? null;
+  const promises = doc?.promises ?? [];
+  const statChips = doc?.statChips ?? [];
+  const included = doc?.included ?? [];
+  const paymentSchedule = doc?.paymentSchedule ?? [];
+  const whatToExpect = doc?.whatToExpect ?? [];
+  const testimonials = doc?.testimonials ?? [];
+  const terms = doc?.terms ?? [];
+  const hasWhyUs =
+    Boolean(doc?.whyUsHeadline || doc?.whyUsBody) ||
+    promises.length > 0 ||
+    statChips.length > 0;
+  const priceHeldDate = doc?.priceHeldThrough
+    ? formatHeldThrough(doc.priceHeldThrough)
+    : null;
   // After acceptance the URL pivots to a status page (PRD §5.5). The
   // project row is the trigger; if there's no project, fall back to the
   // proposal-acceptance render (covers older accepted shares from before
@@ -193,6 +210,11 @@ export default async function SharedProposalPage({
                 <h1 className="text-2xl font-semibold text-white">
                   {snapshot.propertyName}
                 </h1>
+                {doc?.coverSubtitle && (
+                  <p className="mt-1 max-w-prose text-sm leading-snug text-white/85">
+                    {doc.coverSubtitle}
+                  </p>
+                )}
                 <p className="text-sm text-white/80">{snapshot.address}</p>
               </div>
               <Badge variant="secondary" className="shrink-0">
@@ -214,6 +236,11 @@ export default async function SharedProposalPage({
                 : "Mercer Proposal"}
             </p>
             <h1 className="text-2xl font-semibold">{snapshot.propertyName}</h1>
+            {doc?.coverSubtitle && (
+              <p className="mt-1 max-w-prose text-sm leading-snug">
+                {doc.coverSubtitle}
+              </p>
+            )}
             <p className="text-sm text-muted-foreground">{snapshot.address}</p>
           </div>
           {/* This badge is about THIS quote link, not the bid — a customer
@@ -244,11 +271,76 @@ export default async function SharedProposalPage({
         </Card>
       )}
 
+      {hasWhyUs && (
+        <Card>
+          <CardHeader>
+            {doc?.whyUsHeadline ? (
+              <CardTitle
+                className="text-2xl leading-snug"
+                style={{
+                  fontFamily: "var(--font-instrument), ui-serif, serif",
+                }}
+              >
+                {doc.whyUsHeadline}
+              </CardTitle>
+            ) : (
+              <CardTitle className="text-lg">
+                Why {brand?.companyName ?? "us"}
+              </CardTitle>
+            )}
+            {doc?.whyUsBody && (
+              <CardDescription className="text-sm leading-relaxed text-foreground/80">
+                {doc.whyUsBody}
+              </CardDescription>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {promises.length > 0 && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {promises.map((p, i) => (
+                  <div key={i} className="rounded-md border p-3">
+                    <p
+                      className="text-sm font-semibold"
+                      style={accent ? { color: accent } : undefined}
+                    >
+                      {p.title}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {p.body}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {statChips.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {statChips.map((c, i) => (
+                  <div
+                    key={i}
+                    className="min-w-[110px] flex-1 rounded-md border bg-muted/40 p-3 text-center"
+                  >
+                    <p className="text-lg font-semibold tabular-nums">
+                      {c.value}
+                    </p>
+                    <p className="mt-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      {c.label}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Scope & pricing</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {doc?.scopeIntro && (
+            <p className="text-sm leading-relaxed">{doc.scopeIntro}</p>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-md border p-3">
               <p className="text-xs text-muted-foreground">Client</p>
@@ -279,6 +371,26 @@ export default async function SharedProposalPage({
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+          {included.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                What&apos;s included
+              </p>
+              <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
+                {included.map((item, i) => (
+                  <p key={i} className="text-sm leading-snug">
+                    <span
+                      className="font-semibold"
+                      style={accent ? { color: accent } : undefined}
+                    >
+                      {boldLead(item.title)}
+                    </span>{" "}
+                    {item.body}
+                  </p>
+                ))}
+              </div>
             </div>
           )}
           <EvidenceStrip lines={committedLines} />
@@ -318,6 +430,11 @@ export default async function SharedProposalPage({
             <div className="rounded-md border">
               <div className="border-b bg-muted/40 p-3">
                 <p className="text-sm font-medium">Unit rates — as found work</p>
+                {doc?.publishedRatesIntro && (
+                  <p className="mt-1 text-sm leading-relaxed">
+                    {doc.publishedRatesIntro}
+                  </p>
+                )}
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   Billed at the listed rate as work is found and approved. Not
                   included in the quote total.
@@ -358,7 +475,70 @@ export default async function SharedProposalPage({
                 </a>
               )}
             </div>
+            {(doc?.perSf != null ||
+              doc?.perUnit != null ||
+              doc?.durationLine) && (
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t pt-3 text-xs text-muted-foreground">
+                {doc?.perSf != null && (
+                  <span className="tabular-nums">
+                    <span className="font-medium text-foreground">
+                      {formatCurrency(doc.perSf)}
+                    </span>{" "}
+                    per square foot
+                  </span>
+                )}
+                {doc?.perUnit != null && (
+                  <span className="tabular-nums">
+                    <span className="font-medium text-foreground">
+                      {formatWholeCurrency(doc.perUnit)}
+                    </span>{" "}
+                    per unit
+                    {doc.unitCount != null
+                      ? ` · ${doc.unitCount.toLocaleString()} units`
+                      : ""}
+                  </span>
+                )}
+                {doc?.durationLine && <span>{doc.durationLine}</span>}
+              </div>
+            )}
           </div>
+          {paymentSchedule.length > 0 && (
+            <div className="rounded-md border">
+              <div className="border-b bg-muted/40 p-3">
+                <p className="text-sm font-medium">Payment schedule</p>
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs text-muted-foreground">
+                    <th className="p-3 font-medium">Milestone</th>
+                    <th className="p-3 text-right font-medium">Share</th>
+                    <th className="p-3 text-right font-medium">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paymentSchedule.map((m, i) => (
+                    <tr key={i} className="border-b last:border-0">
+                      <td className="p-3">{m.milestone}</td>
+                      <td className="p-3 text-right tabular-nums">
+                        {Math.round(m.sharePct)}%
+                      </td>
+                      <td className="p-3 text-right font-medium tabular-nums">
+                        {formatCurrency(m.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {doc?.scheduleBody && (
+            <div className="rounded-md border p-3">
+              <p className="text-xs text-muted-foreground">Schedule</p>
+              <p className="mt-1 text-sm leading-relaxed">
+                {doc.scheduleBody}
+              </p>
+            </div>
+          )}
           {snapshot.notes && (
             <div className="rounded-md border p-3">
               <p className="text-xs text-muted-foreground">Notes</p>
@@ -455,6 +635,48 @@ export default async function SharedProposalPage({
         </Card>
       )}
 
+      {(whatToExpect.length > 0 || testimonials.length > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">What to expect</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {whatToExpect.length > 0 && (
+              <div className="grid gap-3 sm:grid-cols-3">
+                {whatToExpect.map((step, i) => (
+                  <div key={i} className="rounded-md border p-3">
+                    <p
+                      className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+                      style={accent ? { color: accent } : undefined}
+                    >
+                      Step {i + 1}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold">{step.title}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {step.body}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {testimonials.length > 0 && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {testimonials.map((t, i) => (
+                  <div key={i} className="rounded-md border bg-muted/40 p-3">
+                    <p className="text-sm italic leading-relaxed">
+                      &ldquo;{stripQuotes(t.quote)}&rdquo;
+                    </p>
+                    <p className="mt-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      {t.attribution}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {brand && (brand.aboutBlurb || brand.credentials) && (
         <Card>
           <CardHeader>
@@ -470,6 +692,38 @@ export default async function SharedProposalPage({
               <p className="text-xs text-muted-foreground">
                 {brand.credentials}
               </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {(terms.length > 0 || priceHeldDate) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Terms of this proposal</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {terms.length > 0 && (
+              <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed">
+                {terms.map((term, i) => (
+                  <li key={i}>
+                    <TermText text={term} />
+                  </li>
+                ))}
+              </ul>
+            )}
+            {priceHeldDate && (
+              <div
+                className="rounded-md border p-3 text-sm"
+                style={accent ? { borderColor: accent } : undefined}
+              >
+                <span
+                  className="font-semibold"
+                  style={accent ? { color: accent } : undefined}
+                >
+                  This price is held through {priceHeldDate}
+                </span>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -506,6 +760,11 @@ export default async function SharedProposalPage({
             <CardTitle className="text-lg">Respond</CardTitle>
           </CardHeader>
           <CardContent>
+            {doc?.acceptanceCta && (
+              <p className="mb-4 text-sm leading-relaxed">
+                {doc.acceptanceCta}
+              </p>
+            )}
             <PublicProposalResponse
               slug={slug}
               isAccepted={isAccepted}
@@ -549,6 +808,51 @@ function renderCoverLetter(
     .replaceAll("{recipient}", recipient ?? snapshot.clientName)
     .replaceAll("{property}", snapshot.propertyName)
     .replaceAll("{total}", formatCurrency(snapshot.grandTotal));
+}
+
+/** Whole-dollar money for per-unit stats ("$1,478 per unit"). */
+const wholeCurrency = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
+
+function formatWholeCurrency(amount: number): string {
+  return wholeCurrency.format(amount);
+}
+
+/** ISO date → "December 31, 2026" (UTC so a date-only string can't roll back a day). */
+function formatHeldThrough(iso: string): string | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/** "Pressure wash" → "Pressure wash." — the bold lead of a checklist item. */
+function boldLead(title: string): string {
+  const t = title.trim();
+  return /[.:!?]$/.test(t) ? t : `${t}.`;
+}
+
+/** Testimonial quotes come with or without their own quote marks — normalize. */
+function stripQuotes(quote: string): string {
+  return quote.trim().replace(/^["“]/, "").replace(/["”]$/, "");
+}
+
+/** Terms carry their own "Price." / "Warranty." lead-ins — bold them. */
+function TermText({ text }: { text: string }) {
+  const m = text.match(/^(.{1,48}?[.:])\s+([\s\S]+)$/);
+  if (!m) return <>{text}</>;
+  return (
+    <>
+      <span className="font-semibold">{m[1]}</span> {m[2]}
+    </>
+  );
 }
 
 /** Evidence photos beside the lines they justify — the scope story. */

@@ -13,6 +13,7 @@ import {
   getInvoicesForBid,
   getChangeOrdersForBid,
   getBidContactOptions,
+  getBidBudget,
   allowedProjectStatusTransitions,
   isProjectStartReady,
   type ProjectStatus,
@@ -23,6 +24,12 @@ import {
   type Invoice,
   type ChangeOrder,
 } from "@/lib/store";
+import { BudgetVsActualCard } from "@/components/budget-vs-actual-card";
+import {
+  AdditionalWorkComposer,
+  CloseoutButton,
+  SiteReportComposer,
+} from "@/components/job-ai-cards";
 import {
   updateProjectStatusAction,
   updateProjectDetailsAction,
@@ -158,6 +165,7 @@ export default async function ProjectPage({
     invoices,
     changeOrders,
     contactOptions,
+    takeoffBudget,
   ] = await Promise.all([
     getProjectUpdates(project.id),
     project.status === "not_started"
@@ -171,6 +179,7 @@ export default async function ProjectPage({
     getInvoicesForBid(project.id),
     getChangeOrdersForBid(project.id),
     getBidContactOptions(project.id),
+    getBidBudget(project.id),
   ]);
   const startReady = preStart ? isProjectStartReady(preStart) : true;
 
@@ -282,6 +291,16 @@ export default async function ProjectPage({
                 it isn&apos;t already set; entering <em>complete</em> stamps
                 the actual end date.
               </p>
+              {(project.status === "punch_out" ||
+                project.status === "complete" ||
+                project.status === "warranty_watch") && (
+                <div className="flex flex-col gap-1.5 border-t pt-3">
+                  {/* C4: completion confirmation, colors used + where, care
+                      instructions — posted visible on the customer link and
+                      filed on the property forever. */}
+                  <CloseoutButton bidId={project.id} />
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -307,6 +326,10 @@ export default async function ProjectPage({
             signature={signature}
             schedulePct={schedulePct}
           />
+
+          {takeoffBudget && (
+            <BudgetVsActualCard budget={takeoffBudget} expenses={expenses} />
+          )}
 
           <InvoicesCard
             projectId={project.id}
@@ -654,6 +677,9 @@ function UpdatesCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        {/* C2: photos + a rough note → AI drafts the customer-ready weekly
+            report, posted as a visible update on the customer link. */}
+        <SiteReportComposer bidId={project.id} />
         <form
           action={createProjectUpdateAction}
           className="flex flex-col gap-2.5 rounded-xl border bg-muted/20 p-3"
@@ -1245,16 +1271,9 @@ function ChangeOrdersCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <div className="flex items-start justify-between gap-3 rounded-md border border-primary/20 bg-primary/[0.03] p-3">
-          <p className="text-sm text-muted-foreground">
-            Found more scope on site? Draft an additional-work quote with the
-            engine — describe it, review the lines, send a fresh version. When
-            the customer accepts, the contract value updates to the new total.
-          </p>
-          <Button variant="outline" size="sm" asChild className="shrink-0">
-            <Link href={`/opportunities/${projectId}`}>Draft with AI</Link>
-          </Button>
-        </div>
+        {/* C3: what-the-crew-found + the job's photos → a priced draft at
+            the PUBLISHED rates the customer already approved. */}
+        <AdditionalWorkComposer bidId={projectId} />
         <form
           action={createChangeOrderAction}
           className="grid gap-3 rounded-md border p-3"

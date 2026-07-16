@@ -25,6 +25,7 @@ import {
   createProposal,
   createProposalShare,
   getBidBudget,
+  getJobScheduleContext,
   getNextProposalVersion,
   getCompanyProfile,
   getPhotos,
@@ -170,6 +171,7 @@ import {
 } from "./validations";
 import { calculateBidPricing } from "./pricing";
 import { budgetTotals } from "./budget";
+import { composeProposalDocument } from "./actions/compose-proposal-doc";
 import type { ProposalSnapshot } from "./pdf/types";
 import { generateProposalPdf } from "./pdf/generate";
 import { fetchSatelliteImageDataUriForPdf } from "./maps/satellite-pdf";
@@ -716,6 +718,30 @@ export async function generateProposalAction(data: {
     getPhotos("bid", bid.id),
   ]);
 
+  // §A2: the AI copywriter fills the fixed template's text slots from org
+  // knowledge. Null (no key / failure) renders the pre-A2 layout — a stamp
+  // never fails because copy didn't.
+  const document = await composeProposalDocument({
+    ownerUserId: bid.userId,
+    propertyName: bid.propertyName,
+    clientName: bid.clientName,
+    grandTotal: pricing.grandTotal,
+    totalSqft,
+    units: budget?.units ?? null,
+    buildings: budget?.buildings ?? null,
+    isLargeJob:
+      (await getJobScheduleContext(bid.id)).isLargeJob ?? lineItems.length > 6,
+    lines: lineItems.map((li) => ({
+      name: li.name,
+      rateOnly: Boolean(li.rateOnly),
+      category: li.category,
+    })),
+    scopeText: data.scopeText ?? bid.draftScopeText ?? null,
+    brandCompanyName: companyProfile?.companyName ?? null,
+    brandCredentials: companyProfile?.credentials ?? null,
+    brandAbout: companyProfile?.aboutBlurb ?? null,
+  });
+
   const photoUrlById = new Map(bidPhotos.map((p) => [p.id, p.url]));
   // Hero: the first takeoff photo tells the property's story better than a
   // map; fall back to the satellite proxy when there are no photos.
@@ -780,6 +806,7 @@ export async function generateProposalAction(data: {
         }
       : undefined,
     coverPhotoUrl,
+    document,
     internalBudget:
       budget && buildUp != null
         ? {

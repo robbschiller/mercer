@@ -75,6 +75,49 @@ export interface SnapshotAccessItem {
   amount: number;
 }
 
+/**
+ * The sales-document layer (proposal composer §A2): AI-composed COPY for a
+ * FIXED template — the model fills slots, never invents structure, so every
+ * proposal renders identically (Jordan's consistency requirement). Assembled
+ * at stamp from org knowledge (messaging guide, testimonials, company facts)
+ * and frozen with the snapshot. All fields nullable: a missing document (or
+ * missing slot) renders the pre-A2 layout gracefully.
+ */
+export interface SnapshotDocument {
+  /** One sentence under the property name on the cover. */
+  coverSubtitle: string | null;
+  /** "Why us" header line, e.g. "One painting partner. Zero fire drills." */
+  whyUsHeadline: string | null;
+  /** Short paragraph aimed at the recipient's role (PM/board). */
+  whyUsBody: string | null;
+  /** The org's standing promises — title + one-line body each (≤6). */
+  promises: { title: string; body: string }[];
+  /** Stat chips, e.g. "250+ | communities completed". */
+  statChips: { value: string; label: string }[];
+  /** Scope page intro paragraph. */
+  scopeIntro: string | null;
+  /** "What's included" bullets — bold lead + sentence each. */
+  included: { title: string; body: string }[];
+  /** Investment stats alongside the one number. */
+  perSf: number | null;
+  perUnit: number | null;
+  unitCount: number | null;
+  /** e.g. "5–6 weeks on site". */
+  durationLine: string | null;
+  scheduleBody: string | null;
+  paymentSchedule: { milestone: string; sharePct: number; amount: number }[];
+  /** Published-rates section intro (the no-leverage promise). */
+  publishedRatesIntro: string | null;
+  whatToExpect: { title: string; body: string }[];
+  testimonials: { quote: string; attribution: string }[];
+  /** Terms bullets: "Price." / "Warranty." style lead-ins included in text. */
+  terms: string[];
+  /** ISO date the price is held through — also shown as the CTA urgency. */
+  priceHeldThrough: string | null;
+  /** Sign-off line above the acceptance block. */
+  acceptanceCta: string | null;
+}
+
 export interface ProposalSnapshot {
   propertyName: string;
   address: string;
@@ -94,6 +137,8 @@ export interface ProposalSnapshot {
   brand?: SnapshotBrand;
   /** Hero image for the branded proposal (best bid photo, else satellite). */
   coverPhotoUrl?: string | null;
+  /** The sales-document copy layer (§A2) — absent on older snapshots. */
+  document?: SnapshotDocument | null;
   /**
    * INTERNAL ONLY — the takeoff budget frozen with this version (proposal
    * composer Phase 1). Never rendered on the customer PDF or share page;

@@ -1861,7 +1861,12 @@ export async function getProjectUpdates(
 
 export async function createProjectUpdate(
   bidId: string,
-  data: { body: string; visibleOnPublicUrl: boolean }
+  data: {
+    body: string;
+    visibleOnPublicUrl: boolean;
+    /** "agent" for AI-drafted reports (C2/C4); defaults to human. */
+    authorType?: "human" | "crew_auto" | "agent";
+  }
 ): Promise<ProjectUpdate> {
   const user = await requireUser();
   // Ownership check: only the bid (project) owner can append updates, and
@@ -1880,7 +1885,7 @@ export async function createProjectUpdate(
     .insert(projectUpdates)
     .values({
       bidId,
-      authorType: "human",
+      authorType: data.authorType ?? "human",
       authorName,
       body: data.body,
       visibleOnPublicUrl: data.visibleOnPublicUrl,
@@ -8434,6 +8439,21 @@ export async function deleteOrgKnowledgeFile(
     )
     .returning();
   return rows[0] ?? null;
+}
+
+/** Latest stamped proposal snapshot for a bid — published rates, colors, terms. */
+export async function getLatestProposalSnapshotForBid(
+  bidId: string,
+): Promise<Record<string, unknown> | null> {
+  const user = await requireUser();
+  const rows = await db
+    .select({ snapshot: proposals.snapshot })
+    .from(proposals)
+    .innerJoin(bids, eq(bids.id, proposals.bidId))
+    .where(and(eq(proposals.bidId, bidId), eq(bids.userId, user.ownerUserId)))
+    .orderBy(desc(proposals.version))
+    .limit(1);
+  return (rows[0]?.snapshot as Record<string, unknown>) ?? null;
 }
 
 export async function getBidBudget(

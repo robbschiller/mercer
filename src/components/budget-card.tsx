@@ -11,10 +11,12 @@ import { cn } from "@/lib/utils";
  * build-up, and the margin readout against the live quote total. Internal
  * only; never rendered customer-side.
  */
-export function BudgetCard({
+export function TakeoffBudgetCard({
+  bidId,
   budget,
   quoteTotal,
 }: {
+  bidId: string;
   budget: BidBudgetData;
   quoteTotal: number | null;
 }) {
@@ -55,7 +57,13 @@ export function BudgetCard({
 
       <div className="border-t px-4 pb-4 pt-3">
         {/* scope stats */}
-        <div className="mb-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+        <div className="mb-3 flex flex-wrap items-baseline gap-x-5 gap-y-1 text-xs text-muted-foreground">
+          <a
+            href={`/api/budget/${bidId}`}
+            className="order-last ml-auto font-medium text-blue-700 hover:underline dark:text-blue-400"
+          >
+            Download .xlsx
+          </a>
           {budget.totalSf != null && (
             <span>
               <b className="font-mono font-medium tabular-nums text-foreground/80">

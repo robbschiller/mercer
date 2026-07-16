@@ -345,6 +345,259 @@ const styles = StyleSheet.create({
     color: "#999",
     textAlign: "center",
   },
+  /* ── Sales-document layer (§A2) — all sections conditional on snapshot.document ── */
+  coverSubtitle: {
+    fontSize: 9.5,
+    color: "#444",
+    lineHeight: 1.5,
+    marginTop: -4,
+    marginBottom: 8,
+    maxWidth: 420,
+  },
+  eyebrow: {
+    fontSize: 8,
+    color: "#666",
+    textTransform: "uppercase" as const,
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  whyUsHeadline: {
+    fontSize: 20,
+    fontFamily: "Times-Bold",
+    marginBottom: 10,
+  },
+  leadParagraph: {
+    fontSize: 10,
+    color: "#444",
+    lineHeight: 1.6,
+    marginBottom: 14,
+  },
+  promiseGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 4,
+  },
+  promiseCell: {
+    width: "50%",
+    padding: 4,
+  },
+  promiseBox: {
+    borderWidth: 1,
+    borderColor: "#e5e5e5",
+    borderRadius: 4,
+    padding: 8,
+    minHeight: 48,
+  },
+  promiseTitle: {
+    fontSize: 9.5,
+    fontFamily: "Helvetica-Bold",
+    marginBottom: 3,
+  },
+  promiseBody: {
+    fontSize: 8.5,
+    color: "#444",
+    lineHeight: 1.5,
+  },
+  statRow: {
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 12,
+  },
+  statChip: {
+    flex: 1,
+    backgroundColor: "#f3f3f3",
+    borderRadius: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    alignItems: "center",
+  },
+  statValue: {
+    fontSize: 12,
+    fontFamily: "Helvetica-Bold",
+  },
+  statLabel: {
+    fontSize: 6.5,
+    color: "#666",
+    letterSpacing: 0.5,
+    textAlign: "center",
+    marginTop: 3,
+  },
+  includedGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  includedCell: {
+    width: "50%",
+    paddingRight: 12,
+    marginBottom: 8,
+  },
+  includedBody: {
+    fontSize: 9,
+    color: "#444",
+    lineHeight: 1.5,
+  },
+  includedLead: {
+    fontFamily: "Helvetica-Bold",
+    color: "#1a1a1a",
+  },
+  investStats: {
+    fontSize: 8.5,
+    color: "#666",
+    textAlign: "right",
+    marginTop: 6,
+  },
+  scheduleHeader: {
+    flexDirection: "row",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e5e5",
+  },
+  scheduleHeadCell: {
+    fontSize: 8,
+    fontFamily: "Helvetica-Bold",
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.5,
+    color: "#666",
+  },
+  scheduleRow: {
+    flexDirection: "row",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  scheduleMilestone: {
+    flex: 1,
+    fontSize: 9,
+    paddingRight: 8,
+  },
+  scheduleShare: {
+    width: 60,
+    textAlign: "right",
+  },
+  scheduleShareValue: {
+    width: 60,
+    fontSize: 9,
+    color: "#666",
+    textAlign: "right",
+  },
+  scheduleAmount: {
+    width: 80,
+    textAlign: "right",
+  },
+  scheduleAmountValue: {
+    width: 80,
+    fontSize: 9,
+    textAlign: "right",
+  },
+  stepRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  stepCard: {
+    flex: 1,
+    backgroundColor: "#1a1a1a",
+    borderRadius: 4,
+    padding: 10,
+  },
+  stepEyebrow: {
+    fontSize: 7,
+    color: "#cccccc",
+    letterSpacing: 1,
+    textTransform: "uppercase" as const,
+  },
+  stepTitle: {
+    fontSize: 10.5,
+    fontFamily: "Helvetica-Bold",
+    color: "#ffffff",
+    marginTop: 4,
+  },
+  stepBody: {
+    fontSize: 8,
+    color: "#e5e5e5",
+    lineHeight: 1.5,
+    marginTop: 3,
+  },
+  testimonialGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  testimonialCell: {
+    width: "50%",
+    padding: 4,
+  },
+  testimonialBox: {
+    backgroundColor: "#f9f9f9",
+    borderRadius: 4,
+    padding: 10,
+  },
+  testimonialQuote: {
+    fontSize: 9,
+    fontFamily: "Times-Italic",
+    lineHeight: 1.6,
+  },
+  testimonialAttribution: {
+    fontSize: 6.5,
+    color: "#666",
+    letterSpacing: 0.5,
+    marginTop: 6,
+  },
+  termRow: {
+    flexDirection: "row",
+    marginBottom: 5,
+  },
+  termBullet: {
+    width: 12,
+    fontSize: 9,
+    color: "#444",
+  },
+  termText: {
+    flex: 1,
+    fontSize: 9,
+    color: "#444",
+    lineHeight: 1.5,
+  },
+  termLead: {
+    fontFamily: "Helvetica-Bold",
+    color: "#1a1a1a",
+  },
+  holdCallout: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 12,
+  },
+  holdCalloutText: {
+    fontSize: 9.5,
+    fontFamily: "Helvetica-Bold",
+    color: "#ffffff",
+  },
+  acceptanceCta: {
+    fontSize: 9.5,
+    color: "#444",
+    lineHeight: 1.5,
+  },
+  sigRow: {
+    flexDirection: "row",
+    gap: 24,
+    marginTop: 26,
+  },
+  sigCellWide: {
+    flex: 2,
+  },
+  sigCell: {
+    flex: 1,
+  },
+  sigLine: {
+    height: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#999",
+    marginBottom: 4,
+  },
+  sigLabel: {
+    fontSize: 7.5,
+    color: "#666",
+  },
 });
 
 function accessMeta(item: SnapshotAccessItem): string {
@@ -384,6 +637,47 @@ function lineQtyText(line: SnapshotLineItem): string {
   if (line.qty == null) return "";
   const unit = line.unit ? ` ${pricingUnitLabel(line.unit)}` : "";
   return `${fmtQty.format(line.qty)}${unit}`;
+}
+
+/** Whole-dollar money for per-unit stats ("$1,478 per unit"). */
+const wholeCurrency = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
+
+/** ISO date → "December 31, 2026" (UTC so a date-only string can't roll back a day). */
+function formatHeldThrough(iso: string): string | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/** "Pressure wash" → "Pressure wash." — the bold lead of a checklist item. */
+function boldLead(title: string): string {
+  const t = title.trim();
+  return /[.:!?]$/.test(t) ? t : `${t}.`;
+}
+
+/** Testimonial quotes come with or without their own quote marks — normalize. */
+function stripQuotes(quote: string): string {
+  return quote.trim().replace(/^["“]/, "").replace(/["”]$/, "");
+}
+
+/** Terms carry their own "Price." / "Warranty." lead-ins — bold them. */
+function TermLine({ text }: { text: string }) {
+  const m = text.match(/^(.{1,48}?[.:])\s+([\s\S]+)$/);
+  if (!m) return <Text style={styles.termText}>{text}</Text>;
+  return (
+    <Text style={styles.termText}>
+      <Text style={styles.termLead}>{m[1]}</Text> {m[2]}
+    </Text>
+  );
 }
 
 export function ProposalDocument({
@@ -428,9 +722,44 @@ export function ProposalDocument({
   const brand = snapshot.brand ?? null;
   const accent = brand?.accentColor ?? brand?.primaryColor ?? null;
 
-  return (
-    <Document>
-      <Page size="LETTER" style={styles.page}>
+  // Sales-document copy layer (§A2) — absent on older snapshots, and any
+  // slot may be null. Every section below degrades to the pre-A2 layout.
+  const doc = snapshot.document ?? null;
+  const promises = doc?.promises ?? [];
+  const statChips = doc?.statChips ?? [];
+  const included = doc?.included ?? [];
+  const paymentSchedule = doc?.paymentSchedule ?? [];
+  const whatToExpect = doc?.whatToExpect ?? [];
+  const testimonials = doc?.testimonials ?? [];
+  const terms = doc?.terms ?? [];
+  const hasWhyUs =
+    Boolean(doc?.whyUsHeadline || doc?.whyUsBody) ||
+    promises.length > 0 ||
+    statChips.length > 0;
+  const heldThrough = doc?.priceHeldThrough
+    ? formatHeldThrough(doc.priceHeldThrough)
+    : null;
+  const investStats: string[] = [];
+  if (doc?.perSf != null)
+    investStats.push(`${formatCurrency(doc.perSf)} per square foot`);
+  if (doc?.perUnit != null)
+    investStats.push(
+      `${wholeCurrency.format(doc.perUnit)} per unit${
+        doc.unitCount != null ? ` · ${fmtQty.format(doc.unitCount)} units` : ""
+      }`,
+    );
+  if (doc?.durationLine) investStats.push(doc.durationLine);
+
+  const footerEl = (
+    <Text style={styles.footer}>
+      {brand?.companyName
+        ? `${brand.companyName}${brand.credentials ? ` · ${brand.credentials}` : ""} — ${formattedDate}${versionSuffix}`
+        : `Generated by Mercer — ${formattedDate}${versionSuffix}`}
+    </Text>
+  );
+
+  const coverContent = (
+    <>
         {brand?.companyName ? (
           <View style={styles.brandBar}>
             {brand.logoUrl ? (
@@ -480,6 +809,9 @@ export function ProposalDocument({
             <Text style={styles.propertyValue}>
               {snapshot.propertyName}
             </Text>
+            {doc?.coverSubtitle ? (
+              <Text style={styles.coverSubtitle}>{doc.coverSubtitle}</Text>
+            ) : null}
           </View>
           <View style={styles.propertyBlock}>
             <Text style={styles.propertyLabel}>Address</Text>
@@ -558,6 +890,62 @@ export function ProposalDocument({
             </View>
           </View>
         ) : null}
+    </>
+  );
+
+  // "Why us" (§A2) — its own page after the cover, Jordan-style.
+  const whyUsContent = hasWhyUs ? (
+    <View>
+      <Text style={accent ? [styles.eyebrow, { color: accent }] : styles.eyebrow}>
+        Why {brand?.companyName ?? "us"}
+      </Text>
+      {doc?.whyUsHeadline ? (
+        <Text style={styles.whyUsHeadline}>{doc.whyUsHeadline}</Text>
+      ) : null}
+      {doc?.whyUsBody ? (
+        <Text style={styles.leadParagraph}>{doc.whyUsBody}</Text>
+      ) : null}
+      {promises.length > 0 ? (
+        <View style={styles.promiseGrid}>
+          {promises.map((p, i) => (
+            <View key={i} style={styles.promiseCell}>
+              <View style={styles.promiseBox}>
+                <Text
+                  style={
+                    accent
+                      ? [styles.promiseTitle, { color: accent }]
+                      : styles.promiseTitle
+                  }
+                >
+                  {p.title}
+                </Text>
+                <Text style={styles.promiseBody}>{p.body}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : null}
+      {statChips.length > 0 ? (
+        <View style={styles.statRow}>
+          {statChips.map((c, i) => (
+            <View key={i} style={styles.statChip}>
+              <Text style={styles.statValue}>{c.value}</Text>
+              <Text style={styles.statLabel}>{c.label.toUpperCase()}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  ) : null;
+
+  const mainContent = (
+    <>
+        {doc?.scopeIntro ? (
+          <View>
+            <Text style={styles.sectionTitle}>Scope of Work</Text>
+            <Text style={styles.scopeText}>{doc.scopeIntro}</Text>
+          </View>
+        ) : null}
 
         {hasBuildings && (
           <Text style={styles.sectionTitle}>Building Breakdown</Text>
@@ -629,6 +1017,30 @@ export function ProposalDocument({
             </Text>
           </View>
         )}
+
+        {included.length > 0 ? (
+          <View>
+            <Text style={styles.sectionTitle}>{"What's Included"}</Text>
+            <View style={styles.includedGrid}>
+              {included.map((item, i) => (
+                <View key={i} style={styles.includedCell}>
+                  <Text style={styles.includedBody}>
+                    <Text
+                      style={
+                        accent
+                          ? [styles.includedLead, { color: accent }]
+                          : styles.includedLead
+                      }
+                    >
+                      {boldLead(item.title)}
+                    </Text>{" "}
+                    {item.body}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
 
         {scopeList && (
           <>
@@ -737,6 +1149,11 @@ export function ProposalDocument({
         {rateLines.length > 0 ? (
           <View wrap={false}>
             <Text style={styles.sectionTitle}>Unit Rates — As Found Work</Text>
+            {doc?.publishedRatesIntro ? (
+              <Text style={[styles.scopeText, { marginBottom: 6 }]}>
+                {doc.publishedRatesIntro}
+              </Text>
+            ) : null}
             {rateLines.map((line, i) => (
               <View
                 key={i}
@@ -778,6 +1195,52 @@ export function ProposalDocument({
           </Text>
         </View>
 
+        {investStats.length > 0 ? (
+          <Text style={styles.investStats}>{investStats.join("   ·   ")}</Text>
+        ) : null}
+
+        {paymentSchedule.length > 0 ? (
+          <View wrap={false}>
+            <Text style={styles.sectionTitle}>Payment Schedule</Text>
+            <View style={styles.scheduleHeader}>
+              <Text style={[styles.scheduleHeadCell, { flex: 1 }]}>
+                Milestone
+              </Text>
+              <Text style={[styles.scheduleHeadCell, styles.scheduleShare]}>
+                Share
+              </Text>
+              <Text style={[styles.scheduleHeadCell, styles.scheduleAmount]}>
+                Amount
+              </Text>
+            </View>
+            {paymentSchedule.map((m, i) => (
+              <View
+                key={i}
+                style={
+                  i % 2 === 1
+                    ? [styles.scheduleRow, styles.quoteLineRowAlt]
+                    : styles.scheduleRow
+                }
+              >
+                <Text style={styles.scheduleMilestone}>{m.milestone}</Text>
+                <Text style={styles.scheduleShareValue}>
+                  {Math.round(m.sharePct)}%
+                </Text>
+                <Text style={styles.scheduleAmountValue}>
+                  {formatCurrency(m.amount)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {doc?.scheduleBody ? (
+          <View wrap={false}>
+            <Text style={styles.sectionTitle}>Schedule</Text>
+            <Text style={styles.scopeText}>{doc.scheduleBody}</Text>
+          </View>
+        ) : null}
+
         {snapshot.notes && (
           <View style={styles.notesSection}>
             <Text style={styles.sectionTitle}>Notes</Text>
@@ -785,12 +1248,117 @@ export function ProposalDocument({
           </View>
         )}
 
-        <Text style={styles.footer}>
-          {brand?.companyName
-            ? `${brand.companyName}${brand.credentials ? ` · ${brand.credentials}` : ""} — ${formattedDate}${versionSuffix}`
-            : `Generated by Mercer — ${formattedDate}${versionSuffix}`}
-        </Text>
-      </Page>
+        {whatToExpect.length > 0 ? (
+          <View wrap={false}>
+            <Text style={styles.sectionTitle}>What to Expect</Text>
+            <View style={styles.stepRow}>
+              {whatToExpect.map((step, i) => (
+                <View key={i} style={styles.stepCard}>
+                  <Text style={styles.stepEyebrow}>Step {i + 1}</Text>
+                  <Text style={styles.stepTitle}>{step.title}</Text>
+                  <Text style={styles.stepBody}>{step.body}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {testimonials.length > 0 ? (
+          <View wrap={false}>
+            <Text style={styles.sectionTitle}>What Other Communities Say</Text>
+            <View style={styles.testimonialGrid}>
+              {testimonials.map((t, i) => (
+                <View key={i} style={styles.testimonialCell}>
+                  <View style={styles.testimonialBox}>
+                    <Text style={styles.testimonialQuote}>
+                      {"“"}
+                      {stripQuotes(t.quote)}
+                      {"”"}
+                    </Text>
+                    <Text style={styles.testimonialAttribution}>
+                      {t.attribution.toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {terms.length > 0 ? (
+          <View>
+            <Text style={styles.sectionTitle}>Terms of This Proposal</Text>
+            {terms.map((term, i) => (
+              <View key={i} style={styles.termRow} wrap={false}>
+                <Text style={styles.termBullet}>•</Text>
+                <TermLine text={term} />
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {heldThrough ? (
+          <View style={styles.holdCallout} wrap={false}>
+            <Text style={styles.holdCalloutText}>
+              This price is held through {heldThrough}.
+            </Text>
+          </View>
+        ) : null}
+
+        {doc?.acceptanceCta ? (
+          <View wrap={false}>
+            <Text style={styles.sectionTitle}>Acceptance</Text>
+            <Text style={styles.acceptanceCta}>{doc.acceptanceCta}</Text>
+            <View style={styles.sigRow}>
+              <View style={styles.sigCellWide}>
+                <View style={styles.sigLine} />
+                <Text style={styles.sigLabel}>
+                  Signature — {snapshot.clientName}
+                </Text>
+              </View>
+              <View style={styles.sigCell}>
+                <View style={styles.sigLine} />
+                <Text style={styles.sigLabel}>Date</Text>
+              </View>
+            </View>
+            <View style={styles.sigRow}>
+              <View style={styles.sigCellWide}>
+                <View style={styles.sigLine} />
+                <Text style={styles.sigLabel}>Printed name & title</Text>
+              </View>
+              <View style={styles.sigCell} />
+            </View>
+          </View>
+        ) : null}
+    </>
+  );
+
+  // Why-us gets its own page after the cover (Jordan's proposal structure);
+  // without the document layer everything stays on one flowing page, as before.
+  return (
+    <Document>
+      {whyUsContent ? (
+        <>
+          <Page size="LETTER" style={styles.page}>
+            {coverContent}
+            {footerEl}
+          </Page>
+          <Page size="LETTER" style={styles.page}>
+            {whyUsContent}
+            {footerEl}
+          </Page>
+          <Page size="LETTER" style={styles.page}>
+            {mainContent}
+            {footerEl}
+          </Page>
+        </>
+      ) : (
+        <Page size="LETTER" style={styles.page}>
+          {coverContent}
+          {mainContent}
+          {footerEl}
+        </Page>
+      )}
     </Document>
   );
 }
