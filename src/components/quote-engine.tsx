@@ -565,6 +565,131 @@ function Clarify({
   );
 }
 
+// ── The revision composer (composer plan A1) ────────────────────────────────
+// The thread's persistent input: from review or done, tell Mercer what to
+// change in plain words (drop new photos/specs too) and it re-drafts —
+// revisions accumulate onto the scope so nothing already asked for is lost.
+
+function RevisionComposer({
+  bid,
+  nextVersion,
+  busy,
+  onRevise,
+}: {
+  bid: Bid;
+  nextVersion: number;
+  busy: boolean;
+  onRevise: (instruction: string) => void;
+}) {
+  const [value, setValue] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, startUpload] = useTransition();
+  const [dragOver, setDragOver] = useState(false);
+
+  const uploadFiles = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const list = Array.from(files);
+    startUpload(async () => {
+      for (const file of list) {
+        const fd = new FormData();
+        fd.set("contextType", "bid");
+        fd.set("contextId", bid.id);
+        fd.set("returnTo", `/opportunities/${bid.id}`);
+        fd.set("file", file);
+        if (file.type.startsWith("image/")) {
+          fd.set("kind", "takeoff");
+          await uploadPhotoAction(fd);
+        } else {
+          await uploadAttachmentAction(fd);
+        }
+      }
+    });
+  };
+
+  const submit = () => {
+    const v = value.trim();
+    if (!v || busy) return;
+    setValue("");
+    onRevise(v);
+  };
+
+  return (
+    <div
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("Files")) {
+          e.preventDefault();
+          setDragOver(true);
+        }
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        if (e.dataTransfer.files.length === 0) return;
+        e.preventDefault();
+        setDragOver(false);
+        uploadFiles(e.dataTransfer.files);
+      }}
+      className={cn(
+        "rounded-xl border bg-card px-3 py-2.5 transition-[border-color,box-shadow] focus-within:border-foreground/25",
+        dragOver && "border-blue-600/60 shadow-[0_0_0_3px] shadow-blue-600/10",
+      )}
+    >
+      <div className="flex items-end gap-2">
+        <textarea
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          rows={1}
+          disabled={busy}
+          placeholder={`Tell Mercer what to change — "hold the price through December", "drop the carports, add gutters"… drafts v${nextVersion}`}
+          className="max-h-32 min-h-8 w-full resize-none border-0 bg-transparent py-1 text-sm leading-6 outline-none placeholder:text-muted-foreground/60 disabled:opacity-60"
+        />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={busy || uploading}
+          title="Attach photos or documents — they feed the next draft"
+          className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+        >
+          {uploading ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Plus className="size-4" />
+          )}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*,application/pdf,.pdf,.txt,.csv,.eml,.msg,.doc,.docx,.xls,.xlsx"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            uploadFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          onClick={submit}
+          disabled={busy || !value.trim()}
+          aria-label={`Re-draft as v${nextVersion}`}
+          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-opacity disabled:opacity-35"
+        >
+          {busy ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Sparkles className="size-4" />
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── The exchange transcript (composer plan A1, lean form) ──────────────────
 // The review phase reads as the conversation that produced it: your scope,
 // its questions, your answers, what it drafted. The full chat-thread shell
@@ -858,13 +983,16 @@ export function QuoteEngine({
     }
   }
 
-  const onGenerate = (clarifications?: DraftClarification[]) => {
+  const onGenerate = (
+    clarifications?: DraftClarification[],
+    scopeOverride?: string,
+  ) => {
     setError(null);
     setPhase("generating");
     startGenerate(async () => {
       const result = await generateQuoteDraft({
         bidId: bid.id,
-        scopeText: scope,
+        scopeText: scopeOverride ?? scope,
         clarifications,
       });
       if (!result.ok) {
@@ -887,6 +1015,17 @@ export function QuoteEngine({
       setDraftSummary(result.summary);
       setPhase("review");
     });
+  };
+
+  // A1: revisions are conversation, not a back button. The instruction
+  // accumulates onto the scope so earlier asks survive the re-draft.
+  const onReviseInstruction = (instruction: string) => {
+    const next = scope.trim()
+      ? `${scope.trim()}\n\nRevision: ${instruction}`
+      : instruction;
+    setScope(next);
+    setDone(null);
+    onGenerate(undefined, next);
   };
 
   const onApprove = (acceptBelowBuildUp = false) => {
@@ -1043,25 +1182,39 @@ export function QuoteEngine({
                 approving={approving}
                 error={approveError}
               />
+              <RevisionComposer
+                bid={bid}
+                nextVersion={nextVersion}
+                busy={approving}
+                onRevise={onReviseInstruction}
+              />
             </>
           )}
           {phase === "done" && done && (
-            <DoneCard
-              version={done.version}
-              total={done.total}
-              changeLog={done.changeLog}
-              pdfUrl={done.pdfUrl}
-              contactName={bid.clientName || "your customer"}
-              recipient={recipient}
-              onRecipientChange={setRecipient}
-              onCopyLink={onCopyLink}
-              copied={copied}
-              shareBusy={shareBusy}
-              onRevise={() => {
-                setDone(null);
-                setPhase("compose");
-              }}
-            />
+            <>
+              <DoneCard
+                version={done.version}
+                total={done.total}
+                changeLog={done.changeLog}
+                pdfUrl={done.pdfUrl}
+                contactName={bid.clientName || "your customer"}
+                recipient={recipient}
+                onRecipientChange={setRecipient}
+                onCopyLink={onCopyLink}
+                copied={copied}
+                shareBusy={shareBusy}
+                onRevise={() => {
+                  setDone(null);
+                  setPhase("compose");
+                }}
+              />
+              <RevisionComposer
+                bid={bid}
+                nextVersion={done.version + 1}
+                busy={false}
+                onRevise={onReviseInstruction}
+              />
+            </>
           )}
         </div>
 
