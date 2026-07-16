@@ -235,7 +235,97 @@ Common sizes: `size-3.5` (pill chips), `size-4` (most UI), `size-[17px]` (recent
 
 ---
 
-## 9. Where to look in code
+## 9. Direction A — the shipped page language (2026-07-15)
+
+The six sidebar pages (Home · Pipeline · Jobs · Properties · Reports ·
+Contacts) plus New Lead / New Bid shipped a shared page language. **Every
+new or reworked page must use these exact shapes** — they're deliberately
+letter-for-letter consistent across the redesigned pages; copy classes from
+an existing page rather than approximating.
+
+### 9.1 Page frame
+
+```tsx
+<div className="relative mx-auto w-full max-w-[1240px] px-6 pb-24 pt-7">
+```
+(Reports uses `max-w-[1300px]`; intake front doors use `max-w-[860px]`.)
+No breadcrumb bar — the sidebar names the page; actions + bell float
+top-right via `PageHeaderActions`.
+
+### 9.2 Page header
+
+```tsx
+<header className="mb-5 flex items-end gap-5">
+  <div>
+    <h1 className="text-[27px] font-semibold leading-tight tracking-tight">Pipeline</h1>
+    <p className="mt-1 text-[13.5px] text-muted-foreground">One-line purpose, lowercase-calm.</p>
+  </div>
+  <div className="ml-auto flex shrink-0 items-center gap-2">…buttons…</div>
+</header>
+```
+
+### 9.3 Filter rails & toolbars
+
+- **Stage/filter chips** (Pipeline): `inline-flex h-[38px] items-baseline gap-2 rounded-[10px] border px-3.5 text-[13.5px] font-medium` — active = `border-foreground bg-foreground text-background`, inactive = `bg-card text-foreground/80 hover:border-foreground/25 hover:bg-muted/40`. Count in `font-semibold tabular-nums`, money suffix in `border-l pl-2 font-mono text-xs`.
+- **Toolbar buttons/selects** (Contacts/Properties/Jobs): `inline-flex h-9 items-center gap-2 rounded-[10px] border px-3 text-[13.5px] font-medium`.
+- **Search input**: `h-9 w-56 rounded-[10px] border bg-card pl-9 pr-3 text-[13.5px]` with a `Search` icon absolutely placed left; `focus:border-foreground/30`.
+- **Lens toggle** (All / Going quiet): segmented `flex gap-0.5 rounded-[9px] border bg-muted/70 p-[3px]` with `rounded-md px-3 py-1 text-xs font-medium` buttons, active = `bg-background text-foreground shadow-sm`.
+- Right-aligned result meta line: `text-xs tabular-nums text-muted-foreground` with bold `text-foreground/80` numbers.
+
+### 9.4 The table card (Pipeline is canonical)
+
+```tsx
+<div className="overflow-x-auto rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
+  <div className="min-w-[940px]">
+    {/* header row */}
+    <div className="grid grid-cols-[…] items-center gap-x-2.5 border-b bg-muted/30 py-2.5 pl-4 pr-10">
+      <span className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">…</span>
+    </div>
+    {/* rows */}
+    <div className="group relative grid grid-cols-[…] items-center gap-x-2.5 border-t py-3 pl-4 pr-10 first:border-t-0 hover:bg-muted/20">
+```
+Row anatomy: primary cell = `text-sm font-semibold tracking-tight` name link
+(`hover:underline`) over a `text-xs text-muted-foreground` subline; money =
+`font-mono text-[13px] font-medium tabular-nums`; age = `font-mono text-xs
+tabular-nums text-muted-foreground` (amber `text-amber-600 font-semibold`
+when overdue); status = pill `rounded-full border bg-muted/50 py-[3px] pl-2
+pr-2.5 text-xs font-medium` with a colored `size-1.5 rounded-full` dot;
+**every row carries its ONE next action inline** in the last column; a
+hover-only open arrow floats at the right edge
+(`absolute inset-y-0 right-2 … opacity-0 group-hover:opacity-100`).
+
+### 9.5 Card-grid list (Contacts/Properties/Jobs alternative to tables)
+
+`grid … rounded-2xl border bg-card p-[17px_19px] shadow-[0_1px_2px_rgb(0_0_0/0.04)]
+transition-[border-color,box-shadow,transform] hover:border-foreground/20
+hover:shadow-[0_4px_16px_-6px_rgb(0_0_0/0.12)] active:translate-y-px`.
+
+### 9.6 Empty state
+
+```tsx
+<div className="flex flex-col items-center rounded-2xl border bg-card px-8 py-14 text-center shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
+  <span className="mb-5 flex size-[54px] items-center justify-center rounded-2xl bg-muted text-foreground/60"><Icon className="size-6" /></span>
+  <h3 className="mb-2 text-xl font-semibold tracking-tight">…</h3>
+  <p className="max-w-md text-sm leading-relaxed text-muted-foreground [text-wrap:pretty]">…</p>
+  <div className="mt-6 flex gap-2">…CTAs…</div>
+</div>
+```
+
+### 9.7 Field labels & eyebrows (intake bands)
+
+`text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground`;
+card-grid micro-labels use `text-[10.5px] … tracking-[0.05em]`.
+
+### 9.8 Accent discipline
+
+Near-black is the primary action color. Blue (`text-blue-600`/`bg-blue-600`)
+ONLY for live/unread signals (dots, view counts, links). Amber for
+verify/overdue. Emerald for won/accepted/"on file". Money and counts always
+`tabular-nums`, usually `font-mono`.
+
+---
+
+## 10. Where to look in code
 
 | Looking for | Read |
 |---|---|

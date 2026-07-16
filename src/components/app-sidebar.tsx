@@ -155,16 +155,63 @@ export function AppSidebar({
             <DropdownMenuContent
               side={isMobile ? "bottom" : "right"}
               align="start"
-              className="min-w-44 rounded-lg"
+              sideOffset={8}
+              className="w-[290px] rounded-[14px] p-1.5"
             >
-              <DropdownMenuItem asChild>
-                <Link href="/leads/new" onClick={dismissOnMobile}>
-                  New lead
+              <p className="px-2.5 pb-1 pt-1.5 text-[10.5px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
+                Start something
+              </p>
+              <DropdownMenuItem asChild className="rounded-[10px] p-0">
+                <Link
+                  href="/leads/new"
+                  onClick={dismissOnMobile}
+                  className="flex w-full items-start gap-3 px-2.5 py-2.5"
+                >
+                  <span className="mt-px grid size-9 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/70">
+                    <UserRoundSearch className="size-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13.5px] font-semibold leading-tight">
+                      New lead
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
+                      Someone says work needs doing — find the building,
+                      name the project.
+                    </span>
+                  </span>
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/opportunities/new" onClick={dismissOnMobile}>
-                  New opportunity
+              <DropdownMenuItem asChild className="rounded-[10px] p-0">
+                <Link
+                  href="/opportunities/new"
+                  onClick={dismissOnMobile}
+                  className="flex w-full items-start gap-3 px-2.5 py-2.5"
+                >
+                  <span className="mt-px grid size-9 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/70">
+                    <FileSpreadsheet className="size-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13.5px] font-semibold leading-tight">
+                      New opportunity
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
+                      Straight to a proposal — the AI drafts the quote in
+                      about a minute.
+                    </span>
+                  </span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="my-1" />
+              <DropdownMenuItem asChild className="rounded-[10px] p-0">
+                <Link
+                  href="/contacts/new"
+                  onClick={dismissOnMobile}
+                  className="flex w-full items-center gap-3 px-2.5 py-2"
+                >
+                  <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/70">
+                    <ContactRound className="size-4" />
+                  </span>
+                  <span className="text-[13.5px] font-medium">New contact</span>
                 </Link>
               </DropdownMenuItem>
             </DropdownMenuContent>
