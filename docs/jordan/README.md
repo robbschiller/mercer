@@ -34,6 +34,14 @@ In the order they arrived:
   what we need for the 'Create Proposal' section of the opportunity… it just
   needs to be set up to CRM." This pair is the UX north star for the
   opportunity → proposal flow.
+- **Azur_at_Metrowest_Take_Off_Budget.xlsx** — the proposal's internal twin,
+  also produced by his Claude project ("Internal use only. Do not send to
+  customer."): customer/property block, takeoff by building style, schedule,
+  materials with spread-rate bases priced from his supplier sheet, labor at
+  his $/SF template rate, cost build-up (+30% admin, +4% commission), and a
+  margin check against the quoted number — which on this deal came out
+  **–$39k**, i.e. the quote sat under his own cost. Every proposal needs this
+  second face generated alongside it.
 
 ## Related material elsewhere
 
