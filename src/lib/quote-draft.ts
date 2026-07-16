@@ -56,12 +56,54 @@ export type DraftClarification = {
   answer: string;
 };
 
+/**
+ * The internal takeoff budget the engine drafts ALONGSIDE the customer lines
+ * (proposal composer Phase 1 — mirrors Jordan's own takeoff spreadsheet).
+ * Costs here are what the work costs US (supplier pricing), not customer
+ * prices; the margin guardrail compares its build-up to the quote total.
+ */
+export const BudgetLineSchema = z.object({
+  // Best-fitting expense category slug (staging, lifts, primer_sealer,
+  // topcoat, caulk, patch, cleaners, supplies, paint_labor, travel,
+  // mobilization, housing, other …).
+  category: z.string(),
+  item: z.string(),
+  // The spread-rate basis, stated so a human can check the math — e.g.
+  // "1 gal per 200 SF", "1 tube per unit", "20 gal per building".
+  basis: z.string(),
+  qty: z.number(),
+  // OUR unit cost from supplier pricing / org knowledge — not a customer price.
+  unitCost: z.number(),
+});
+
+export const QuoteBudgetSchema = z.object({
+  totalSf: z.number().nullable(),
+  units: z.number().nullable(),
+  buildings: z.number().nullable(),
+  materials: z.array(BudgetLineSchema),
+  // Sales tax + fees on materials, percent (default 10 when unknown).
+  materialsTaxPct: z.number(),
+  laborRatePerSf: z.number().nullable(),
+  laborCost: z.number(),
+  // Overhead percent on costs (default 30 when the org knowledge is silent).
+  adminPct: z.number(),
+  // Commission percent on costs + admin (default 4 when silent).
+  commissionPct: z.number(),
+  // Assumptions and caveats — where rates came from, what was estimated.
+  notes: z.string().nullable(),
+});
+
+export type QuoteBudget = z.infer<typeof QuoteBudgetSchema>;
+
 export const QuoteDraftSchema = z.object({
   // "draft" delivers lines; "questions" asks ≤3 blocking questions first.
   // The engine allows at most ONE questions round per version.
   kind: z.enum(["draft", "questions"]),
   lines: z.array(QuoteDraftLineSchema),
   questions: z.array(QuoteClarificationSchema),
+  // The internal takeoff budget for this draft (null on kind="questions",
+  // or when the inputs genuinely can't support one).
+  budget: QuoteBudgetSchema.nullable(),
   // One sentence on what changed vs. the previous version (null on v1).
   changeLog: z.string().nullable(),
   // One-line summary of the draft for the UI.

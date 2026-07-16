@@ -20,6 +20,7 @@ import {
   RotateCcw,
   Ruler,
   Sparkles,
+  TriangleAlert,
   Square,
   Tags,
 } from "lucide-react";
@@ -744,6 +745,11 @@ export function QuoteEngine({
   );
   const [error, setError] = useState<string | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
+  const [marginWarning, setMarginWarning] = useState<{
+    quoteTotal: number;
+    buildUpTotal: number;
+    delta: number;
+  } | null>(null);
   const [done, setDone] = useState<{
     version: number;
     total: number;
@@ -797,10 +803,20 @@ export function QuoteEngine({
     });
   };
 
-  const onApprove = () => {
+  const onApprove = (acceptBelowBuildUp = false) => {
     setApproveError(null);
+    setMarginWarning(null);
     startApprove(async () => {
-      const result = await generateProposalAction({ bidId: bid.id });
+      const result = await generateProposalAction({
+        bidId: bid.id,
+        acceptBelowBuildUp,
+      });
+      // Margin guardrail: the quote is priced under the internal build-up —
+      // surface the numbers and require an explicit go-ahead.
+      if ("marginWarning" in result && result.marginWarning) {
+        setMarginWarning(result.marginWarning);
+        return;
+      }
       if (result.error || !result.pdfUrl) {
         setApproveError(result.error ?? "Failed to generate the quote PDF.");
         return;
@@ -879,16 +895,61 @@ export function QuoteEngine({
             />
           )}
           {phase === "review" && (
-            <QuoteReviewCard
-              bidId={bid.id}
-              items={lineItems}
-              photos={photos}
-              attachments={attachments}
-              nextVersion={nextVersion}
-              onApprove={onApprove}
-              approving={approving}
-              error={approveError}
-            />
+            <>
+              {marginWarning && (
+                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-red-600/40 bg-red-600/5 px-4 py-3">
+                  <TriangleAlert className="size-5 shrink-0 text-red-600" />
+                  <div className="min-w-0 flex-1 text-sm">
+                    <p className="font-semibold text-red-700 dark:text-red-400">
+                      This quote is{" "}
+                      <span className="font-mono tabular-nums">
+                        {formatCurrency(Math.abs(marginWarning.delta))}
+                      </span>{" "}
+                      under your build-up cost.
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Quote{" "}
+                      <span className="font-mono tabular-nums">
+                        {formatCurrency(marginWarning.quoteTotal)}
+                      </span>{" "}
+                      · Build-up{" "}
+                      <span className="font-mono tabular-nums">
+                        {formatCurrency(marginWarning.buildUpTotal)}
+                      </span>{" "}
+                      — materials, labor, admin &amp; commission per your
+                      takeoff budget below.
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setMarginWarning(null)}
+                    >
+                      Back to pricing
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={approving}
+                      onClick={() => onApprove(true)}
+                    >
+                      Send anyway — under cost
+                    </Button>
+                  </div>
+                </div>
+              )}
+              <QuoteReviewCard
+                bidId={bid.id}
+                items={lineItems}
+                photos={photos}
+                attachments={attachments}
+                nextVersion={nextVersion}
+                onApprove={() => onApprove()}
+                approving={approving}
+                error={approveError}
+              />
+            </>
           )}
           {phase === "done" && done && (
             <DoneCard

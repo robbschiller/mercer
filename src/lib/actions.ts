@@ -24,6 +24,7 @@ import {
   getProposalPartyBlock,
   createProposal,
   createProposalShare,
+  getBidBudget,
   getNextProposalVersion,
   getCompanyProfile,
   getPhotos,
@@ -165,8 +166,10 @@ import {
   createSupplierProductSchema,
   addCatalogLineItemSchema,
   idSchema,
+  idWithBidSchema,
 } from "./validations";
 import { calculateBidPricing } from "./pricing";
+import { budgetTotals } from "./budget";
 import type { ProposalSnapshot } from "./pdf/types";
 import { generateProposalPdf } from "./pdf/generate";
 import { fetchSatelliteImageDataUriForPdf } from "./maps/satellite-pdf";
@@ -501,6 +504,27 @@ export async function updateQuoteLineAction(data: {
   return { error: null };
 }
 
+/**
+ * Confirm a flagged line as-is: the reviewer looked at the AI's number and
+ * accepted it without edits. Clears the low-confidence flag so the stamp
+ * gate (no unconfirmed price reaches the customer) passes.
+ */
+export async function confirmQuoteLineAction(data: {
+  id: string;
+  bidId: string;
+}) {
+  const result = idWithBidSchema.safeParse(data);
+  if (!result.success) {
+    return { error: result.error.issues[0]?.message ?? "Invalid input" };
+  }
+  await updateLineItem(result.data.id, {
+    confidence: "high",
+    flagNote: null,
+  });
+  revalidatePath(`/opportunities/${result.data.bidId}`);
+  return { error: null };
+}
+
 /** Quote-engine "Add line": a blank manual line the user edits in place. */
 export async function createQuoteLineAction(data: { bidId: string }) {
   const result = createQuoteLineSchema.safeParse(data);
@@ -611,6 +635,8 @@ export async function generateProposalAction(data: {
   bidId: string;
   changeLog?: string | null;
   scopeText?: string | null;
+  /** Margin guardrail override: stamp even though the quote is under build-up. */
+  acceptBelowBuildUp?: boolean;
 }) {
   const result = generateProposalSchema.safeParse(data);
 
@@ -650,6 +676,37 @@ export async function generateProposalAction(data: {
 
   if (!pricing.complete || pricing.grandTotal == null) {
     return { error: "Pricing is incomplete. Fill in all pricing fields before generating a proposal.", pdfUrl: null };
+  }
+
+  // Jordan's rule, enforced structurally: no invented or unconfirmed price
+  // ever reaches the customer-facing version. Confirm or edit flagged lines.
+  const unconfirmed = lineItems.filter((li) => li.confidence === "low");
+  if (unconfirmed.length > 0) {
+    return {
+      error: `${unconfirmed.length} price${unconfirmed.length === 1 ? "" : "s"} still need${unconfirmed.length === 1 ? "s" : ""} your confirmation — review the flagged lines before stamping.`,
+      pdfUrl: null,
+    };
+  }
+
+  // Margin guardrail: a quote priced under the internal build-up can only
+  // go out with an explicit override (the -$39k check, plan §A5).
+  const budget = await getBidBudget(bid.id);
+  const buildUp = budget ? budgetTotals(budget).buildUpTotal : null;
+  if (
+    buildUp != null &&
+    pricing.grandTotal < buildUp &&
+    !result.data.acceptBelowBuildUp
+  ) {
+    const delta = pricing.grandTotal - buildUp;
+    return {
+      error: null,
+      pdfUrl: null,
+      marginWarning: {
+        quoteTotal: pricing.grandTotal,
+        buildUpTotal: buildUp,
+        delta,
+      },
+    };
   }
 
   const [parties, version, companyProfile, bidPhotos] = await Promise.all([
@@ -723,6 +780,14 @@ export async function generateProposalAction(data: {
         }
       : undefined,
     coverPhotoUrl,
+    internalBudget:
+      budget && buildUp != null
+        ? {
+            data: budget,
+            buildUpTotal: buildUp,
+            marginOverBuildUp: pricing.grandTotal - buildUp,
+          }
+        : undefined,
     generatedAt: new Date().toISOString(),
   };
 
