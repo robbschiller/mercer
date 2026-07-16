@@ -13,7 +13,8 @@ export type AiFeature =
   | "ask"
   | "morning_brief"
   | "follow_up"
-  | "composer";
+  | "composer"
+  | "lead_intake";
 
 export const AI_FEATURE_LABELS: Record<AiFeature, string> = {
   quote_engine: "Quote engine",
@@ -21,6 +22,7 @@ export const AI_FEATURE_LABELS: Record<AiFeature, string> = {
   morning_brief: "Morning brief",
   follow_up: "Follow-up drafts",
   composer: "Home composer",
+  lead_intake: "Lead intake",
 };
 
 /**

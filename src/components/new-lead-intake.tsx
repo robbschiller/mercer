@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useFormStatus } from "react-dom";
 import {
   BadgeCheck,
   Briefcase,
@@ -8,19 +9,24 @@ import {
   CalendarPlus,
   Check,
   ChevronDown,
+  FileText,
   Gavel,
   Hand,
+  Loader2,
   MapPin,
   Paperclip,
   Plus,
   RotateCcw,
   Search,
   Sparkles,
+  Tag,
   UserPlus,
   UserRound,
   X,
 } from "lucide-react";
-import { createLeadAction } from "@/lib/actions";
+import { createLeadAction, searchAccountsAction } from "@/lib/actions";
+import { extractLeadDraftAction } from "@/lib/actions/extract-lead";
+import { takeLeadDraft } from "@/lib/lead-draft";
 import type { ContactRegisterRow, KnownBuilding } from "@/lib/store";
 import {
   AerialBuildingCard,
@@ -68,7 +74,7 @@ const SCOPE = [
 const DEFAULT_SOURCES = [
   "Repeat client",
   "Referral",
-  "RFP / bid invite",
+  "RFP / invite to quote",
   "Website",
   "Walk-up",
   "Cold outreach",
@@ -86,18 +92,112 @@ export function NewLeadIntake({
   const [building, setBuilding] = useState<FinderBuilding | null>(null);
 
   /* band state */
+  const [projectName, setProjectName] = useState("");
   const [contactId, setContactId] = useState<string | null>(null);
   const [newContact, setNewContact] = useState(false);
   const [contactQuery, setContactQuery] = useState("");
+  const [newContactName, setNewContactName] = useState("");
   const [acOpen, setAcOpen] = useState(false);
   const [company, setCompany] = useState("");
+  const [accountId, setAccountId] = useState<string | null>(null);
   const [scope, setScope] = useState<Set<string>>(new Set());
   const [source, setSource] = useState<string | null>(null);
   const [customSource, setCustomSource] = useState(false);
   const [largeJob, setLargeJob] = useState(false);
   const [rough, setRough] = useState("");
-  const [fileNames, setFileNames] = useState<string[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
+  const [notes, setNotes] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  function syncFiles(next: File[]) {
+    const seen = new Set<string>();
+    setFiles(
+      next.filter((f) => {
+        const key = `${f.name}:${f.size}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }),
+    );
+  }
+
+  // The (form-submitted) file input mirrors the removable list — done in an
+  // effect because the input only exists once a building is locked.
+  useEffect(() => {
+    if (!fileRef.current) return;
+    const dt = new DataTransfer();
+    for (const f of files) dt.items.add(f);
+    fileRef.current.files = dt.files;
+  }, [files, building]);
+
+  // D1: hydrate from a draft the Home composer extracted out of a dropped
+  // spec/email. Everything lands editable — review-before-save, never silent.
+  const [draftContact, setDraftContact] = useState<{
+    phone: string;
+    email: string;
+  } | null>(null);
+  useEffect(() => {
+    const { draft, files: droppedFiles } = takeLeadDraft();
+    if (!draft) return;
+    const propertyLabel =
+      draft.propertyName ?? draft.propertyAddress ?? "New property";
+    setBuilding({
+      kind: "place",
+      name: propertyLabel,
+      address: draft.propertyAddress ?? "",
+      lat: null,
+      lng: null,
+      placeId: null,
+    });
+    setProjectName(draft.projectName ?? propertyLabel);
+    if (draft.company) setCompany(draft.company);
+    if (draft.source) setSource(draft.source);
+    if (draft.isLargeJob != null) setLargeJob(draft.isLargeJob);
+    if (draft.scope.length > 0)
+      setScope(new Set(draft.scope.filter((s) => SCOPE.includes(s))));
+    if (draft.scopeSummary) setNotes(draft.scopeSummary);
+    const contactName = [draft.contactFirstName, draft.contactLastName]
+      .filter(Boolean)
+      .join(" ");
+    if (contactName || draft.phone || draft.email) {
+      setNewContact(true);
+      setNewContactName(contactName);
+      setDraftContact({ phone: draft.phone ?? "", email: draft.email ?? "" });
+    }
+    if (droppedFiles.length > 0) syncFiles(droppedFiles);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot mount hydration
+  }, []);
+
+  // D2: a scope-of-work upload on the What's-the-work card — AI ticks the
+  // chips and drops the specifics into notes, all editable before save.
+  const [scopeReading, setScopeReading] = useState(false);
+  const [scopeError, setScopeError] = useState<string | null>(null);
+  const scopeFileRef = useRef<HTMLInputElement>(null);
+  async function readScopeFiles(list: FileList | File[]) {
+    const chosen = Array.from(list).slice(0, 3);
+    if (chosen.length === 0 || scopeReading) return;
+    setScopeReading(true);
+    setScopeError(null);
+    try {
+      const fd = new FormData();
+      for (const f of chosen) fd.append("files", f);
+      const result = await extractLeadDraftAction(fd);
+      if (!result.ok) {
+        setScopeError(result.error);
+        return;
+      }
+      const chips = result.draft.scope.filter((s) => SCOPE.includes(s));
+      if (chips.length > 0)
+        setScope((prev) => new Set([...prev, ...chips]));
+      const summary = result.draft.scopeSummary;
+      if (summary) setNotes((n) => (n ? `${n}\n\n${summary}` : summary));
+      if (result.draft.isLargeJob != null)
+        setLargeJob(result.draft.isLargeJob);
+      syncFiles([...files, ...chosen]);
+    } finally {
+      setScopeReading(false);
+    }
+  }
 
   const isKnown = building?.kind === "known";
   const knownB = isKnown
@@ -107,6 +207,9 @@ export function NewLeadIntake({
 
   function lock(b: FinderBuilding) {
     setBuilding(b);
+    // Suggested project name (Jordan C2): the property name is a fine
+    // default, but it stays fully editable — it's the record's display name.
+    setProjectName(buildingName(b));
     if (b.kind === "known") {
       if (b.primaryContactId) setContactId(b.primaryContactId);
       if (b.managementName) setCompany(b.managementName);
@@ -116,9 +219,11 @@ export function NewLeadIntake({
   }
   function backToFinder() {
     setBuilding(null);
+    setProjectName("");
     setContactId(null);
     setNewContact(false);
     setCompany("");
+    setAccountId(null);
     setScope(new Set());
     setSource(null);
     setLargeJob(false);
@@ -128,6 +233,17 @@ export function NewLeadIntake({
     () => contacts.find((c) => c.id === contactId) ?? null,
     [contacts, contactId],
   );
+  // Inline new-contact mode still checks the register — typing a name that
+  // already exists surfaces the match before a duplicate can be created (A2).
+  const newContactMatch = useMemo(() => {
+    const q = newContactName.trim().toLowerCase();
+    if (q.length < 3) return null;
+    return (
+      contacts.find((c) => c.name.toLowerCase() === q) ??
+      contacts.find((c) => c.name.toLowerCase().includes(q)) ??
+      null
+    );
+  }, [contacts, newContactName]);
   const filteredContacts = useMemo(() => {
     const ts = contactQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
     if (ts.length === 0) return contacts.slice(0, 6);
@@ -142,9 +258,6 @@ export function NewLeadIntake({
 
   const name = building ? buildingName(building) : "";
   const address = building ? buildingAddress(building) : "";
-  const leadName = `${name || "New property"} – ${
-    [...scope][0] ?? "Exterior repaint"
-  }`;
   const allSources = useMemo(() => {
     const merged = [...sources, ...DEFAULT_SOURCES];
     return [...new Set(merged)].slice(0, 7);
@@ -227,7 +340,6 @@ export function NewLeadIntake({
 
       <form action={createLeadAction} className="flex flex-col">
         {/* hidden payload */}
-        <input type="hidden" name="name" value={leadName} />
         <input type="hidden" name="propertyName" value={name} />
         <input type="hidden" name="resolvedAddress" value={address} />
         {isKnown && knownB && (
@@ -254,6 +366,7 @@ export function NewLeadIntake({
           <input type="hidden" name="contactId" value={pickedContact.id} />
         )}
         <input type="hidden" name="company" value={company} />
+        <input type="hidden" name="accountId" value={accountId ?? ""} />
         <input
           type="hidden"
           name="scopeCategory"
@@ -355,9 +468,51 @@ export function NewLeadIntake({
           }
         />
 
-        {/* ── band 1: who ── */}
+        {/* ── band 1: the project ── */}
         <Band
           num="1"
+          title="Name the project"
+          note={
+            projectName.trim() ? (
+              <BandNote done icon={<Check className="size-[13px]" />}>
+                Named
+              </BandNote>
+            ) : (
+              <BandNote icon={<Tag className="size-[13px]" />}>
+                Required
+              </BandNote>
+            )
+          }
+        >
+          <FieldLabel>
+            Project name{" "}
+            <span className="font-normal normal-case tracking-normal text-muted-foreground/70">
+              — the quick synopsis this lead shows up as, everywhere
+            </span>
+          </FieldLabel>
+          <SlimField>
+            <Tag className="size-4 shrink-0 text-muted-foreground" />
+            <input
+              name="name"
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
+              required
+              placeholder='e.g. "Nona Terrace" or "Villas at Parkway – breezeways"'
+              autoComplete="off"
+              className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+            />
+          </SlimField>
+          <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
+            <Sparkles className="mt-px size-[13px] shrink-0 text-emerald-600" />
+            Suggested from the property — rename it to whatever you&apos;d call
+            it out loud. It carries to the opportunity when this converts.
+          </p>
+        </Band>
+
+        {/* ── band 2: who ── */}
+        <Band
+          num="2"
+          overflowVisible
           title="Who's it for?"
           note={
             pickedContact ? (
@@ -405,7 +560,7 @@ export function NewLeadIntake({
                           </span>
                         )}
                         <span className="font-mono tabular-nums text-foreground/70">
-                          {pickedContact.dealsCount} deal
+                          {pickedContact.dealsCount} project
                           {pickedContact.dealsCount === 1 ? "" : "s"}
                         </span>
                         <span className="text-border">·</span>
@@ -439,16 +594,42 @@ export function NewLeadIntake({
                     <UserRound className="size-4 shrink-0 text-muted-foreground" />
                     <input
                       name="contactName"
+                      value={newContactName}
+                      onChange={(e) => setNewContactName(e.target.value)}
                       placeholder="Their name"
                       className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
                     />
                   </SlimField>
+                  {newContactMatch && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setContactId(newContactMatch.id);
+                        if (!company && newContactMatch.company)
+                          setCompany(newContactMatch.company);
+                        setNewContact(false);
+                        setNewContactName("");
+                      }}
+                      className="flex items-center gap-2 rounded-[10px] border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-left text-[12.5px] text-amber-800 transition-colors hover:bg-amber-500/15 dark:text-amber-300"
+                    >
+                      <BadgeCheck className="size-4 shrink-0 text-amber-600" />
+                      <span className="min-w-0 flex-1">
+                        <b className="font-semibold">{newContactMatch.name}</b>{" "}
+                        is already in Mercer
+                        {newContactMatch.company
+                          ? ` (${newContactMatch.company})`
+                          : ""}{" "}
+                        — click to link them instead of creating a duplicate.
+                      </span>
+                    </button>
+                  )}
                   <div className="grid grid-cols-2 gap-2">
                     <SlimField>
                       <input
                         name="phone"
                         type="tel"
                         placeholder="Phone"
+                        defaultValue={draftContact?.phone ?? ""}
                         className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
                       />
                     </SlimField>
@@ -457,6 +638,7 @@ export function NewLeadIntake({
                         name="email"
                         type="email"
                         placeholder="Email"
+                        defaultValue={draftContact?.email ?? ""}
                         className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
                       />
                     </SlimField>
@@ -520,8 +702,12 @@ export function NewLeadIntake({
                                 .join(" · ") || "—"}
                             </span>
                           </span>
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-600/25 bg-emerald-600/10 px-1.5 py-px text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+                            <BadgeCheck className="size-[11px]" />
+                            In Mercer
+                          </span>
                           <span className="shrink-0 font-mono text-[11.5px] tabular-nums text-muted-foreground/70">
-                            {c.dealsCount} deal{c.dealsCount === 1 ? "" : "s"}
+                            {c.dealsCount} project{c.dealsCount === 1 ? "" : "s"}
                           </span>
                         </button>
                       ))}
@@ -553,23 +739,25 @@ export function NewLeadIntake({
             </div>
             <div>
               <FieldLabel>Company</FieldLabel>
-              <SlimField>
-                <Briefcase className="size-4 shrink-0 text-muted-foreground" />
-                <input
-                  value={company}
-                  onChange={(e) => setCompany(e.target.value)}
-                  placeholder="Management company…"
-                  autoComplete="off"
-                  className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
-                />
-              </SlimField>
+              <CompanyField
+                value={company}
+                accountId={accountId}
+                onChange={(v) => {
+                  setCompany(v);
+                  setAccountId(null);
+                }}
+                onPick={(s) => {
+                  setCompany(s.name);
+                  setAccountId(s.id);
+                }}
+              />
             </div>
           </div>
         </Band>
 
-        {/* ── band 2: what ── */}
+        {/* ── band 3: what ── */}
         <Band
-          num="2"
+          num="3"
           title="What's the work?"
           note={
             scope.size > 0 ? (
@@ -612,6 +800,41 @@ export function NewLeadIntake({
               );
             })}
           </div>
+
+          <button
+            type="button"
+            onClick={() => scopeFileRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              void readScopeFiles(e.dataTransfer.files);
+            }}
+            disabled={scopeReading}
+            className="mt-3 inline-flex items-center gap-2 rounded-[10px] border border-dashed bg-muted/20 px-3 py-2 text-[12.5px] font-medium text-muted-foreground transition-colors hover:border-foreground/25 hover:text-foreground disabled:opacity-60"
+          >
+            {scopeReading ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="size-3.5" />
+            )}
+            {scopeReading
+              ? "Reading the scope…"
+              : "Got a scope of work? Drop it — AI ticks the boxes"}
+          </button>
+          <input
+            ref={scopeFileRef}
+            type="file"
+            multiple
+            accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,image/*,application/pdf"
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files?.length) void readScopeFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          {scopeError && (
+            <p className="mt-2 text-xs text-destructive">{scopeError}</p>
+          )}
 
           <div className="mt-[18px] flex flex-wrap items-end gap-6">
             <div>
@@ -721,11 +944,16 @@ export function NewLeadIntake({
           </div>
         </Band>
 
-        {/* ── band 3: notes & files ── */}
-        <Band num="3" title="Notes & files" note={<BandNote>Optional</BandNote>}>
+        {/* ── band 4: notes & files ── */}
+        <Band num="4" title="Notes & files" note={<BandNote>Optional</BandNote>}>
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              syncFiles([...files, ...Array.from(e.dataTransfer.files)]);
+            }}
             className="flex w-full items-center gap-3 rounded-xl border-[1.5px] border-dashed bg-muted/20 p-[14px_16px] text-left transition-colors hover:border-foreground/25 hover:bg-muted/30"
           >
             <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/60">
@@ -733,13 +961,13 @@ export function NewLeadIntake({
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-[13.5px] font-medium text-foreground/80">
-                {fileNames.length > 0
-                  ? fileNames.join(", ")
-                  : "Drop the RFP, paint spec, or referral email — they ride along"}
+                {files.length > 0
+                  ? `${files.length} file${files.length === 1 ? "" : "s"} attached — add more anytime`
+                  : "Drop the RFP, paint spec, scope of work, photos — they ride along"}
               </span>
               <span className="mt-0.5 block text-xs text-muted-foreground/80">
-                PDF, images, or forward the email. Attached to the lead from
-                day one.
+                PDFs, images, emails — several at once is fine. Attached to the
+                lead from day one.
               </span>
             </span>
             <span className="shrink-0 text-[12.5px] font-medium text-blue-700 dark:text-blue-400">
@@ -754,12 +982,48 @@ export function NewLeadIntake({
             accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.eml,.msg,.doc,.docx,.xls,.xlsx,.csv,.txt,image/*,application/pdf"
             className="hidden"
             onChange={(e) =>
-              setFileNames(Array.from(e.target.files ?? []).map((f) => f.name))
+              syncFiles([...files, ...Array.from(e.target.files ?? [])])
             }
           />
+          {files.length > 0 && (
+            <ul className="mt-2.5 flex flex-col gap-1.5">
+              {files.map((f) => (
+                <li
+                  key={`${f.name}:${f.size}`}
+                  className="flex items-center gap-2.5 rounded-[10px] border bg-muted/20 px-3 py-2"
+                >
+                  <FileText className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-foreground/80">
+                    {f.name}
+                  </span>
+                  <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground/70">
+                    {f.size >= 1_048_576
+                      ? `${(f.size / 1_048_576).toFixed(1)} MB`
+                      : `${Math.max(1, Math.round(f.size / 1024))} KB`}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${f.name}`}
+                    onClick={() =>
+                      syncFiles(
+                        files.filter(
+                          (x) => !(x.name === f.name && x.size === f.size),
+                        ),
+                      )
+                    }
+                    className="grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
           <textarea
             name="notes"
             rows={2}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
             placeholder="Anything worth remembering — access notes, who referred it, the deadline…"
             className="mt-3 min-h-14 w-full resize-y rounded-xl border bg-card p-[12px_14px] text-[13.5px] leading-relaxed outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground/60 focus:border-foreground/35 focus:shadow-[0_0_0_3px_rgb(0_0_0/0.06)]"
           />
@@ -772,7 +1036,9 @@ export function NewLeadIntake({
               This lead
             </p>
             <p className="truncate text-[13px] text-foreground/80">
-              <b className="font-semibold text-foreground">{name}</b>
+              <b className="font-semibold text-foreground">
+                {projectName.trim() || name}
+              </b>
               <span className="px-1.5 text-border">·</span>
               {pickedContact?.name ?? (
                 <span className="text-muted-foreground/70">add a contact</span>
@@ -785,26 +1051,177 @@ export function NewLeadIntake({
               )}
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2.5">
-            <button
-              type="submit"
-              name="next"
-              value="schedule"
-              className="inline-flex h-11 items-center gap-2 rounded-[11px] border bg-card px-5 text-sm font-medium text-foreground/80 transition-colors hover:bg-muted active:translate-y-px"
-            >
-              <CalendarPlus className="size-4" />
-              Add &amp; schedule takeoff
-            </button>
-            <button
-              type="submit"
-              className="inline-flex h-11 items-center gap-2 rounded-[11px] border border-foreground bg-foreground px-5 text-sm font-medium text-background transition-opacity hover:opacity-90 active:translate-y-px"
-            >
-              <Check className="size-4" />
-              Add lead
-            </button>
-          </div>
+          <SendOffButtons />
         </div>
       </form>
+    </div>
+  );
+}
+
+/**
+ * Send-off buttons that go dead the moment either is clicked. The lead
+ * action takes a few seconds; live buttons during that window is how the
+ * same lead got submitted twice (Jordan A1).
+ */
+function SendOffButtons() {
+  const { pending } = useFormStatus();
+  const [clicked, setClicked] = useState<"schedule" | "add" | null>(null);
+
+  return (
+    <div className="flex shrink-0 items-center gap-2.5">
+      <button
+        type="submit"
+        name="next"
+        value="schedule"
+        disabled={pending}
+        onClick={() => setClicked("schedule")}
+        className="inline-flex h-11 items-center gap-2 rounded-[11px] border bg-card px-5 text-sm font-medium text-foreground/80 transition-colors hover:bg-muted active:translate-y-px disabled:pointer-events-none disabled:opacity-60"
+      >
+        {pending && clicked === "schedule" ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <CalendarPlus className="size-4" />
+        )}
+        Add &amp; schedule takeoff
+      </button>
+      <button
+        type="submit"
+        disabled={pending}
+        onClick={() => setClicked("add")}
+        className="inline-flex h-11 items-center gap-2 rounded-[11px] border border-foreground bg-foreground px-5 text-sm font-medium text-background transition-opacity hover:opacity-90 active:translate-y-px disabled:pointer-events-none disabled:opacity-70"
+      >
+        {pending && clicked === "add" ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <Check className="size-4" />
+        )}
+        {pending ? "Adding…" : "Add lead"}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Company input with a live register check (Jordan A2): typing a management
+ * company that already exists surfaces the match so picking it links the
+ * account instead of minting a duplicate.
+ */
+function CompanyField({
+  value,
+  accountId,
+  onChange,
+  onPick,
+}: {
+  value: string;
+  accountId: string | null;
+  onChange: (v: string) => void;
+  onPick: (s: { id: string; name: string }) => void;
+}) {
+  const [suggestions, setSuggestions] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  const [open, setOpen] = useState(false);
+  const [searched, setSearched] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const seqRef = useRef(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocMouseDown(e: MouseEvent) {
+      if (containerRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, [open]);
+  useEffect(
+    () => () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    },
+    [],
+  );
+
+  function handleChange(next: string) {
+    onChange(next);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const q = next.trim();
+    if (q.length < 2) {
+      setSuggestions([]);
+      setOpen(false);
+      setSearched(false);
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
+      const seq = ++seqRef.current;
+      try {
+        const rows = await searchAccountsAction(q);
+        if (seq !== seqRef.current) return;
+        setSuggestions(rows);
+        setSearched(true);
+        setOpen(true);
+      } catch {
+        if (seq !== seqRef.current) return;
+        setSuggestions([]);
+        setSearched(true);
+      }
+    }, 200);
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      <SlimField>
+        <Briefcase className="size-4 shrink-0 text-muted-foreground" />
+        <input
+          value={value}
+          onChange={(e) => handleChange(e.target.value)}
+          placeholder="Management company…"
+          autoComplete="off"
+          className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+        />
+        {accountId && (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-600/25 bg-emerald-600/10 px-1.5 py-px text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+            <BadgeCheck className="size-[11px]" />
+            Linked
+          </span>
+        )}
+      </SlimField>
+      {open && suggestions.length > 0 && (
+        <div className="absolute inset-x-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-[14px] border bg-card shadow-[0_18px_44px_-14px_rgb(0_0_0/0.26)]">
+          <p className="px-3.5 pb-1.5 pt-2.5 text-[10.5px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
+            Existing companies
+          </p>
+          {suggestions.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => {
+                onPick(s);
+                setOpen(false);
+              }}
+              className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left transition-colors hover:bg-muted/40"
+            >
+              <Briefcase className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium">
+                {s.name}
+              </span>
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-600/25 bg-emerald-600/10 px-1.5 py-px text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+                <BadgeCheck className="size-[11px]" />
+                In Mercer
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      {!accountId &&
+        searched &&
+        suggestions.length === 0 &&
+        value.trim().length >= 2 && (
+          <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
+            <Sparkles className="mt-px size-[13px] shrink-0" />
+            New to Mercer — we&apos;ll create this company with the lead.
+          </p>
+        )}
     </div>
   );
 }
@@ -815,15 +1232,23 @@ function Band({
   num,
   title,
   note,
+  overflowVisible,
   children,
 }: {
   num: string;
   title: string;
   note: React.ReactNode;
+  /** Bands hosting dropdowns must not clip them (Jordan A2). */
+  overflowVisible?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div className="mb-3.5 overflow-hidden rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
+    <div
+      className={cn(
+        "mb-3.5 rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04)]",
+        overflowVisible ? "overflow-visible" : "overflow-hidden",
+      )}
+    >
       <div className="flex items-center gap-3 px-[18px] pt-[15px]">
         <span className="grid size-[26px] shrink-0 place-items-center rounded-full bg-foreground font-mono text-xs text-background">
           {num}

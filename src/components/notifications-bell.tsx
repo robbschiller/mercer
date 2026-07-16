@@ -85,7 +85,13 @@ export function NotificationsBell() {
             items.map((n) => (
               <Link
                 key={n.id}
-                href={n.bidId ? `/bids/${n.bidId}` : "/pipeline"}
+                href={
+                  n.bidId
+                    ? `/opportunities/${n.bidId}`
+                    : n.leadId
+                      ? `/leads/${n.leadId}`
+                      : "/pipeline"
+                }
                 className={cn(
                   "flex items-start gap-2.5 border-b px-3 py-2.5 text-sm transition-colors last:border-0 hover:bg-accent/50",
                   n.unread && "bg-blue-600/[0.04]",

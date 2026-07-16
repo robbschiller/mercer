@@ -174,12 +174,12 @@ const ACTIONS: Record<ActionKey, ActionDef> = {
   },
   "start-draft-bid": {
     kind: "form",
-    title: "Start draft bid",
+    title: "Start draft opportunity",
     description: "Begin a new proposal",
-    cta: "Start bid",
+    cta: "Start opportunity",
     success: {
-      title: "Draft bid started",
-      sub: "Opening the bid editor next.",
+      title: "Draft opportunity started",
+      sub: "Opening the opportunity editor next.",
     },
     fields: [
       {
@@ -211,7 +211,7 @@ const PILLS: { key: ActionKey; label: string; icon: LucideIcon }[] = [
   { key: "create-lead", label: "Create lead", icon: Target },
   { key: "log-call", label: "Log call", icon: Phone },
   { key: "set-follow-up", label: "Set follow-up", icon: CalendarClock },
-  { key: "start-draft-bid", label: "Start draft bid", icon: ClipboardList },
+  { key: "start-draft-bid", label: "Start draft opportunity", icon: ClipboardList },
   { key: "show-overdue", label: "Show overdue", icon: CircleAlert },
 ];
 
@@ -321,7 +321,7 @@ export function DashboardActionPills({
     // route into the full wizard instead of a partial one-shot create.
     if (open === "start-draft-bid") {
       close();
-      router.push("/bids/new");
+      router.push("/opportunities/new");
       return;
     }
 

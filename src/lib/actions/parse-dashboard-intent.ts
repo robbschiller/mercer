@@ -21,7 +21,7 @@ Intents:
 - create-lead — logging a new sales opportunity. Fields: propertyAddress, primaryContact, source (e.g. "Referral", "Trade show", "Cold call", "Website", "Repeat client").
 - log-call — recording a call they made. Fields: contact, outcome (e.g. "Connected", "Left voicemail", "No answer", "Scheduled meeting"), notes.
 - set-follow-up — setting a reminder. Fields: about (who/what to follow up on), dueDate (ISO YYYY-MM-DD), note.
-- start-draft-bid — starting a new bid/proposal. Fields: propertyAddress, scopeSummary, sourceTag.
+- start-draft-bid — starting a new opportunity/proposal. Fields: propertyAddress, scopeSummary, sourceTag.
 - show-overdue — show overdue follow-ups. No fields.
 - unknown — request doesn't clearly map to any of the above (greetings, off-topic, jokes, vague questions).
 
@@ -116,7 +116,7 @@ function mockParseDashboardIntent(prompt: string): DashboardIntent {
   if (/\bbid\b|\bproposal\b|\bestimate\b|\bquote\b/.test(lower)) {
     const i = blankIntent("start-draft-bid");
     i.confidence = "medium";
-    i.summary = "Start a draft bid";
+    i.summary = "Start a draft opportunity";
     return i;
   }
 
@@ -146,7 +146,7 @@ function mockParseDashboardIntent(prompt: string): DashboardIntent {
 
   const unknown = blankIntent("unknown");
   unknown.summary =
-    "Offline mode (no API key yet) — try a keyword like “add”, “call”, “lead”, “bid”, “follow up”, or “overdue”.";
+    "Offline mode (no API key yet) — try a keyword like “add”, “call”, “lead”, “opportunity”, “follow up”, or “overdue”.";
   return unknown;
 }
 

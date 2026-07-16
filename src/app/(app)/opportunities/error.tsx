@@ -17,9 +17,9 @@ export default function BidsError({
 
   return (
     <div className="container mx-auto flex flex-col items-center justify-center gap-4 px-4 py-24">
-      <h2 className="text-2xl font-bold">Failed to load bids</h2>
+      <h2 className="text-2xl font-bold">Failed to load opportunities</h2>
       <p className="text-muted-foreground">
-        Something went wrong loading your bids.
+        Something went wrong loading your opportunities.
       </p>
       <div className="flex gap-2">
         <Button variant="outline" asChild>

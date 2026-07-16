@@ -101,7 +101,7 @@ export function BidsTable({ bids }: { bids: BidSummary[] }) {
     () =>
       bids.map((bid) => ({
         ...bid,
-        href: `/bids/${bid.id}`,
+        href: `/opportunities/${bid.id}`,
         grandTotal: computeBidTotal(bid),
       })),
     [bids],
@@ -186,7 +186,7 @@ export function BidsTable({ bids }: { bids: BidSummary[] }) {
         enableColumnFilter: false,
         header: () => (
           <span className="block text-right text-xs font-medium uppercase text-muted-foreground">
-            Bid total
+            Opportunity total
           </span>
         ),
         cell: ({ row }) => (
@@ -259,7 +259,7 @@ export function BidsTable({ bids }: { bids: BidSummary[] }) {
         <DataTableToolbarSection className="flex-wrap justify-between gap-2 border-b p-0 px-3 py-2">
           <div className="min-w-0 flex-1">
             <DataTableSearchFilter<BidRow>
-              placeholder="Search bids..."
+              placeholder="Search opportunities..."
               className="w-full max-w-md [&_input]:border-0 [&_input]:shadow-none [&_input]:focus-visible:ring-0"
             />
           </div>
@@ -279,7 +279,7 @@ export function BidsTable({ bids }: { bids: BidSummary[] }) {
             }}
           >
             <DataTableEmptyBody className="h-28 text-center text-sm text-muted-foreground">
-              No bids match this view.
+              No opportunities match this view.
             </DataTableEmptyBody>
           </DataTableBody>
         </DataTable>

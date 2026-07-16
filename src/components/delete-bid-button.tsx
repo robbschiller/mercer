@@ -27,7 +27,7 @@ export function DeleteBidButton({ bid }: { bid: Bid }) {
         </Button>
       }
       title={`Delete "${bid.propertyName}"?`}
-      description="This will permanently delete the bid, all its buildings, surfaces, and proposals. This cannot be undone."
+      description="This will permanently delete the opportunity, all its buildings, surfaces, and proposals. This cannot be undone."
       onConfirm={handleDelete}
     />
   );

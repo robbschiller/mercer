@@ -19,7 +19,7 @@ export async function createBidAction(formData: FormData) {
 
   if (!result.success) {
     const message = result.error.issues[0]?.message ?? "Invalid input";
-    redirect(`/bids/new?error=${encodeURIComponent(message)}`);
+    redirect(`/opportunities/new?error=${encodeURIComponent(message)}`);
   }
 
   let created: { bid: Awaited<ReturnType<typeof createBid>>; defaults: Awaited<ReturnType<typeof getUserDefaults>> } | null = null;
@@ -36,8 +36,8 @@ export async function createBidAction(formData: FormData) {
     ]);
     created = { bid, defaults };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to create bid";
-    redirect(`/bids/new?error=${encodeURIComponent(message)}`);
+    const message = error instanceof Error ? error.message : "Failed to create opportunity";
+    redirect(`/opportunities/new?error=${encodeURIComponent(message)}`);
   }
 
   if (created?.defaults) {
@@ -58,9 +58,9 @@ export async function createBidAction(formData: FormData) {
 
   // The AI-draft launchpad lands on the quote engine; empty bids on the bid.
   if (result.data.next === "draft") {
-    redirect(`/bids/${created!.bid.id}#quote`);
+    redirect(`/opportunities/${created!.bid.id}#quote`);
   }
-  redirect(`/bids/${created!.bid.id}`);
+  redirect(`/opportunities/${created!.bid.id}`);
 }
 
 /**
@@ -70,7 +70,7 @@ export async function createBidAction(formData: FormData) {
  */
 export async function createSmallTakeoffAction(formData: FormData) {
   const leadId = (formData.get("leadId") as string) || "";
-  const errorPath = `/bids/new/small?leadId=${encodeURIComponent(leadId)}`;
+  const errorPath = `/opportunities/new/small?leadId=${encodeURIComponent(leadId)}`;
 
   const picks: Array<{ priceListItemId: string; quantity: number }> = [];
   for (const [key, value] of formData.entries()) {
@@ -111,5 +111,5 @@ export async function createSmallTakeoffAction(formData: FormData) {
     redirect(`${errorPath}&error=${encodeURIComponent(message)}`);
   }
 
-  redirect(`/bids/${bidId}`);
+  redirect(`/opportunities/${bidId}`);
 }

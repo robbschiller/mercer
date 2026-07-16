@@ -484,8 +484,8 @@ export const leads = pgTable("leads", {
   notes: text("notes").notNull().default(""),
   status: text("status", { enum: LEAD_STATUSES })
     .notNull()
-    .default("needs_takeoff"),
-  /** When the takeoff visit is booked (status = takeoff_scheduled). */
+    .default("takeoff"),
+  /** When the takeoff visit is booked — schedule state is data, not a stage. */
   takeoffScheduledAt: timestamp("takeoff_scheduled_at", { withTimezone: true }),
   /** Drives the large/small takeoff + billing fork (AQP 2-week threshold). */
   isLargeJob: boolean("is_large_job").notNull().default(false),
@@ -566,6 +566,33 @@ export const activityEvents = pgTable("activity_events", {
     .defaultNow(),
   metadata: jsonb("metadata"),
   createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const TASK_STATUSES = ["open", "done", "cancelled"] as const;
+
+/**
+ * Per-person work items (042). Tenant-scoped by userId like everything else,
+ * targeted via assignedToUserId — saving a lead follow-up date creates one
+ * for a chosen member (Jordan C7: the app asks who, no silent default).
+ */
+export const tasks = pgTable("tasks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  assignedToUserId: uuid("assigned_to_user_id").notNull(),
+  createdByUserId: uuid("created_by_user_id"),
+  leadId: uuid("lead_id").references(() => leads.id, { onDelete: "cascade" }),
+  bidId: uuid("bid_id").references(() => bids.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull().default("follow_up"),
+  title: text("title").notNull(),
+  dueDate: date("due_date"),
+  status: text("status", { enum: TASK_STATUSES }).notNull().default("open"),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });

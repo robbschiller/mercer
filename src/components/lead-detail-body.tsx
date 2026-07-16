@@ -2,8 +2,13 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Pencil, X } from "lucide-react";
-import type { Lead } from "@/lib/store";
+import { Briefcase, Pencil, UserRound, X } from "lucide-react";
+import type {
+  AssignableMember,
+  ContactAttempt,
+  Lead,
+  LeadContactCard,
+} from "@/lib/store";
 import {
   enrichLeadAction,
   logLeadContactAction,
@@ -34,13 +39,27 @@ import {
 
 type LinkedBid = { id: string } | null | undefined;
 
+/** "Robert Strembicki" → ["Robert", "Strembicki"]; single words stay first. */
+function splitName(name: string): [string, string] {
+  const trimmed = name.trim();
+  const i = trimmed.lastIndexOf(" ");
+  if (i < 0) return [trimmed, ""];
+  return [trimmed.slice(0, i), trimmed.slice(i + 1)];
+}
+
 export function LeadDetailBody({
   lead,
+  contact,
+  members,
+  attempts,
   linkedBid,
   error,
   closeHref,
 }: {
   lead: Lead;
+  contact: LeadContactCard | null;
+  members: AssignableMember[];
+  attempts: ContactAttempt[];
   linkedBid: LinkedBid;
   error?: string;
   closeHref: string;
@@ -52,7 +71,8 @@ export function LeadDetailBody({
     lead.enrichmentStatus === "failed" ||
     lead.enrichmentStatus === "skipped";
 
-  const subtitle = [lead.company, lead.propertyName].filter(Boolean).join(" · ");
+  const company = contact?.accountName ?? lead.company;
+  const subtitle = [company, lead.propertyName].filter(Boolean).join(" · ");
 
   return (
     <div className="flex flex-col gap-4">
@@ -101,7 +121,11 @@ export function LeadDetailBody({
       )}
 
       {isEditing ? (
-        <EditForm lead={lead} onDone={() => setIsEditing(false)} />
+        <EditForm
+          lead={lead}
+          contact={contact}
+          onDone={() => setIsEditing(false)}
+        />
       ) : (
         <>
           <Card>
@@ -109,22 +133,52 @@ export function LeadDetailBody({
               <CardTitle className="text-base">Contact</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-2 text-sm">
-              {lead.email ? (
+              {contact ? (
+                <div className="flex flex-col gap-0.5">
+                  <Link
+                    href={`/contacts/${contact.id}`}
+                    className="flex items-center gap-2 font-medium hover:underline"
+                  >
+                    <UserRound className="size-4 text-muted-foreground" />
+                    {contact.name}
+                  </Link>
+                  {(contact.accountName ?? lead.company) && (
+                    <span className="flex items-center gap-2 text-muted-foreground">
+                      <Briefcase className="size-4" />
+                      {contact.accountId ? (
+                        <Link
+                          href={`/leads/accounts/${contact.accountId}`}
+                          className="hover:underline"
+                        >
+                          {contact.accountName}
+                        </Link>
+                      ) : (
+                        (contact.accountName ?? lead.company)
+                      )}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <span className="text-muted-foreground/60">
+                  No contact on this lead yet — add one in Edit.
+                </span>
+              )}
+              {(contact?.email ?? lead.email) ? (
                 <a
-                  href={`mailto:${lead.email}`}
+                  href={`mailto:${contact?.email ?? lead.email}`}
                   className="text-muted-foreground hover:text-foreground"
                 >
-                  {lead.email}
+                  {contact?.email ?? lead.email}
                 </a>
               ) : (
                 <span className="text-muted-foreground/60">No email</span>
               )}
-              {lead.phone ? (
+              {(contact?.phone ?? lead.phone) ? (
                 <a
-                  href={`tel:${lead.phone}`}
+                  href={`tel:${contact?.phone ?? lead.phone}`}
                   className="text-muted-foreground hover:text-foreground"
                 >
-                  {lead.phone}
+                  {contact?.phone ?? lead.phone}
                 </a>
               ) : (
                 <span className="text-muted-foreground/60">No phone</span>
@@ -165,7 +219,12 @@ export function LeadDetailBody({
             </CardContent>
           </Card>
 
-          <OutreachCard lead={lead} />
+          <OutreachCard
+            lead={lead}
+            contactName={contact?.name ?? null}
+            members={members}
+            attempts={attempts}
+          />
 
           {lead.notes && (
             <Card>
@@ -207,11 +266,11 @@ export function LeadDetailBody({
           <div className="flex items-center justify-end gap-2 pt-2">
             {linkedBid ? (
               <Button variant="outline" asChild>
-                <Link href={`/bids/${linkedBid.id}`}>View linked bid</Link>
+                <Link href={`/opportunities/${linkedBid.id}`}>View linked opportunity</Link>
               </Button>
             ) : null}
             <Button variant="amber" asChild>
-              <Link href={`/bids/new?leadId=${lead.id}`}>Create bid from lead</Link>
+              <Link href={`/opportunities/new?leadId=${lead.id}`}>Convert to opportunity</Link>
             </Button>
           </div>
         </>
@@ -220,17 +279,31 @@ export function LeadDetailBody({
   );
 }
 
-function EditForm({ lead, onDone }: { lead: Lead; onDone: () => void }) {
+/**
+ * Edit form, restructured (Jordan C5): Project / Contact / Property /
+ * Company sections, each saving to its own record — the project name never
+ * lands in the contact's Name field again.
+ */
+function EditForm({
+  lead,
+  contact,
+  onDone,
+}: {
+  lead: Lead;
+  contact: LeadContactCard | null;
+  onDone: () => void;
+}) {
+  const [first, last] = splitName(contact?.name ?? "");
   return (
     <form action={updateLeadAction} onSubmit={() => onDone()} className="flex flex-col gap-4">
       <input type="hidden" name="id" value={lead.id} />
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Contact</CardTitle>
+          <CardTitle className="text-base">Project</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm">
-          <Field label="Name" htmlFor="lead-name">
+          <Field label="Project name" htmlFor="lead-name">
             <Input
               id="lead-name"
               name="name"
@@ -238,12 +311,36 @@ function EditForm({ lead, onDone }: { lead: Lead; onDone: () => void }) {
               required
             />
           </Field>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Contact</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 text-sm">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="First name" htmlFor="lead-contact-first">
+              <Input
+                id="lead-contact-first"
+                name="contactFirstName"
+                defaultValue={first}
+              />
+            </Field>
+            <Field label="Last name" htmlFor="lead-contact-last">
+              <Input
+                id="lead-contact-last"
+                name="contactLastName"
+                defaultValue={last}
+              />
+            </Field>
+          </div>
           <Field label="Email" htmlFor="lead-email">
             <Input
               id="lead-email"
               name="email"
               type="email"
-              defaultValue={lead.email ?? ""}
+              defaultValue={contact?.email ?? lead.email ?? ""}
             />
           </Field>
           <Field label="Phone" htmlFor="lead-phone">
@@ -251,7 +348,7 @@ function EditForm({ lead, onDone }: { lead: Lead; onDone: () => void }) {
               id="lead-phone"
               name="phone"
               type="tel"
-              defaultValue={lead.phone ?? ""}
+              defaultValue={contact?.phone ?? lead.phone ?? ""}
             />
           </Field>
         </CardContent>
@@ -262,13 +359,6 @@ function EditForm({ lead, onDone }: { lead: Lead; onDone: () => void }) {
           <CardTitle className="text-base">Property</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm">
-          <Field label="Company" htmlFor="lead-company">
-            <Input
-              id="lead-company"
-              name="company"
-              defaultValue={lead.company ?? ""}
-            />
-          </Field>
           <Field label="Property name" htmlFor="lead-property">
             <Input
               id="lead-property"
@@ -281,6 +371,24 @@ function EditForm({ lead, onDone }: { lead: Lead; onDone: () => void }) {
               id="lead-address"
               name="resolvedAddress"
               defaultValue={lead.resolvedAddress ?? ""}
+            />
+          </Field>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Company / Account</CardTitle>
+          <CardDescription className="text-xs">
+            The management company associated with this lead.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 text-sm">
+          <Field label="Company" htmlFor="lead-company">
+            <Input
+              id="lead-company"
+              name="company"
+              defaultValue={contact?.accountName ?? lead.company ?? ""}
             />
           </Field>
         </CardContent>
@@ -310,11 +418,21 @@ function EditForm({ lead, onDone }: { lead: Lead; onDone: () => void }) {
   );
 }
 
-function OutreachCard({ lead }: { lead: Lead }) {
+function OutreachCard({
+  lead,
+  contactName,
+  members,
+  attempts,
+}: {
+  lead: Lead;
+  contactName: string | null;
+  members: AssignableMember[];
+  attempts: ContactAttempt[];
+}) {
   const lastLabel = lead.lastContactedAt
-    ? formatRelative(new Date(lead.lastContactedAt))
+    ? formatExact(new Date(lead.lastContactedAt))
     : null;
-  const attempts = lead.contactAttempts ?? 0;
+  const count = lead.contactAttempts ?? 0;
   const followUp = lead.followUpAt ?? "";
   const isOverdue =
     lead.followUpAt && new Date(lead.followUpAt) < startOfToday();
@@ -335,7 +453,7 @@ function OutreachCard({ lead }: { lead: Lead }) {
               <>
                 {lastLabel}
                 <span className="ms-2 text-xs text-muted-foreground">
-                  ({attempts} {attempts === 1 ? "attempt" : "attempts"})
+                  ({count} {count === 1 ? "attempt" : "attempts"})
                 </span>
               </>
             ) : (
@@ -343,6 +461,22 @@ function OutreachCard({ lead }: { lead: Lead }) {
             )}
           </span>
         </div>
+
+        {attempts.length > 1 && (
+          <ul className="flex flex-col gap-1 border-t pt-2">
+            {attempts.map((a, i) => (
+              <li
+                key={a.id}
+                className="flex items-baseline justify-between text-xs text-muted-foreground"
+              >
+                <span>Attempt {attempts.length - i}</span>
+                <span className="tabular-nums">
+                  {formatExact(new Date(a.occurredAt))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
 
         <form action={logLeadContactAction}>
           <input type="hidden" name="id" value={lead.id} />
@@ -372,6 +506,29 @@ function OutreachCard({ lead }: { lead: Lead }) {
             />
             <SubmitButton size="sm">Save</SubmitButton>
           </div>
+          <Label
+            htmlFor={`assignee-${lead.id}`}
+            className="text-xs text-muted-foreground"
+          >
+            Who&apos;s it for? Saving creates the task
+            {contactName ? ` “Follow up: ${lead.name} (${contactName})”` : ""}{" "}
+            for them.
+          </Label>
+          <select
+            id={`assignee-${lead.id}`}
+            name="assignedTo"
+            defaultValue={members.length === 1 ? members[0].userId : ""}
+            className="h-9 rounded-md border bg-background px-2 text-sm"
+          >
+            <option value="" disabled>
+              Assign to…
+            </option>
+            {members.map((m) => (
+              <option key={m.userId} value={m.userId}>
+                {m.label}
+              </option>
+            ))}
+          </select>
           {lead.followUpAt && (
             <p
               className={`text-xs ${
@@ -403,21 +560,14 @@ function formatDate(iso: string): string {
   });
 }
 
-function formatRelative(date: Date): string {
-  const diffMs = Date.now() - date.getTime();
-  const diffMin = Math.round(diffMs / 60000);
-  if (diffMin < 1) return "Just now";
-  if (diffMin < 60) return `${diffMin} min ago`;
-  const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDay = Math.round(diffHr / 24);
-  if (diffDay < 30) return `${diffDay}d ago`;
-  const diffMo = Math.round(diffDay / 30);
-  if (diffMo < 12) return `${diffMo}mo ago`;
-  return date.toLocaleDateString(undefined, {
+/** Exact stamp (Jordan C7): "Jul 16, 2026, 2:41 PM" — never just "Just now". */
+function formatExact(date: Date): string {
+  return date.toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
 }
 

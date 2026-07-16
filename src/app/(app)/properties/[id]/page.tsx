@@ -164,7 +164,7 @@ export default async function PropertyHubPage({
   const hasOpenDeal = deals.some(
     (d) =>
       (d.kind === "lead" &&
-        ["needs_takeoff", "takeoff_scheduled", "on_hold"].includes(d.status)) ||
+        ["takeoff", "on_hold"].includes(d.status)) ||
       (d.kind === "bid" && ["draft", "sent"].includes(d.status)) ||
       (d.kind === "job" &&
         d.status !== "complete" &&
@@ -278,7 +278,7 @@ export default async function PropertyHubPage({
             ) : hasOpenDeal ? (
               <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-blue-600/20 bg-blue-600/10 px-2.5 py-[3px] text-xs font-semibold text-blue-700 dark:text-blue-400">
                 <span className="size-1.5 rounded-full bg-blue-600" />
-                Active deal
+                Active project
               </span>
             ) : null}
           </div>
@@ -359,7 +359,7 @@ export default async function PropertyHubPage({
             <span className="text-xs text-muted-foreground">Win rate</span>
             <span className="text-[13.5px] font-semibold">
               {winRate != null
-                ? `${Math.round(winRate * 100)}% · ${bidsAll.length} bid${bidsAll.length === 1 ? "" : "s"}`
+                ? `${Math.round(winRate * 100)}% · ${bidsAll.length} opportunit${bidsAll.length === 1 ? "y" : "ies"}`
                 : "—"}
             </span>
           </div>
@@ -379,7 +379,7 @@ export default async function PropertyHubPage({
             </p>
             <p className="mt-0.5 text-[12.5px] text-amber-800/80 dark:text-amber-300/80">
               {repaintYears} years on, past the exterior repaint cycle. No open
-              deal on this building yet.
+              project on this building yet.
             </p>
           </div>
           <Link
@@ -395,13 +395,13 @@ export default async function PropertyHubPage({
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_424px]">
         {/* ── Left column ── */}
         <div className="flex min-w-0 flex-col gap-5">
-          {/* Deals timeline */}
+          {/* Projects timeline */}
           <Panel
             icon={<GitCommitVertical className="size-[15px]" />}
-            title="Deals timeline"
+            title="Projects timeline"
             note={
               deals.length > 0
-                ? `every lead, bid & job since ${clientSince}`
+                ? `every lead, opportunity & job since ${clientSince}`
                 : "nothing here yet"
             }
             right={
@@ -426,14 +426,14 @@ export default async function PropertyHubPage({
                     cls: "border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
                   }}
                   title="Repaint due"
-                  detail={`${repaintYears} years since the last exterior. No open deal yet.`}
+                  detail={`${repaintYears} years since the last exterior. No open project yet.`}
                   highlight
                   last={deals.length === 0}
                 />
               )}
               {deals.length === 0 && !repaintDue ? (
                 <p className="pb-3 text-sm text-muted-foreground">
-                  No deals at this property yet. The first lead starts the
+                  No projects at this property yet. The first lead starts the
                   story.
                 </p>
               ) : (
@@ -600,7 +600,7 @@ export default async function PropertyHubPage({
           <Panel
             icon={<Ruler className="size-[15px]" />}
             title="Specs & takeoff"
-            note="reusable across every bid"
+            note="reusable across every opportunity"
           >
             <div className="p-4">
               {specCells.length > 0 ? (
@@ -630,7 +630,7 @@ export default async function PropertyHubPage({
               ) : (
                 <p className="text-sm text-muted-foreground">
                   No specs captured yet — fill them in below and every future
-                  bid starts warm.
+                  opportunity starts warm.
                 </p>
               )}
 
@@ -794,7 +794,7 @@ export default async function PropertyHubPage({
             {detail.contacts.length === 0 ? (
               <p className="p-4 text-sm text-muted-foreground">
                 Nobody linked yet — attach contacts from the panel below so
-                the next bid knows who decides.
+                the next opportunity knows who decides.
               </p>
             ) : (
               <div className="flex flex-col">

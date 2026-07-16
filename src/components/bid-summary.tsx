@@ -109,7 +109,7 @@ export function BidSummary({ bid }: { bid: Bid }) {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-lg">Bid Details</CardTitle>
+              <CardTitle className="text-lg">Opportunity Details</CardTitle>
               <CardDescription>
                 Property info, client, and status.
               </CardDescription>

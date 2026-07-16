@@ -33,7 +33,7 @@ type ChatMessage = {
 
 const TYPE_LABEL: Record<UnitHit["type"], string> = {
   lead: "Lead",
-  bid: "Bid / Project",
+  bid: "Opportunity / Job",
   property: "Property",
   contact: "Contact",
   account: "Company",
@@ -127,12 +127,12 @@ export function AskChat() {
               Ask Mercer
             </h1>
             <p className="max-w-sm text-sm text-muted-foreground">
-              Tag a property, bid, lead, contact, or company with the{" "}
+              Tag a property, opportunity, lead, contact, or company with the{" "}
               <span className="inline-flex items-center gap-0.5 font-medium text-foreground">
                 <Plus className="size-3.5" /> Add context
               </span>{" "}
               button, then ask about it — e.g. “What did the Disney property’s
-              accepted bid come to, and how far along are its buildings?”
+              accepted quote come to, and how far along are its buildings?”
             </p>
           </div>
         ) : (
@@ -321,7 +321,7 @@ function AddContextPopover({
           )}
           {!searching && !query.trim() && (
             <p className="px-2 py-3 text-sm text-muted-foreground">
-              Search leads, bids/projects, properties, contacts, or companies.
+              Search leads, opportunities/jobs, properties, contacts, or companies.
             </p>
           )}
           {results.map((hit) => {

@@ -10,9 +10,12 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/takeoff-queue",
-        destination: "/pipeline?stage=needs_takeoff",
+        destination: "/pipeline?stage=takeoff",
         permanent: false,
       },
+      // Bids became Opportunities (Jordan field pass B1) — old links live on.
+      { source: "/bids", destination: "/opportunities", permanent: false },
+      { source: "/bids/:path*", destination: "/opportunities/:path*", permanent: false },
       { source: "/leads/import", destination: "/contacts/import", permanent: false },
       { source: "/leads/accounts", destination: "/leads?view=property", permanent: false },
       { source: "/leads/properties", destination: "/leads?view=property", permanent: false },

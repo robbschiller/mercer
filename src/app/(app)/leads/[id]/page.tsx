@@ -5,6 +5,9 @@ import {
   getLatestBidForLead,
   getPhotos,
   getAttachments,
+  getContactWithAccount,
+  getLeadContactAttempts,
+  listAssignableMembers,
 } from "@/lib/store";
 import { scheduleTakeoffAction } from "@/lib/actions";
 import { LeadDetailBody } from "@/components/lead-detail-body";
@@ -22,6 +25,17 @@ import {
 import { Input } from "@/components/ui/input";
 import { SubmitButton } from "@/components/submit-button";
 
+// The browser tab reads the project name, same as the page title (C3).
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const lead = await getLead(id);
+  return { title: lead ? leadFullName(lead) : "Lead" };
+}
+
 export default async function LeadDetailPage({
   params,
   searchParams,
@@ -30,37 +44,45 @@ export default async function LeadDetailPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const [{ id }, { error }] = await Promise.all([params, searchParams]);
-  const [lead, linkedBid, photos, attachments] = await Promise.all([
-    getLead(id),
-    getLatestBidForLead(id),
-    getPhotos("lead", id),
-    getAttachments("lead", id),
-  ]);
+  const [lead, linkedBid, photos, attachments, attempts, members] =
+    await Promise.all([
+      getLead(id),
+      getLatestBidForLead(id),
+      getPhotos("lead", id),
+      getAttachments("lead", id),
+      getLeadContactAttempts(id),
+      listAssignableMembers(),
+    ]);
   if (!lead) notFound();
+  const contact = lead.primaryContactId
+    ? await getContactWithAccount(lead.primaryContactId)
+    : null;
 
   return (
     <div className="container mx-auto flex max-w-2xl flex-col gap-6 px-4 py-6">
       <BreadcrumbLabel segment={id} label={leadFullName(lead)} />
       <LeadDetailBody
         lead={lead}
+        contact={contact}
+        members={members}
+        attempts={attempts}
         linkedBid={linkedBid}
         error={error}
         closeHref="/leads"
       />
-      {(lead.status === "needs_takeoff" ||
-        lead.status === "takeoff_scheduled") && (
+      {lead.status === "takeoff" && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <CalendarClock className="size-4" />
-              {lead.status === "takeoff_scheduled"
+              {lead.takeoffScheduledAt
                 ? "Takeoff scheduled"
                 : "Schedule the takeoff"}
             </CardTitle>
             <CardDescription>
-              {lead.status === "takeoff_scheduled" && lead.takeoffScheduledAt
+              {lead.takeoffScheduledAt
                 ? `On the books for ${new Date(lead.takeoffScheduledAt).toLocaleString("en-US", { weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} — reschedule below if it moves.`
-                : "Put the site walk on the calendar — the lead moves to the takeoff stage."}
+                : "Put the site walk on the calendar — whether it's booked shows right on the pipeline row."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -83,9 +105,7 @@ export default async function LeadDetailPage({
                 className="h-9 w-56"
               />
               <SubmitButton size="sm">
-                {lead.status === "takeoff_scheduled"
-                  ? "Reschedule"
-                  : "Schedule takeoff"}
+                {lead.takeoffScheduledAt ? "Reschedule" : "Schedule takeoff"}
               </SubmitButton>
             </form>
           </CardContent>

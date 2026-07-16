@@ -35,8 +35,8 @@ const TYPE_META: Record<
     icon: <Building2 className="size-4" />,
   },
   bid: {
-    label: "Bids & jobs",
-    href: (id) => `/bids/${id}`,
+    label: "Opportunities & jobs",
+    href: (id) => `/opportunities/${id}`,
     icon: <FileText className="size-4" />,
   },
   lead: {
@@ -134,7 +134,7 @@ export function GlobalSearch() {
         if (!o) setQuery("");
       }}
       title="Search"
-      description="Find any property, deal, or person"
+      description="Find any property, project, or person"
       // The palette filters server-side; client-side re-filtering would
       // fight the ranked results.
       shouldFilter={false}
@@ -142,7 +142,7 @@ export function GlobalSearch() {
       onValueChange={setSelected}
     >
       <CommandInput
-        placeholder="Search properties, deals, people…"
+        placeholder="Search properties, projects, people…"
         value={query}
         onValueChange={setQuery}
       />
@@ -181,9 +181,9 @@ export function GlobalSearch() {
             <UserPlus className="size-4" />
             New lead
           </CommandItem>
-          <CommandItem value="action-new-bid" onSelect={() => go("/bids/new")}>
+          <CommandItem value="action-new-bid" onSelect={() => go("/opportunities/new")}>
             <FilePlus2 className="size-4" />
-            New bid
+            New opportunity
           </CommandItem>
           <CommandItem
             value="action-ask"

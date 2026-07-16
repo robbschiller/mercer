@@ -85,7 +85,7 @@ export function BidDetailSections({
 
   const pricingSummary = pricing.complete
     ? `${formatCurrency(pricing.grandTotal)}${lineItemsTotal > 0 ? ` · ${lineItems.length} line item${lineItems.length !== 1 ? "s" : ""}` : ""}`
-    : "Set up pricing to calculate your bid";
+    : "Set up pricing to calculate your quote";
 
   return (
     <>
@@ -118,7 +118,7 @@ export function BidDetailSections({
       <CollapsibleSection
         icon={DollarSign}
         title="Pricing"
-        description="Set rates and margins to calculate your bid price."
+        description="Set rates and margins to calculate your quote price."
         summary={pricingSummary}
         open={open.has("pricing")}
         onToggle={() => toggle("pricing")}

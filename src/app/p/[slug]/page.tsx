@@ -320,7 +320,7 @@ export default async function SharedProposalPage({
                 <p className="text-sm font-medium">Unit rates — as found work</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   Billed at the listed rate as work is found and approved. Not
-                  included in the bid total.
+                  included in the quote total.
                 </p>
               </div>
               <table className="w-full text-sm">
@@ -342,7 +342,7 @@ export default async function SharedProposalPage({
           <div className="rounded-md border p-3">
             <div className="flex items-end justify-between gap-3">
               <div>
-                <p className="text-xs text-muted-foreground">Bid total</p>
+                <p className="text-xs text-muted-foreground">Quote total</p>
                 <p className="text-2xl font-semibold">
                   {formatCurrency(snapshot.grandTotal)}
                 </p>
@@ -417,7 +417,7 @@ export default async function SharedProposalPage({
             <CardTitle className="text-lg">Access</CardTitle>
             <CardDescription>
               Lifts, scaffolding, and other access methods included in the
-              bid total.
+              quote total.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -542,7 +542,7 @@ function renderCoverLetter(
   const base =
     template?.trim() ||
     (recipient
-      ? `{recipient}, thank you for the opportunity to bid ${snapshot.propertyName}. Every line in this proposal is itemized below — the price you see is the price you pay, and we're glad to walk through any of it.`
+      ? `{recipient}, thank you for the opportunity to quote ${snapshot.propertyName}. Every line in this proposal is itemized below — the price you see is the price you pay, and we're glad to walk through any of it.`
       : null);
   if (!base) return null;
   return base
@@ -725,7 +725,7 @@ function StatusPage({
             <p className="text-sm font-medium">{snapshot.clientName}</p>
           </div>
           <div className="rounded-md border p-3">
-            <p className="text-xs text-muted-foreground">Bid status</p>
+            <p className="text-xs text-muted-foreground">Quote status</p>
             <p className="text-sm font-medium">{bidStatus.toUpperCase()}</p>
           </div>
           <div className="rounded-md border p-3 sm:col-span-2">

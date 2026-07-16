@@ -78,15 +78,15 @@ export default async function SmallTakeoffPage({
             </p>
             <p className="max-w-sm text-sm text-muted-foreground/80">
               The small-job takeoff prices straight off the catalog. Add SKUs
-              first, or use the full bid wizard.
+              first, or use the full opportunity wizard.
             </p>
             <div className="flex items-center gap-2">
               <Button variant="outline" asChild>
                 <Link href="/settings/catalog">Open catalog settings</Link>
               </Button>
               <Button asChild>
-                <Link href={`/bids/new?leadId=${lead.id}`}>
-                  Full bid wizard
+                <Link href={`/opportunities/new?leadId=${lead.id}`}>
+                  Full opportunity wizard
                 </Link>
               </Button>
             </div>
@@ -153,17 +153,17 @@ export default async function SmallTakeoffPage({
           ))}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Create the bid</CardTitle>
+              <CardTitle className="text-base">Create the opportunity</CardTitle>
               <CardDescription>
-                Items with a quantity become priced line items on a new bid for
+                Items with a quantity become priced line items on a new opportunity for
                 this lead; the lead moves to “Quote sent”. You can still add or
-                adjust lines on the bid afterward.
+                adjust lines on the opportunity afterward.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex items-center gap-2">
-              <SubmitButton variant="amber">Create priced bid</SubmitButton>
+              <SubmitButton variant="amber">Create priced opportunity</SubmitButton>
               <Button variant="ghost" asChild>
-                <Link href={`/bids/new?leadId=${lead.id}`}>
+                <Link href={`/opportunities/new?leadId=${lead.id}`}>
                   Use the full wizard instead
                 </Link>
               </Button>

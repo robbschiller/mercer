@@ -8,6 +8,7 @@ import {
   Building2,
   ChevronsUpDown,
   ContactRound,
+  FileSpreadsheet,
   HardHat,
   House,
   LifeBuoy,
@@ -21,6 +22,7 @@ import {
   Settings,
   SlidersHorizontal,
   Sun,
+  UserRoundSearch,
   UsersRound,
   Waypoints,
 } from "lucide-react";
@@ -58,6 +60,13 @@ const NAV_ITEMS = [
     label: "Pipeline",
     icon: Waypoints,
     countKey: "pipeline" as const,
+  },
+  { href: "/leads", label: "Leads", icon: UserRoundSearch, countKey: null },
+  {
+    href: "/opportunities",
+    label: "Opportunities",
+    icon: FileSpreadsheet,
+    countKey: null,
   },
   { href: "/projects", label: "Jobs", icon: HardHat, countKey: "jobs" as const },
   { href: "/properties", label: "Properties", icon: Building2, countKey: null },
@@ -154,8 +163,8 @@ export function AppSidebar({
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/bids/new" onClick={dismissOnMobile}>
-                  New bid
+                <Link href="/opportunities/new" onClick={dismissOnMobile}>
+                  New opportunity
                 </Link>
               </DropdownMenuItem>
             </DropdownMenuContent>

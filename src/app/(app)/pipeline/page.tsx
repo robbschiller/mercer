@@ -24,17 +24,16 @@ import { Input } from "@/components/ui/input";
 import { SubmitButton } from "@/components/submit-button";
 import { cn } from "@/lib/utils";
 
+// Tab names match the status dropdown exactly (Jordan C6) — one vocabulary.
 const STAGE_LABELS: Record<PipelineStage, string> = {
-  needs_takeoff: "Needs takeoff",
-  takeoff_scheduled: "Takeoff scheduled",
+  takeoff: "Takeoff",
   quoting: "Quoting",
-  sent: "Sent",
+  sent: "Quote sent",
   on_hold: "On hold",
 };
 
 const STAGE_DOTS: Record<PipelineStage, string> = {
-  needs_takeoff: "bg-muted-foreground/60",
-  takeoff_scheduled: "bg-cyan-600",
+  takeoff: "bg-cyan-600",
   quoting: "bg-violet-600",
   sent: "bg-blue-600",
   on_hold: "bg-amber-500",
@@ -50,7 +49,8 @@ function compactMoney(n: number): string {
 }
 
 function ageAmber(row: PipelineRow): boolean {
-  if (row.stage === "needs_takeoff") return ageDays(row) > 7;
+  if (row.stage === "takeoff" && row.takeoffScheduledAt == null)
+    return ageDays(row) > 7;
   if (row.stage === "sent") return ageDays(row) > 5;
   return false;
 }
@@ -109,7 +109,7 @@ export default async function PipelinePage({
             Pipeline
           </h1>
           <p className="mt-1 text-[13.5px] text-muted-foreground">
-            Every open deal, first contact to signed.
+            Every open project, first contact to signed.
           </p>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -120,9 +120,9 @@ export default async function PipelinePage({
             </Link>
           </Button>
           <Button asChild>
-            <Link href="/bids/new">
+            <Link href="/opportunities/new">
               <FilePlus2 className="size-4" />
-              New bid
+              New opportunity
             </Link>
           </Button>
         </div>
@@ -220,7 +220,7 @@ export default async function PipelinePage({
                   <b className="font-semibold text-foreground/80">
                     {rows.length}
                   </b>{" "}
-                  deals ·{" "}
+                  projects ·{" "}
                   <b className="font-semibold text-foreground/80">
                     {compactMoney(sumValue(all))}
                   </b>{" "}
@@ -250,7 +250,7 @@ export default async function PipelinePage({
           <div className="overflow-x-auto rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
             <div className="min-w-[940px]">
               <div className="grid grid-cols-[minmax(180px,1.5fr)_100px_128px_72px_144px_58px_minmax(200px,auto)] items-center gap-x-2.5 border-b bg-muted/30 py-2.5 pl-4 pr-10">
-                {["Deal", "Company", "Stage", "Value", "Quote", "Age", "Next"].map(
+                {["Project", "Company", "Stage", "Value", "Quote", "Age", "Next"].map(
                   (h) => (
                     <span
                       key={h}
@@ -356,7 +356,7 @@ function PipelineTableRow({
   const age = ageDays(row);
   return (
     <div className="group relative grid grid-cols-[minmax(180px,1.5fr)_100px_128px_72px_144px_58px_minmax(200px,auto)] items-center gap-x-2.5 border-t py-3 pl-4 pr-10 transition-colors first:border-t-0 hover:bg-muted/20">
-      {/* deal */}
+      {/* project */}
       <div className="min-w-0">
         <div className="flex items-center gap-1.5 truncate text-sm font-semibold tracking-tight">
           {row.advancedToday && (
@@ -459,43 +459,41 @@ function PipelineTableRow({
 }
 
 function NextCell({ row }: { row: PipelineRow }) {
-  if (row.kind === "lead" && row.stage === "needs_takeoff") {
-    return (
-      <form action={scheduleTakeoffAction} className="flex items-center gap-1.5">
-        <input type="hidden" name="id" value={row.id} />
-        <Input
-          type="date"
-          name="scheduledAt"
-          required
-          className="h-8 w-[7.5rem] text-xs"
-        />
-        <SubmitButton variant="outline" size="sm" className="h-8 text-xs">
-          Schedule
-        </SubmitButton>
-      </form>
-    );
-  }
-  if (row.kind === "lead" && row.stage === "takeoff_scheduled") {
-    const past =
-      row.takeoffScheduledAt != null &&
-      row.takeoffScheduledAt.getTime() < Date.now();
+  // One Takeoff stage (C6): the row shows schedule state as data — a date
+  // picker when the walk isn't booked, the booked slot when it is.
+  if (row.kind === "lead" && row.stage === "takeoff") {
+    if (row.takeoffScheduledAt == null) {
+      return (
+        <form action={scheduleTakeoffAction} className="flex items-center gap-1.5">
+          <input type="hidden" name="id" value={row.id} />
+          <Input
+            type="date"
+            name="scheduledAt"
+            required
+            className="h-8 w-[7.5rem] text-xs"
+          />
+          <SubmitButton variant="outline" size="sm" className="h-8 text-xs">
+            Schedule
+          </SubmitButton>
+        </form>
+      );
+    }
+    const past = row.takeoffScheduledAt.getTime() < Date.now();
     if (past) {
       return (
         <Link
-          href={`/bids/new?leadId=${row.id}`}
+          href={`/opportunities/new?leadId=${row.id}`}
           className="inline-flex h-8 items-center gap-1.5 rounded-lg border bg-card px-3 text-xs font-medium text-foreground/80 transition-colors hover:border-foreground hover:bg-foreground hover:text-background"
         >
           <Calculator className="size-3.5" />
-          Start bid
+          Convert to opportunity
         </Link>
       );
     }
     return (
       <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border bg-muted/50 px-2.5 py-1.5 text-xs font-medium text-foreground/80">
         <Calendar className="size-3.5 text-muted-foreground" />
-        {row.takeoffScheduledAt
-          ? `${row.takeoffScheduledAt.toLocaleDateString("en-US", { weekday: "short" })} · ${row.takeoffScheduledAt.toLocaleTimeString("en-US", { hour: "numeric" }).toLowerCase().replace(" ", "")}`
-          : "Scheduled"}
+        {`${row.takeoffScheduledAt.toLocaleDateString("en-US", { weekday: "short" })} · ${row.takeoffScheduledAt.toLocaleTimeString("en-US", { hour: "numeric" }).toLowerCase().replace(" ", "")}`}
       </span>
     );
   }

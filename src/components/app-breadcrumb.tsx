@@ -18,7 +18,7 @@ const SECTION_LABELS: Record<string, string> = {
   pipeline: "Pipeline",
   contacts: "Contacts",
   leads: "Leads",
-  bids: "Bids",
+  opportunities: "Opportunities",
   projects: "Jobs",
   properties: "Properties",
   settings: "Settings",

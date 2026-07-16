@@ -256,7 +256,7 @@ export function HomeAgendaSection({ agenda }: { agenda: HomeAgenda }) {
                       </span>
                     }
                   />
-                  <ActLink href={`/bids/${e.bidId}`}>Open bid</ActLink>
+                  <ActLink href={`/opportunities/${e.bidId}`}>Open opportunity</ActLink>
                 </Row>
               ))}
             </Group>

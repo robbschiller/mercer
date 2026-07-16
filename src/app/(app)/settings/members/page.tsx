@@ -54,7 +54,7 @@ export default async function SettingsMembersPage({
         <CardHeader>
           <CardTitle className="text-lg">Team</CardTitle>
           <CardDescription>
-            People with access to your bids, leads, and projects.
+            People with access to your opportunities, leads, and jobs.
           </CardDescription>
         </CardHeader>
         <CardContent>

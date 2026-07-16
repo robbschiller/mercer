@@ -39,10 +39,10 @@ export default async function OnboardingPage({
   if (!ctx) redirect("/login");
 
   // Invited members shouldn't redo onboarding — their org's owner already did it.
-  if (ctx.role !== "owner") redirect("/bids");
+  if (ctx.role !== "owner") redirect("/opportunities");
 
   const state = await getOnboardingState(ctx.ownerUserId);
-  if (isOnboardingComplete(state)) redirect("/bids");
+  if (isOnboardingComplete(state)) redirect("/opportunities");
 
   const { step: rawStep, error } = await searchParams;
   const step = parseStep(rawStep);
@@ -55,17 +55,17 @@ export default async function OnboardingPage({
           §&nbsp;welcome
         </span>
         <CardTitle className="font-display text-3xl font-medium tracking-tight">
-          {step === "website" && "Let's brand your bids"}
+          {step === "website" && "Let's brand your proposals"}
           {step === "confirm" && "Confirm your company"}
-          {step === "theme" && "Theme your bid page"}
+          {step === "theme" && "Theme your proposal page"}
         </CardTitle>
         <CardDescription>
           {step === "website" &&
-            "Drop in your website. We'll pull your company name, address, and brand to theme every bid you send."}
+            "Drop in your website. We'll pull your company name, address, and brand to theme every proposal you send."}
           {step === "confirm" &&
-            "Edit anything we got wrong. This shows up at the top of your bid PDF and shareable proposal page."}
+            "Edit anything we got wrong. This shows up at the top of your proposal PDF and shareable proposal page."}
           {step === "theme" &&
-            "Pick the accent color for your bid page. You can change everything later from Settings."}
+            "Pick the accent color for your proposal page. You can change everything later from Settings."}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -206,7 +206,7 @@ export default async function OnboardingPage({
                   className="h-10 w-16 cursor-pointer p-1"
                 />
                 <span className="text-xs text-muted-foreground dark:text-white/60">
-                  Used for the price box and section dividers on every bid.
+                  Used for the price box and section dividers on every proposal.
                 </span>
               </div>
             </div>

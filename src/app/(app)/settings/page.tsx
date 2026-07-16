@@ -16,7 +16,7 @@ export default async function SettingsPricingPage() {
       <CardHeader>
         <CardTitle className="text-lg">Company pricing defaults</CardTitle>
         <CardDescription>
-          Default rates and margins applied to new bids.
+          Default rates and margins applied to new opportunities.
         </CardDescription>
       </CardHeader>
       <CardContent>

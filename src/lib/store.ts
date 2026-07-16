@@ -32,6 +32,7 @@ import {
   companyProfiles,
   onboardings,
   orgMemberships,
+  tasks,
 } from "@/db/schema";
 import {
   eq,
@@ -44,6 +45,7 @@ import {
   inArray,
   isNull,
   ne,
+  gte,
   type SQL,
 } from "drizzle-orm";
 import { getOrgContext } from "@/lib/org-context";
@@ -121,7 +123,7 @@ async function requireBidOwnership(bidId: string, existingUserId?: string) {
     .from(bids)
     .where(and(eq(bids.id, bidId), eq(bids.userId, userId)))
     .limit(1);
-  if (!rows[0]) throw new Error("Bid not found");
+  if (!rows[0]) throw new Error("Opportunity not found");
   return userId;
 }
 
@@ -282,6 +284,21 @@ export async function createBid(
     >
 ) {
   const user = await requireUser();
+  // Double-submit guard: same story as createLead — a matching bid created
+  // moments ago is the same launchpad click twice, not a second bid.
+  const recentDuplicate = await db
+    .select()
+    .from(bids)
+    .where(
+      and(
+        eq(bids.userId, user.ownerUserId),
+        eq(bids.propertyName, data.propertyName),
+        eq(bids.clientName, data.clientName),
+        gte(bids.createdAt, new Date(Date.now() - 2 * 60_000)),
+      ),
+    )
+    .limit(1);
+  if (recentDuplicate[0]) return recentDuplicate[0];
   const lat = data.latitude ?? null;
   const lng = data.longitude ?? null;
   const leadId: string | null = data.leadId ?? null;
@@ -346,6 +363,38 @@ export async function createBid(
       userId: user.ownerUserId,
     })
     .returning();
+  // Files that arrived with the lead ride along on convert (C8) — same
+  // storage objects, a second context row. The delete path removes the
+  // storage file only via its own row's path, so shared paths are safe
+  // as long as only one context's Remove is used per file; duplicating
+  // rows (not files) keeps the spec visible from both records.
+  if (leadId) {
+    const leadFiles = await db
+      .select()
+      .from(attachments)
+      .where(
+        and(
+          eq(attachments.userId, user.ownerUserId),
+          eq(attachments.contextType, "lead"),
+          eq(attachments.contextId, leadId),
+        ),
+      );
+    if (leadFiles.length > 0) {
+      await db.insert(attachments).values(
+        leadFiles.map((f) => ({
+          userId: f.userId,
+          contextType: "bid" as const,
+          contextId: rows[0].id,
+          fileName: f.fileName,
+          mimeType: f.mimeType,
+          sizeBytes: f.sizeBytes,
+          storagePath: f.storagePath,
+          url: f.url,
+          caption: f.caption,
+        })),
+      );
+    }
+  }
   await createActivityEvent({
     userId: user.ownerUserId,
     leadId,
@@ -354,7 +403,7 @@ export async function createBid(
     accountId: leadContext?.accountId ?? property?.accountId ?? null,
     bidId: rows[0].id,
     type: "bid_created",
-    title: "Bid created",
+    title: "Opportunity created",
     body: data.notes,
   });
   await writeAuditLog({
@@ -2054,7 +2103,7 @@ export async function getLeadStatusCounts(options?: {
 
 // ── Dashboard recents ──
 
-export type DashboardRecentKind = "Lead" | "Bid" | "Project";
+export type DashboardRecentKind = "Lead" | "Opportunity" | "Job";
 
 export type DashboardRecent = {
   id: string;
@@ -2124,11 +2173,11 @@ export async function getDashboardRecents(
       );
       return {
         id: b.id,
-        kind: isProject ? "Project" : "Bid",
+        kind: isProject ? "Job" : "Opportunity",
         title: b.propertyName || b.clientName,
         sub: statusLabel,
         updatedAt: b.updatedAt,
-        href: isProject ? `/projects/${b.id}` : `/bids/${b.id}`,
+        href: isProject ? `/projects/${b.id}` : `/opportunities/${b.id}`,
       };
     }),
   ];
@@ -2822,6 +2871,21 @@ export async function createLead(
     }
 ) {
   const user = await requireUser();
+  // Double-submit guard: an identical lead created moments ago is the same
+  // form submitted twice (slow action + two live send-off buttons), not a
+  // second lead. Return it instead of minting a duplicate pipeline row.
+  const recentDuplicate = await db
+    .select()
+    .from(leads)
+    .where(
+      and(
+        eq(leads.userId, user.ownerUserId),
+        eq(leads.name, data.name),
+        gte(leads.createdAt, new Date(Date.now() - 2 * 60_000)),
+      ),
+    )
+    .limit(1);
+  if (recentDuplicate[0]) return recentDuplicate[0];
   let account: Account | null = null;
   if (data.accountId) {
     const existing = await db
@@ -3553,8 +3617,8 @@ export async function setProjectNto(input: {
     .where(and(eq(bids.id, input.bidId), eq(bids.userId, user.ownerUserId)))
     .limit(1);
   const bid = bidRows[0];
-  if (!bid) throw new Error("Bid not found");
-  if (!bid.propertyId) throw new Error("Bid is not attached to a property");
+  if (!bid) throw new Error("Opportunity not found");
+  if (!bid.propertyId) throw new Error("Opportunity is not attached to a property");
 
   const legalOwnerName = cleanText(input.legalOwnerName) ?? null;
   const legalOwnerAddress = cleanText(input.legalOwnerAddress) ?? null;
@@ -4775,11 +4839,15 @@ export async function updateLead(
       | "resolvedAddress"
       | "notes"
     >
-  >,
+  > & {
+    /** The person's name — writes to the contact record, never the lead title. */
+    contactName?: string | null;
+  },
 ) {
   const user = await requireUser();
   const previous = await getLead(id);
   if (!previous) return null;
+  const { contactName, ...leadPatch } = patch;
   const account = await findOrCreateAccount({
     userId: user.ownerUserId,
     name: patch.company ?? previous.company,
@@ -4799,44 +4867,77 @@ export async function updateLead(
     sourceTag: previous.sourceTag,
     rawSource: previous.rawRow,
   });
-  const contact = await findOrCreateContact({
-    userId: user.ownerUserId,
-    accountId: account?.id ?? previous.accountId ?? null,
-    name: patch.name ?? previous.name,
-    email: patch.email ?? previous.email,
-    phone: patch.phone ?? previous.phone,
-    title: rawRole(previous.rawRow),
-    sourceTag: previous.sourceTag,
-  });
-  const propertyContact = await upsertPropertyContact({
-    userId: user.ownerUserId,
-    propertyId: property?.id ?? previous.propertyId,
-    contactId: contact.id,
-    role: rawRole(previous.rawRow),
-    sourceTag: previous.sourceTag,
-    importRef: previous.rawRow,
-  });
+  // Contact edits update the person's own record. `lead.name` is the project
+  // name — it must never be written into a contact (Jordan C5: the old code
+  // minted contacts named after the lead title).
+  let contact: Contact | null = null;
+  if (previous.primaryContactId) {
+    const contactPatch: Partial<
+      Pick<Contact, "name" | "email" | "phone" | "accountId">
+    > = {};
+    if (contactName?.trim()) contactPatch.name = contactName.trim();
+    if (patch.email !== undefined) contactPatch.email = patch.email;
+    if (patch.phone !== undefined) contactPatch.phone = patch.phone;
+    if (account?.id) contactPatch.accountId = account.id;
+    const updated = await db
+      .update(contacts)
+      .set({ ...contactPatch, updatedAt: new Date() })
+      .where(
+        and(
+          eq(contacts.id, previous.primaryContactId),
+          eq(contacts.userId, user.ownerUserId),
+        ),
+      )
+      .returning();
+    contact = updated[0] ?? null;
+  } else if (contactName?.trim() || patch.email || patch.phone) {
+    contact = await findOrCreateContact({
+      userId: user.ownerUserId,
+      accountId: account?.id ?? previous.accountId ?? null,
+      name:
+        contactName?.trim() ||
+        patch.email ||
+        patch.phone ||
+        "Unknown contact",
+      email: patch.email ?? previous.email,
+      phone: patch.phone ?? previous.phone,
+      title: rawRole(previous.rawRow),
+      sourceTag: previous.sourceTag,
+    });
+  }
+  const propertyContact = contact
+    ? await upsertPropertyContact({
+        userId: user.ownerUserId,
+        propertyId: property?.id ?? previous.propertyId,
+        contactId: contact.id,
+        role: rawRole(previous.rawRow),
+        sourceTag: previous.sourceTag,
+        importRef: previous.rawRow,
+      })
+    : null;
   const rows = await db
     .update(leads)
     .set({
-      ...patch,
+      ...leadPatch,
       accountId: account?.id ?? previous.accountId,
       propertyId: property?.id ?? previous.propertyId,
-      primaryContactId: contact.id,
+      primaryContactId: contact?.id ?? previous.primaryContactId,
       updatedAt: new Date(),
     })
     .where(and(eq(leads.id, id), eq(leads.userId, user.ownerUserId)))
     .returning();
   const lead = rows[0] ?? null;
   if (lead) {
-    await createLeadContactLink({
-      userId: user.ownerUserId,
-      leadId: lead.id,
-      contactId: contact.id,
-      propertyContactId: propertyContact?.id ?? null,
-      role: "primary",
-      isPrimary: true,
-    });
+    if (contact) {
+      await createLeadContactLink({
+        userId: user.ownerUserId,
+        leadId: lead.id,
+        contactId: contact.id,
+        propertyContactId: propertyContact?.id ?? null,
+        role: "primary",
+        isPrimary: true,
+      });
+    }
     await writeAuditLog({
       userId: user.ownerUserId,
       entityType: "lead",
@@ -4887,9 +4988,34 @@ export async function logLeadContact(id: string) {
   return rows[0] ?? null;
 }
 
-export async function setLeadFollowUp(id: string, followUpAt: string | null) {
+export async function setLeadFollowUp(
+  id: string,
+  followUpAt: string | null,
+  /** Who the follow-up task lands with — required when setting a date (C7). */
+  assignedToUserId?: string | null,
+) {
   const user = await requireUser();
   const previous = await getLead(id);
+  // One open follow-up task per lead: setting a date creates or re-aims it;
+  // clearing the date cancels it.
+  const openTask = await db
+    .select({ id: tasks.id })
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.userId, user.ownerUserId),
+        eq(tasks.leadId, id),
+        eq(tasks.kind, "follow_up"),
+        eq(tasks.status, "open"),
+      ),
+    )
+    .limit(1);
+  // A new follow-up must name its owner; re-aiming an existing one (snooze)
+  // keeps the current assignee unless a new one is picked. Checked before
+  // any write so a rejected save leaves nothing behind.
+  if (followUpAt && !openTask[0] && !assignedToUserId) {
+    throw new Error("Pick who this follow-up is for");
+  }
   const rows = await db
     .update(leads)
     .set({ followUpAt, updatedAt: new Date() })
@@ -4897,6 +5023,40 @@ export async function setLeadFollowUp(id: string, followUpAt: string | null) {
     .returning();
   const lead = rows[0] ?? null;
   if (lead) {
+    if (followUpAt) {
+      const contactName = lead.primaryContactId
+        ? await getContactName(lead.primaryContactId)
+        : null;
+      const title = contactName
+        ? `Follow up: ${lead.name} (${contactName})`
+        : `Follow up: ${lead.name}`;
+      if (openTask[0]) {
+        await db
+          .update(tasks)
+          .set({
+            title,
+            dueDate: followUpAt,
+            ...(assignedToUserId ? { assignedToUserId } : {}),
+            updatedAt: new Date(),
+          })
+          .where(eq(tasks.id, openTask[0].id));
+      } else {
+        await db.insert(tasks).values({
+          userId: user.ownerUserId,
+          assignedToUserId: assignedToUserId!,
+          createdByUserId: user.userId,
+          leadId: lead.id,
+          kind: "follow_up",
+          title,
+          dueDate: followUpAt,
+        });
+      }
+    } else if (!followUpAt && openTask[0]) {
+      await db
+        .update(tasks)
+        .set({ status: "cancelled", updatedAt: new Date() })
+        .where(eq(tasks.id, openTask[0].id));
+    }
     await createActivityEvent({
       userId: user.ownerUserId,
       leadId: lead.id,
@@ -4905,7 +5065,7 @@ export async function setLeadFollowUp(id: string, followUpAt: string | null) {
       accountId: lead.accountId,
       type: "task",
       title: followUpAt ? "Follow-up scheduled" : "Follow-up cleared",
-      metadata: { followUpAt },
+      metadata: { followUpAt, assignedToUserId: assignedToUserId ?? null },
     });
     await writeAuditLog({
       userId: user.ownerUserId,
@@ -4918,6 +5078,67 @@ export async function setLeadFollowUp(id: string, followUpAt: string | null) {
     });
   }
   return rows[0] ?? null;
+}
+
+export type ContactAttempt = { id: string; occurredAt: Date };
+
+/** Timestamped history of logged contact attempts on a lead (C7 part one). */
+export async function getLeadContactAttempts(
+  leadId: string,
+): Promise<ContactAttempt[]> {
+  const user = await requireUser();
+  return db
+    .select({ id: activityEvents.id, occurredAt: activityEvents.occurredAt })
+    .from(activityEvents)
+    .where(
+      and(
+        eq(activityEvents.userId, user.ownerUserId),
+        eq(activityEvents.leadId, leadId),
+        eq(activityEvents.type, "call"),
+      ),
+    )
+    .orderBy(desc(activityEvents.occurredAt))
+    .limit(8);
+}
+
+export type AssignableMember = { userId: string; label: string };
+
+/**
+ * Everyone a task can be assigned to: the org owner plus active members.
+ * Memberships carry no display name, so teammates are labeled by email.
+ */
+export async function listAssignableMembers(): Promise<AssignableMember[]> {
+  const user = await requireUser();
+  const members = await db
+    .select({
+      userId: orgMemberships.userId,
+      email: orgMemberships.email,
+    })
+    .from(orgMemberships)
+    .where(
+      and(
+        eq(orgMemberships.ownerUserId, user.ownerUserId),
+        eq(orgMemberships.status, "active"),
+      ),
+    )
+    .orderBy(asc(orgMemberships.createdAt));
+  const out: AssignableMember[] = [
+    {
+      userId: user.ownerUserId,
+      label:
+        user.userId === user.ownerUserId
+          ? `${user.name || user.email} (me)`
+          : "Owner",
+    },
+  ];
+  for (const m of members) {
+    if (!m.userId || m.userId === user.ownerUserId) continue;
+    out.push({
+      userId: m.userId,
+      label: m.userId === user.userId ? `${m.email} (me)` : m.email,
+    });
+  }
+  return out;
 }
 
 /** Intake fork (small vs large) — the flag that drives takeoff & billing templates. */
@@ -4969,14 +5190,14 @@ export async function updateLeadStatus(id: string, status: Lead["status"]) {
   return rows[0] ?? null;
 }
 
-/** Book the takeoff visit: status → takeoff_scheduled + the booked time. */
+/** Book the takeoff visit — schedule state is data on the lead, not a stage. */
 export async function scheduleLeadTakeoff(id: string, scheduledAt: Date) {
   const user = await requireUser();
   const previous = await getLead(id);
   const rows = await db
     .update(leads)
     .set({
-      status: "takeoff_scheduled",
+      status: "takeoff",
       takeoffScheduledAt: scheduledAt,
       updatedAt: new Date(),
     })
@@ -4994,7 +5215,7 @@ export async function scheduleLeadTakeoff(id: string, scheduledAt: Date) {
       title: "Takeoff scheduled",
       metadata: {
         from: previous?.status ?? null,
-        to: "takeoff_scheduled",
+        to: "takeoff",
         takeoffScheduledAt: scheduledAt.toISOString(),
       },
     });
@@ -5025,7 +5246,7 @@ export type TakeoffQueueRow = Lead & {
 
 /**
  * The takeoff queue (AQP's dispatch screen): open takeoff-stage leads —
- * needs_takeoff ordered oldest-first, then takeoff_scheduled by booked time.
+ * unscheduled ones oldest-first, then scheduled ones by booked time.
  */
 export async function getTakeoffQueue(): Promise<TakeoffQueueRow[]> {
   const user = await requireUser();
@@ -5046,7 +5267,7 @@ export async function getTakeoffQueue(): Promise<TakeoffQueueRow[]> {
       ),
     )
     .orderBy(
-      sql`case when ${leads.status} = 'needs_takeoff' then 0 else 1 end`,
+      sql`case when ${leads.takeoffScheduledAt} is null then 0 else 1 end`,
       sql`${leads.takeoffScheduledAt} asc nulls last`,
       asc(leads.createdAt),
     );
@@ -5056,6 +5277,38 @@ export async function getTakeoffQueue(): Promise<TakeoffQueueRow[]> {
     propertyAddress: row.propertyAddress,
     accountName: row.accountName,
   }));
+}
+
+export type LeadContactCard = {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  title: string | null;
+  accountId: string | null;
+  accountName: string | null;
+};
+
+/** The person on a lead plus their account — the lead detail Contact card (C4). */
+export async function getContactWithAccount(
+  id: string,
+): Promise<LeadContactCard | null> {
+  const user = await requireUser();
+  const rows = await db
+    .select({
+      id: contacts.id,
+      name: contacts.name,
+      email: contacts.email,
+      phone: contacts.phone,
+      title: contacts.title,
+      accountId: contacts.accountId,
+      accountName: accounts.name,
+    })
+    .from(contacts)
+    .leftJoin(accounts, eq(contacts.accountId, accounts.id))
+    .where(and(eq(contacts.id, id), eq(contacts.userId, user.ownerUserId)))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 /** Display name of one contact (org-scoped) — for prefill affordances. */
@@ -5077,8 +5330,7 @@ export async function getContactName(id: string): Promise<string | null> {
  * sent). Won bids leave the pipeline for Jobs; closed leads/bids drop out.
  */
 export const PIPELINE_STAGES = [
-  "needs_takeoff",
-  "takeoff_scheduled",
+  "takeoff",
   "quoting",
   "sent",
   "on_hold",
@@ -5113,8 +5365,7 @@ export type PipelineRow = {
 };
 
 const OPEN_LEAD_PIPELINE_STATUSES = [
-  "needs_takeoff",
-  "takeoff_scheduled",
+  "takeoff",
   "on_hold",
 ] as const satisfies readonly LeadStatus[];
 
@@ -5230,7 +5481,7 @@ export async function getPipeline(): Promise<PipelineRow[]> {
       return {
         kind: "bid" as const,
         id: bid.id,
-        href: `/bids/${bid.id}`,
+        href: `/opportunities/${bid.id}`,
         stage: (bid.status === "sent" ? "sent" : "quoting") as PipelineStage,
         name: bid.label ?? bid.propertyName,
         propertyName: bid.propertyName,
@@ -5544,6 +5795,9 @@ export async function getHomeAgenda(): Promise<HomeAgenda> {
           AND s.created_at < now() - interval '${sql.raw(String(QUIET_AFTER_DAYS))} days'
         ORDER BY b.id, p.version DESC, s.created_at DESC
       `),
+      // Follow-ups are per-person now (C7): a lead whose open follow-up task
+      // is assigned to someone else stays off MY agenda. Leads with no task
+      // (legacy rows) still show for everyone.
       db
         .select({
           leadId: leads.id,
@@ -5557,6 +5811,12 @@ export async function getHomeAgenda(): Promise<HomeAgenda> {
             eq(leads.userId, uid),
             isNull(leads.closedAt),
             sql`${leads.followUpAt} IS NOT NULL AND ${leads.followUpAt}::date <= now()::date`,
+            sql`NOT EXISTS (
+              SELECT 1 FROM tasks t
+              WHERE t.lead_id = ${leads.id} AND t.kind = 'follow_up'
+                AND t.status = 'open'
+                AND t.assigned_to_user_id <> ${user.userId}
+            )`,
           ),
         )
         .orderBy(asc(leads.followUpAt))
@@ -5573,7 +5833,7 @@ export async function getHomeAgenda(): Promise<HomeAgenda> {
         .where(
           and(
             eq(leads.userId, uid),
-            eq(leads.status, "takeoff_scheduled"),
+            eq(leads.status, "takeoff"),
             sql`${leads.takeoffScheduledAt} BETWEEN now() - interval '12 hours' AND now() + interval '7 days'`,
           ),
         )
@@ -5722,6 +5982,7 @@ export type NotificationItem = {
   title: string;
   body: string;
   bidId: string | null;
+  leadId: string | null;
   occurredAt: Date;
   unread: boolean;
 };
@@ -5731,7 +5992,7 @@ export async function getNotifications(): Promise<{
   unreadCount: number;
 }> {
   const user = await requireUser();
-  const [events, seen] = await Promise.all([
+  const [events, dueTasks, seen] = await Promise.all([
     db
       .select({
         id: activityEvents.id,
@@ -5739,6 +6000,7 @@ export async function getNotifications(): Promise<{
         title: activityEvents.title,
         body: activityEvents.body,
         bidId: activityEvents.bidId,
+        leadId: activityEvents.leadId,
         occurredAt: activityEvents.occurredAt,
       })
       .from(activityEvents)
@@ -5750,6 +6012,20 @@ export async function getNotifications(): Promise<{
       )
       .orderBy(desc(activityEvents.occurredAt))
       .limit(15),
+    // My due follow-up tasks (C7) — the first per-person entry in the bell.
+    db
+      .select()
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.userId, user.ownerUserId),
+          eq(tasks.assignedToUserId, user.userId),
+          eq(tasks.status, "open"),
+          sql`${tasks.dueDate} IS NOT NULL AND ${tasks.dueDate}::date <= now()::date`,
+        ),
+      )
+      .orderBy(asc(tasks.dueDate))
+      .limit(10),
     db
       .select({ seenAt: userDefaults.notificationsSeenAt })
       .from(userDefaults)
@@ -5757,10 +6033,25 @@ export async function getNotifications(): Promise<{
       .limit(1),
   ]);
   const seenAt = seen[0]?.seenAt ?? null;
-  const items = events.map((e) => ({
-    ...e,
-    unread: seenAt == null || e.occurredAt.getTime() > seenAt.getTime(),
-  }));
+  const today = new Date().toISOString().slice(0, 10);
+  const items: NotificationItem[] = [
+    ...dueTasks.map((t) => ({
+      id: t.id,
+      type: "task_due",
+      title: t.title,
+      body: t.dueDate === today ? "Due today" : `Overdue since ${t.dueDate}`,
+      bidId: t.bidId,
+      leadId: t.leadId,
+      // A due task stays visible (and unread) until done — not gated by the
+      // seen watermark like customer moments.
+      occurredAt: new Date(`${t.dueDate}T12:00:00`),
+      unread: true,
+    })),
+    ...events.map((e) => ({
+      ...e,
+      unread: seenAt == null || e.occurredAt.getTime() > seenAt.getTime(),
+    })),
+  ];
   return { items, unreadCount: items.filter((i) => i.unread).length };
 }
 
@@ -6027,7 +6318,7 @@ export async function getSidebarCounts(): Promise<SidebarCounts> {
     SELECT
       (SELECT count(*) FROM leads
         WHERE user_id = ${user.ownerUserId}
-          AND status IN ('needs_takeoff', 'takeoff_scheduled', 'on_hold'))
+          AND status IN ('takeoff', 'on_hold'))
       + (SELECT count(*) FROM bids
         WHERE user_id = ${user.ownerUserId} AND status IN ('draft', 'sent'))
       AS pipeline,
@@ -6110,7 +6401,7 @@ export async function getPropertyDeals(
     ...bidRows.map((b) => ({
       kind: (b.deliveryStatus ? "job" : "bid") as "job" | "bid",
       id: b.id,
-      href: b.deliveryStatus ? `/projects/${b.id}` : `/bids/${b.id}`,
+      href: b.deliveryStatus ? `/projects/${b.id}` : `/opportunities/${b.id}`,
       name: b.label ?? b.propertyName,
       status: b.deliveryStatus ?? b.status,
       value: b.contractValue == null ? null : Number(b.contractValue),
@@ -6186,7 +6477,7 @@ export async function getPropertiesRegister(): Promise<PropertyRegisterRow[]> {
     LEFT JOIN LATERAL (
       SELECT count(*) AS n, max(l.updated_at) AS last_at FROM leads l
       WHERE l.property_id = p.id
-        AND l.status IN ('needs_takeoff', 'takeoff_scheduled', 'on_hold')
+        AND l.status IN ('takeoff', 'on_hold')
     ) ol ON true
     LEFT JOIN LATERAL (
       SELECT count(*) AS n, max(b.updated_at) AS last_at FROM bids b
@@ -6722,7 +7013,7 @@ export async function searchUnits(q: string, perType = 4): Promise<UnitHit[]> {
       label: b.propertyName?.trim() || b.clientName,
       sublabel: b.deliveryStatus
         ? `Project · ${b.deliveryStatus.replace(/_/g, " ")}`
-        : `Bid · ${b.status}`,
+        : `Opportunity · ${b.status}`,
     });
   }
   for (const p of propertyRows) {
@@ -6782,7 +7073,7 @@ async function buildBidPack(id: string): Promise<ContextPack> {
   const acceptedTotal = data.proposals[0]?.total ?? null;
 
   const lines = [
-    `${isProject ? "Project" : "Bid"}: ${label}${bid.address ? ` — ${bid.address}` : ""}`,
+    `${isProject ? "Job" : "Opportunity"}: ${label}${bid.address ? ` — ${bid.address}` : ""}`,
     `Client: ${bid.clientName}`,
     `Stage: ${(isProject ? bid.deliveryStatus! : bid.status).replace(/_/g, " ")}`,
     `Estimated total: ${fmtMoney(pricing.grandTotal)}${pricing.complete ? "" : " (pricing incomplete)"}`,
@@ -6867,7 +7158,7 @@ async function buildPropertyPack(id: string): Promise<ContextPack> {
   const lines = [
     `Property: ${label}`,
     property.address ? `Address: ${property.address}` : null,
-    `Bids/projects: ${bidCount[0]?.n ?? 0}`,
+    `Opportunities/jobs: ${bidCount[0]?.n ?? 0}`,
     `Leads: ${leadCount[0]?.n ?? 0}`,
   ].filter(Boolean) as string[];
   return { type: "property", id, label, found: true, markdown: lines.join("\n") };
@@ -7456,7 +7747,7 @@ export async function getContactsRegister(options?: {
     ) pc ON true
     LEFT JOIN LATERAL (
       SELECT count(*) FILTER (WHERE l.status <> 'quoted') AS total,
-        count(*) FILTER (WHERE l.status IN ('needs_takeoff','takeoff_scheduled','on_hold')) AS open,
+        count(*) FILTER (WHERE l.status IN ('takeoff','on_hold')) AS open,
         max(l.last_contacted_at) AS last_contacted
       FROM leads l WHERE l.primary_contact_id = c.id
     ) ld ON true
@@ -7567,7 +7858,7 @@ export async function getContactDeals(
     ...bidRows.map((b) => ({
       kind: (b.deliveryStatus ? "job" : "bid") as "job" | "bid",
       id: b.id,
-      href: b.deliveryStatus ? `/projects/${b.id}` : `/bids/${b.id}`,
+      href: b.deliveryStatus ? `/projects/${b.id}` : `/opportunities/${b.id}`,
       name: b.label ?? b.propertyName,
       status: b.deliveryStatus ?? b.status,
       value: b.contractValue == null ? null : Number(b.contractValue),
@@ -7780,6 +8071,8 @@ export type ReportMonthRow = {
 
 export type ReportData = {
   leadFunnel: Array<{ status: LeadStatus; count: number; estValue: number }>;
+  /** Takeoff-stage leads whose site walk is booked (schedule is data, not a stage). */
+  takeoffBooked: number;
   bidFunnel: Array<{ status: BidStatus; count: number }>;
   /** Top lead sources with closed-won counts. */
   sources: Array<{ sourceTag: string | null; total: number; won: number }>;
@@ -7830,6 +8123,7 @@ export async function getReportData(): Promise<ReportData> {
 
   const [
     leadFunnelRows,
+    takeoffBookedRows,
     bidFunnelRows,
     sourceRows,
     pipeline,
@@ -7847,6 +8141,16 @@ export async function getReportData(): Promise<ReportData> {
       .from(leads)
       .where(eq(leads.userId, user.ownerUserId))
       .groupBy(leads.status),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(leads)
+      .where(
+        and(
+          eq(leads.userId, user.ownerUserId),
+          eq(leads.status, "takeoff"),
+          sql`${leads.takeoffScheduledAt} IS NOT NULL`,
+        ),
+      ),
     db
       .select({ status: bids.status, count: sql<number>`count(*)::int` })
       .from(bids)
@@ -7923,6 +8227,7 @@ export async function getReportData(): Promise<ReportData> {
       count: Number(r.count),
       estValue: Number(r.estValue),
     })),
+    takeoffBooked: Number(takeoffBookedRows[0]?.count ?? 0),
     bidFunnel: bidFunnelRows.map((r) => ({
       status: r.status,
       count: Number(r.count),
@@ -8053,6 +8358,26 @@ export async function deleteAttachment(id: string): Promise<Attachment | null> {
     .where(and(eq(attachments.id, id), eq(attachments.userId, user.ownerUserId)))
     .returning();
   return rows[0] ?? null;
+}
+
+/**
+ * Whether any attachment row still references a storage path. Lead files
+ * ride to the opportunity on convert as a second row over the same storage
+ * object (C8) — the object may only be removed when the last row is gone.
+ */
+export async function attachmentPathInUse(storagePath: string): Promise<boolean> {
+  const user = await requireUser();
+  const rows = await db
+    .select({ id: attachments.id })
+    .from(attachments)
+    .where(
+      and(
+        eq(attachments.userId, user.ownerUserId),
+        eq(attachments.storagePath, storagePath),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
 }
 
 // ── Service catalog + supplier pricing (Phase 3) ────────────────────────────
