@@ -17,6 +17,8 @@ import {
   updateLeadStatusAction,
 } from "@/lib/actions";
 import { leadFullName } from "@/lib/leads/name";
+import { AccountAutocomplete } from "@/components/account-autocomplete";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -55,6 +57,7 @@ export function LeadDetailBody({
   linkedBid,
   error,
   closeHref,
+  hideIdentity = false,
 }: {
   lead: Lead;
   contact: LeadContactCard | null;
@@ -63,6 +66,12 @@ export function LeadDetailBody({
   linkedBid: LinkedBid;
   error?: string;
   closeHref: string;
+  /**
+   * On the lead detail page the hero already names the lead and its building,
+   * and the back link replaces the close ✕ — so drop both and keep only the
+   * status badges. Side-panel callers keep the full header.
+   */
+  hideIdentity?: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
 
@@ -78,13 +87,17 @@ export function LeadDetailBody({
     <div className="flex flex-col gap-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <h2 className="text-2xl font-medium tracking-tight">
-            {leadFullName(lead)}
-          </h2>
-          {subtitle && (
-            <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+          {!hideIdentity && (
+            <>
+              <h2 className="text-2xl font-medium tracking-tight">
+                {leadFullName(lead)}
+              </h2>
+              {subtitle && (
+                <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+              )}
+            </>
           )}
-          <div className="mt-2 flex items-center gap-2">
+          <div className={cn("flex items-center gap-2", !hideIdentity && "mt-2")}>
             <Badge variant={leadStatusVariant(lead.status)}>
               {leadStatusLabel(lead.status)}
             </Badge>
@@ -106,11 +119,13 @@ export function LeadDetailBody({
               <Pencil className="h-4 w-4" />
             </Button>
           )}
-          <Button variant="ghost" size="icon" asChild>
-            <Link href={closeHref} scroll={false} aria-label="Close details">
-              <X className="h-4 w-4" />
-            </Link>
-          </Button>
+          {!hideIdentity && (
+            <Button variant="ghost" size="icon" asChild>
+              <Link href={closeHref} scroll={false} aria-label="Close details">
+                <X className="h-4 w-4" />
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -385,9 +400,11 @@ function EditForm({
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm">
           <Field label="Company" htmlFor="lead-company">
-            <Input
+            {/* Type-ahead against the account register: picking a match saves
+                the exact existing name, so findOrCreateAccount links that
+                account instead of minting a near-miss duplicate. */}
+            <AccountAutocomplete
               id="lead-company"
-              name="company"
               defaultValue={contact?.accountName ?? lead.company ?? ""}
             />
           </Field>

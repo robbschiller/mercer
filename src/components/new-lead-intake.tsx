@@ -96,6 +96,10 @@ export function NewLeadIntake({
   const [newContact, setNewContact] = useState(false);
   const [contactQuery, setContactQuery] = useState("");
   const [newContactName, setNewContactName] = useState("");
+  // Controlled so a person typed on the finder screen survives locking a
+  // building — the two screens are separate trees, uncontrolled inputs remount.
+  const [newContactPhone, setNewContactPhone] = useState("");
+  const [newContactEmail, setNewContactEmail] = useState("");
   const [acOpen, setAcOpen] = useState(false);
   const [company, setCompany] = useState("");
   const [accountId, setAccountId] = useState<string | null>(null);
@@ -131,10 +135,6 @@ export function NewLeadIntake({
 
   // D1: hydrate from a draft the Home composer extracted out of a dropped
   // spec/email. Everything lands editable — review-before-save, never silent.
-  const [draftContact, setDraftContact] = useState<{
-    phone: string;
-    email: string;
-  } | null>(null);
   useEffect(() => {
     const { draft, files: droppedFiles } = takeLeadDraft();
     if (!draft) return;
@@ -161,7 +161,8 @@ export function NewLeadIntake({
     if (contactName || draft.phone || draft.email) {
       setNewContact(true);
       setNewContactName(contactName);
-      setDraftContact({ phone: draft.phone ?? "", email: draft.email ?? "" });
+      setNewContactPhone(draft.phone ?? "");
+      setNewContactEmail(draft.email ?? "");
     }
     if (droppedFiles.length > 0) syncFiles(droppedFiles);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot mount hydration
@@ -257,10 +258,270 @@ export function NewLeadIntake({
 
   const name = building ? buildingName(building) : "";
   const address = building ? buildingAddress(building) : "";
+  /** What the project name falls back to when nobody opens the accordion. */
+  const suggestedName = name || address;
+  /** How much of the optional half is filled — shown on the closed summary. */
+  const moreCount =
+    (projectName.trim() && projectName.trim() !== suggestedName ? 1 : 0) +
+    (scope.size > 0 ? 1 : 0) +
+    (source ? 1 : 0) +
+    (rough.trim() ? 1 : 0) +
+    (notes.trim() ? 1 : 0) +
+    (files.length > 0 ? 1 : 0);
   const allSources = useMemo(() => {
     const merged = [...sources, ...DEFAULT_SOURCES];
     return [...new Set(merged)].slice(0, 7);
   }, [sources]);
+
+  // Who's it for — shown once the building is locked, not during the search.
+  const whoBand = (
+        <Band
+          num="1"
+          overflowVisible
+          title="Who's it for?"
+          note={
+            pickedContact ? (
+              <BandNote done icon={<Check className="size-[13px]" />}>
+                {isKnown ? "Auto-attached" : "On file"}
+              </BandNote>
+            ) : (
+              <BandNote icon={<UserRound className="size-[13px]" />}>
+                Pick or add a person
+              </BandNote>
+            )
+          }
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <FieldLabel>Contact</FieldLabel>
+              {pickedContact ? (
+                <div className="relative">
+                  <div className="flex items-center gap-3 rounded-[11px] border bg-muted/20 p-[9px_11px]">
+                    <span
+                      className={cn(
+                        "grid size-[38px] shrink-0 place-items-center rounded-full text-[13px] font-bold text-white",
+                        tintFor(pickedContact.name),
+                      )}
+                    >
+                      {initials(pickedContact.name)}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        <span className="truncate text-[14.5px] font-semibold tracking-tight">
+                          {pickedContact.name}
+                        </span>
+                        {pickedContact.isDecisionMaker && (
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-foreground px-2 py-px text-[10.5px] font-semibold text-background">
+                            <Gavel className="size-[11px]" />
+                            Decision maker
+                          </span>
+                        )}
+                      </span>
+                      <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[12.5px] text-muted-foreground">
+                        {pickedContact.company && (
+                          <span className="inline-flex max-w-full items-center gap-1 truncate rounded-full border bg-muted/60 px-2 py-px text-[11.5px] text-foreground/80">
+                            <Briefcase className="size-[11px] text-muted-foreground/70" />
+                            {pickedContact.company}
+                          </span>
+                        )}
+                        <span className="font-mono tabular-nums text-foreground/70">
+                          {pickedContact.dealsCount} project
+                          {pickedContact.dealsCount === 1 ? "" : "s"}
+                        </span>
+                        <span className="text-border">·</span>
+                        <span className="font-mono tabular-nums text-foreground/70">
+                          {moneyK(pickedContact.lifetime)}
+                        </span>
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="Clear contact"
+                      onClick={() => {
+                        setContactId(null);
+                        setAcOpen(false);
+                      }}
+                      className="grid size-[30px] shrink-0 place-items-center rounded-lg text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      <X className="size-[15px]" />
+                    </button>
+                  </div>
+                  {isKnown && (
+                    <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
+                      <Sparkles className="mt-px size-[13px] shrink-0 text-emerald-600" />
+                      Came attached to {name} — their name is on its history.
+                    </p>
+                  )}
+                </div>
+              ) : newContact ? (
+                <div className="flex flex-col gap-2">
+                  <SlimField>
+                    <UserRound className="size-4 shrink-0 text-muted-foreground" />
+                    <input
+                      name="contactName"
+                      value={newContactName}
+                      onChange={(e) => setNewContactName(e.target.value)}
+                      placeholder="Their name"
+                      className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+                    />
+                  </SlimField>
+                  {newContactMatch && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setContactId(newContactMatch.id);
+                        if (!company && newContactMatch.company)
+                          setCompany(newContactMatch.company);
+                        setNewContact(false);
+                        setNewContactName("");
+                      }}
+                      className="flex items-center gap-2 rounded-[10px] border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-left text-[12.5px] text-amber-800 transition-colors hover:bg-amber-500/15 dark:text-amber-300"
+                    >
+                      <BadgeCheck className="size-4 shrink-0 text-amber-600" />
+                      <span className="min-w-0 flex-1">
+                        <b className="font-semibold">{newContactMatch.name}</b>{" "}
+                        is already in Mercer
+                        {newContactMatch.company
+                          ? ` (${newContactMatch.company})`
+                          : ""}{" "}
+                        — click to link them instead of creating a duplicate.
+                      </span>
+                    </button>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <SlimField>
+                      <input
+                        name="phone"
+                        type="tel"
+                        placeholder="Phone"
+                        value={newContactPhone}
+                        onChange={(e) => setNewContactPhone(e.target.value)}
+                        className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+                      />
+                    </SlimField>
+                    <SlimField>
+                      <input
+                        name="email"
+                        type="email"
+                        placeholder="Email"
+                        value={newContactEmail}
+                        onChange={(e) => setNewContactEmail(e.target.value)}
+                        className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+                      />
+                    </SlimField>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setNewContact(false)}
+                    className="self-start text-[12.5px] font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    ← Search existing instead
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <SlimField>
+                    <Search className="size-4 shrink-0 text-muted-foreground" />
+                    <input
+                      value={contactQuery}
+                      onChange={(e) => {
+                        setContactQuery(e.target.value);
+                        setAcOpen(true);
+                      }}
+                      onFocus={() => setAcOpen(true)}
+                      placeholder="Search people or type a name…"
+                      autoComplete="off"
+                      className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+                    />
+                    <ChevronDown className="size-[15px] shrink-0 text-muted-foreground/60" />
+                  </SlimField>
+                  {acOpen && (
+                    <div className="absolute inset-x-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-[14px] border bg-card shadow-[0_18px_44px_-14px_rgb(0_0_0/0.26)]">
+                      <p className="px-3.5 pb-1.5 pt-2.5 text-[10.5px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
+                        Existing contacts
+                      </p>
+                      {filteredContacts.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            setContactId(c.id);
+                            if (!company && c.company) setCompany(c.company);
+                            setAcOpen(false);
+                          }}
+                          className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left transition-colors hover:bg-muted/40"
+                        >
+                          <span
+                            className={cn(
+                              "grid size-8 shrink-0 place-items-center rounded-full text-[11.5px] font-bold text-white",
+                              tintFor(c.name),
+                            )}
+                          >
+                            {initials(c.name)}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[13.5px] font-semibold">
+                              {c.name}
+                            </span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {[c.title, c.company]
+                                .filter(Boolean)
+                                .join(" · ") || "—"}
+                            </span>
+                          </span>
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-600/25 bg-emerald-600/10 px-1.5 py-px text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+                            <BadgeCheck className="size-[11px]" />
+                            In Mercer
+                          </span>
+                          <span className="shrink-0 font-mono text-[11.5px] tabular-nums text-muted-foreground/70">
+                            {c.dealsCount} project{c.dealsCount === 1 ? "" : "s"}
+                          </span>
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewContact(true);
+                          setAcOpen(false);
+                        }}
+                        className="flex w-full items-center gap-2.5 border-t border-border/60 bg-muted/20 px-3.5 py-2.5 text-left text-[13px] font-medium text-foreground/80 transition-colors hover:bg-muted/40"
+                      >
+                        <UserPlus className="size-[15px] text-muted-foreground" />
+                        New contact instead
+                      </button>
+                    </div>
+                  )}
+                  <div className="mt-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setNewContact(true)}
+                      className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-muted-foreground hover:text-foreground"
+                    >
+                      <Plus className="size-[13px]" />
+                      New contact — name, phone, email inline
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div>
+              <FieldLabel>Company</FieldLabel>
+              <CompanyField
+                value={company}
+                accountId={accountId}
+                onChange={(v) => {
+                  setCompany(v);
+                  setAccountId(null);
+                }}
+                onPick={(s) => {
+                  setCompany(s.name);
+                  setAccountId(s.id);
+                }}
+              />
+            </div>
+          </div>
+        </Band>
+  );
 
   /* ═══════════ 7a — FINDER ═══════════ */
   if (!building) {
@@ -459,296 +720,74 @@ export function NewLeadIntake({
           }
         />
 
-        {/* ── band 1: the project ── */}
-        <Band
-          num="1"
-          title="Name the project"
-          note={
-            projectName.trim() ? (
-              <BandNote done icon={<Check className="size-[13px]" />}>
-                Named
-              </BandNote>
-            ) : (
-              <BandNote icon={<Tag className="size-[13px]" />}>
-                Required
-              </BandNote>
-            )
-          }
-        >
-          <FieldLabel>
-            Project name{" "}
-            <span className="font-normal normal-case tracking-normal text-muted-foreground/70">
-              — the quick synopsis this lead shows up as, everywhere
+        {whoBand}
+
+        {/* ── everything past the contact is really the start of the bid, so
+             it stays folded away until someone wants it ── */}
+        <details className="group">
+          <summary className="mb-3.5 flex cursor-pointer list-none items-center gap-3 rounded-2xl border bg-card px-[18px] py-[15px] shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-colors hover:border-foreground/20 [&::-webkit-details-marker]:hidden">
+            <span className="grid size-[26px] shrink-0 place-items-center rounded-full border bg-muted text-foreground/60">
+              <Plus className="size-[13px] transition-transform group-open:rotate-45" />
             </span>
-          </FieldLabel>
-          <SlimField>
-            <Tag className="size-4 shrink-0 text-muted-foreground" />
-            <input
-              name="name"
-              value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
-              required
-              placeholder='e.g. "Nona Terrace" or "Villas at Parkway – breezeways"'
-              autoComplete="off"
-              className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
-            />
-          </SlimField>
-          <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
-            <Sparkles className="mt-px size-[13px] shrink-0 text-emerald-600" />
-            Suggested from the property — rename it to whatever you&apos;d call
-            it out loud. It carries to the opportunity when this converts.
-          </p>
-        </Band>
+            <span className="min-w-0">
+              <span className="block text-[15px] font-semibold tracking-tight">
+                Add more — project name, scope, source, notes &amp; files
+              </span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                All optional. This is really where the bid starts — fill it in
+                now, or when you quote it.
+              </span>
+            </span>
+            <span className="ml-auto shrink-0">
+              <BandNote done={moreCount > 0}>
+                {moreCount > 0 ? `${moreCount} added` : "Optional"}
+              </BandNote>
+            </span>
+          </summary>
 
-        {/* ── band 2: who ── */}
-        <Band
-          num="2"
-          overflowVisible
-          title="Who's it for?"
-          note={
-            pickedContact ? (
-              <BandNote done icon={<Check className="size-[13px]" />}>
-                {isKnown ? "Auto-attached" : "On file"}
+          {/* ── name the project ── */}
+          <Band
+            title="Name the project"
+            note={
+              <BandNote done={projectName.trim() !== suggestedName}>
+                {projectName.trim() === suggestedName
+                  ? "From the property"
+                  : "Renamed"}
               </BandNote>
-            ) : (
-              <BandNote icon={<UserRound className="size-[13px]" />}>
-                Pick or add a person
-              </BandNote>
-            )
-          }
-        >
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <FieldLabel>Contact</FieldLabel>
-              {pickedContact ? (
-                <div className="relative">
-                  <div className="flex items-center gap-3 rounded-[11px] border bg-muted/20 p-[9px_11px]">
-                    <span
-                      className={cn(
-                        "grid size-[38px] shrink-0 place-items-center rounded-full text-[13px] font-bold text-white",
-                        tintFor(pickedContact.name),
-                      )}
-                    >
-                      {initials(pickedContact.name)}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2">
-                        <span className="truncate text-[14.5px] font-semibold tracking-tight">
-                          {pickedContact.name}
-                        </span>
-                        {pickedContact.isDecisionMaker && (
-                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-foreground px-2 py-px text-[10.5px] font-semibold text-background">
-                            <Gavel className="size-[11px]" />
-                            Decision maker
-                          </span>
-                        )}
-                      </span>
-                      <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[12.5px] text-muted-foreground">
-                        {pickedContact.company && (
-                          <span className="inline-flex max-w-full items-center gap-1 truncate rounded-full border bg-muted/60 px-2 py-px text-[11.5px] text-foreground/80">
-                            <Briefcase className="size-[11px] text-muted-foreground/70" />
-                            {pickedContact.company}
-                          </span>
-                        )}
-                        <span className="font-mono tabular-nums text-foreground/70">
-                          {pickedContact.dealsCount} project
-                          {pickedContact.dealsCount === 1 ? "" : "s"}
-                        </span>
-                        <span className="text-border">·</span>
-                        <span className="font-mono tabular-nums text-foreground/70">
-                          {moneyK(pickedContact.lifetime)}
-                        </span>
-                      </span>
-                    </span>
-                    <button
-                      type="button"
-                      aria-label="Clear contact"
-                      onClick={() => {
-                        setContactId(null);
-                        setAcOpen(false);
-                      }}
-                      className="grid size-[30px] shrink-0 place-items-center rounded-lg text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
-                    >
-                      <X className="size-[15px]" />
-                    </button>
-                  </div>
-                  {isKnown && (
-                    <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
-                      <Sparkles className="mt-px size-[13px] shrink-0 text-emerald-600" />
-                      Came attached to {name} — their name is on its history.
-                    </p>
-                  )}
-                </div>
-              ) : newContact ? (
-                <div className="flex flex-col gap-2">
-                  <SlimField>
-                    <UserRound className="size-4 shrink-0 text-muted-foreground" />
-                    <input
-                      name="contactName"
-                      value={newContactName}
-                      onChange={(e) => setNewContactName(e.target.value)}
-                      placeholder="Their name"
-                      className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
-                    />
-                  </SlimField>
-                  {newContactMatch && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setContactId(newContactMatch.id);
-                        if (!company && newContactMatch.company)
-                          setCompany(newContactMatch.company);
-                        setNewContact(false);
-                        setNewContactName("");
-                      }}
-                      className="flex items-center gap-2 rounded-[10px] border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-left text-[12.5px] text-amber-800 transition-colors hover:bg-amber-500/15 dark:text-amber-300"
-                    >
-                      <BadgeCheck className="size-4 shrink-0 text-amber-600" />
-                      <span className="min-w-0 flex-1">
-                        <b className="font-semibold">{newContactMatch.name}</b>{" "}
-                        is already in Mercer
-                        {newContactMatch.company
-                          ? ` (${newContactMatch.company})`
-                          : ""}{" "}
-                        — click to link them instead of creating a duplicate.
-                      </span>
-                    </button>
-                  )}
-                  <div className="grid grid-cols-2 gap-2">
-                    <SlimField>
-                      <input
-                        name="phone"
-                        type="tel"
-                        placeholder="Phone"
-                        defaultValue={draftContact?.phone ?? ""}
-                        className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
-                      />
-                    </SlimField>
-                    <SlimField>
-                      <input
-                        name="email"
-                        type="email"
-                        placeholder="Email"
-                        defaultValue={draftContact?.email ?? ""}
-                        className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
-                      />
-                    </SlimField>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setNewContact(false)}
-                    className="self-start text-[12.5px] font-medium text-muted-foreground hover:text-foreground"
-                  >
-                    ← Search existing instead
-                  </button>
-                </div>
-              ) : (
-                <div className="relative">
-                  <SlimField>
-                    <Search className="size-4 shrink-0 text-muted-foreground" />
-                    <input
-                      value={contactQuery}
-                      onChange={(e) => {
-                        setContactQuery(e.target.value);
-                        setAcOpen(true);
-                      }}
-                      onFocus={() => setAcOpen(true)}
-                      placeholder="Search people or type a name…"
-                      autoComplete="off"
-                      className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
-                    />
-                    <ChevronDown className="size-[15px] shrink-0 text-muted-foreground/60" />
-                  </SlimField>
-                  {acOpen && (
-                    <div className="absolute inset-x-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-[14px] border bg-card shadow-[0_18px_44px_-14px_rgb(0_0_0/0.26)]">
-                      <p className="px-3.5 pb-1.5 pt-2.5 text-[10.5px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
-                        Existing contacts
-                      </p>
-                      {filteredContacts.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => {
-                            setContactId(c.id);
-                            if (!company && c.company) setCompany(c.company);
-                            setAcOpen(false);
-                          }}
-                          className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left transition-colors hover:bg-muted/40"
-                        >
-                          <span
-                            className={cn(
-                              "grid size-8 shrink-0 place-items-center rounded-full text-[11.5px] font-bold text-white",
-                              tintFor(c.name),
-                            )}
-                          >
-                            {initials(c.name)}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-[13.5px] font-semibold">
-                              {c.name}
-                            </span>
-                            <span className="block truncate text-xs text-muted-foreground">
-                              {[c.title, c.company]
-                                .filter(Boolean)
-                                .join(" · ") || "—"}
-                            </span>
-                          </span>
-                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-600/25 bg-emerald-600/10 px-1.5 py-px text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
-                            <BadgeCheck className="size-[11px]" />
-                            In Mercer
-                          </span>
-                          <span className="shrink-0 font-mono text-[11.5px] tabular-nums text-muted-foreground/70">
-                            {c.dealsCount} project{c.dealsCount === 1 ? "" : "s"}
-                          </span>
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNewContact(true);
-                          setAcOpen(false);
-                        }}
-                        className="flex w-full items-center gap-2.5 border-t border-border/60 bg-muted/20 px-3.5 py-2.5 text-left text-[13px] font-medium text-foreground/80 transition-colors hover:bg-muted/40"
-                      >
-                        <UserPlus className="size-[15px] text-muted-foreground" />
-                        New contact instead
-                      </button>
-                    </div>
-                  )}
-                  <div className="mt-2.5">
-                    <button
-                      type="button"
-                      onClick={() => setNewContact(true)}
-                      className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-muted-foreground hover:text-foreground"
-                    >
-                      <Plus className="size-[13px]" />
-                      New contact — name, phone, email inline
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div>
-              <FieldLabel>Company</FieldLabel>
-              <CompanyField
-                value={company}
-                accountId={accountId}
-                onChange={(v) => {
-                  setCompany(v);
-                  setAccountId(null);
+            }
+          >
+            <FieldLabel>
+              Project name{" "}
+              <span className="font-normal normal-case tracking-normal text-muted-foreground/70">
+                — the quick synopsis this lead shows up as, everywhere
+              </span>
+            </FieldLabel>
+            <SlimField>
+              <Tag className="size-4 shrink-0 text-muted-foreground" />
+              <input
+                name="name"
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                onBlur={() => {
+                  // Cleared by hand? Fall back to the building — the action
+                  // requires a name and this field can be left folded away.
+                  if (!projectName.trim()) setProjectName(suggestedName);
                 }}
-                onPick={(s) => {
-                  setCompany(s.name);
-                  setAccountId(s.id);
-                }}
+                placeholder='e.g. "Nona Terrace" or "Villas at Parkway – breezeways"'
+                autoComplete="off"
+                className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
               />
-            </div>
-          </div>
-        </Band>
+            </SlimField>
+            <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
+              <Sparkles className="mt-px size-[13px] shrink-0 text-emerald-600" />
+              Suggested from the property — rename it to whatever you&apos;d
+              call it out loud. It carries to the opportunity when this
+              converts.
+            </p>
+          </Band>
 
-        {/* ── band 3: what ── */}
+        {/* ── what ── */}
         <Band
-          num="3"
           title="What's the work?"
           note={
             scope.size > 0 ? (
@@ -935,8 +974,8 @@ export function NewLeadIntake({
           </div>
         </Band>
 
-        {/* ── band 4: notes & files ── */}
-        <Band num="4" title="Notes & files" note={<BandNote>Optional</BandNote>}>
+        {/* ── notes & files ── */}
+        <Band title="Notes & files" note={<BandNote>Optional</BandNote>}>
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
@@ -1019,6 +1058,7 @@ export function NewLeadIntake({
             className="mt-3 min-h-14 w-full resize-y rounded-xl border bg-card p-[12px_14px] text-[13.5px] leading-relaxed outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground/60 focus:border-foreground/35 focus:shadow-[0_0_0_3px_rgb(0_0_0/0.06)]"
           />
         </Band>
+        </details>
 
         {/* ── send-off ── */}
         <div className="mt-1.5 flex flex-wrap items-center gap-4 border-t pt-[18px]">
@@ -1038,7 +1078,7 @@ export function NewLeadIntake({
               {scope.size > 0 ? (
                 [...scope].join(", ")
               ) : (
-                <span className="text-muted-foreground/70">add scope</span>
+                <span className="text-muted-foreground/70">scope later</span>
               )}
             </p>
           </div>
@@ -1226,7 +1266,8 @@ function Band({
   overflowVisible,
   children,
 }: {
-  num: string;
+  /** Omitted inside the optional accordion — those steps aren't a sequence. */
+  num?: string;
   title: string;
   note: React.ReactNode;
   /** Bands hosting dropdowns must not clip them (Jordan A2). */
@@ -1241,9 +1282,11 @@ function Band({
       )}
     >
       <div className="flex items-center gap-3 px-[18px] pt-[15px]">
-        <span className="grid size-[26px] shrink-0 place-items-center rounded-full bg-foreground font-mono text-xs text-background">
-          {num}
-        </span>
+        {num && (
+          <span className="grid size-[26px] shrink-0 place-items-center rounded-full bg-foreground font-mono text-xs text-background">
+            {num}
+          </span>
+        )}
         <span className="text-[15px] font-semibold tracking-tight">
           {title}
         </span>

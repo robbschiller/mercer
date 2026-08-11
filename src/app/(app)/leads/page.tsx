@@ -26,6 +26,7 @@ import {
   type LeadStatus,
 } from "@/lib/status-meta";
 import { leadFullName } from "@/lib/leads/name";
+import { LeadsGridRow } from "@/components/leads-row";
 import { cn } from "@/lib/utils";
 
 type LeadsView = "property" | "contact";
@@ -200,15 +201,52 @@ export default async function LeadsPage({
 
   return (
     <div className="relative mx-auto w-full max-w-[1240px] px-6 pb-24 pt-7">
-      {/* header */}
-      <header className="mb-5 flex items-end gap-5">
-        <div>
-          <h1 className="text-[27px] font-semibold leading-tight tracking-tight">
-            Leads
-          </h1>
-          <p className="mt-1 text-[13.5px] text-muted-foreground">
-            Everyone who asked for work, before a number exists.
-          </p>
+      {/* header — the sidebar already says Leads, so the row carries the
+          attribute filters instead of a title. */}
+      <header className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-3">
+        <h1 className="sr-only">Leads</h1>
+        <div className="flex items-center gap-2.5">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
+            View
+          </span>
+          <div className="flex gap-0.5 rounded-[9px] border bg-muted/70 p-[3px]">
+            <LensButton
+              href={leadsHref(query, { view: "property", page: 1 })}
+              active={query.view === "property"}
+            >
+              <Building2 className="size-3" />
+              By property
+            </LensButton>
+            <LensButton
+              href={leadsHref(query, { view: "contact", page: 1 })}
+              active={query.view === "contact"}
+            >
+              <UserPlus className="size-3" />
+              By contact
+            </LensButton>
+          </div>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
+            Follow-up
+          </span>
+          <div className="flex gap-0.5 rounded-[9px] border bg-muted/70 p-[3px]">
+            <LensButton
+              href={leadsHref(query, { followUp: null, page: 1 })}
+              active={query.followUp == null}
+            >
+              All
+            </LensButton>
+            {LEADS_FOLLOW_UP_FILTERS.map((f) => (
+              <LensButton
+                key={f}
+                href={leadsHref(query, { followUp: f, page: 1 })}
+                active={query.followUp === f}
+              >
+                {FOLLOW_UP_LABELS[f]}
+              </LensButton>
+            ))}
+          </div>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <Button variant="outline" asChild>
@@ -297,51 +335,6 @@ export default async function LeadsPage({
             Apply
           </Button>
         </form>
-        <div className="ml-auto flex items-center gap-3.5">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
-            View
-          </span>
-          <div className="flex gap-0.5 rounded-[9px] border bg-muted/70 p-[3px]">
-            <LensButton
-              href={leadsHref(query, { view: "property", page: 1 })}
-              active={query.view === "property"}
-            >
-              <Building2 className="size-3" />
-              By property
-            </LensButton>
-            <LensButton
-              href={leadsHref(query, { view: "contact", page: 1 })}
-              active={query.view === "contact"}
-            >
-              <UserPlus className="size-3" />
-              By contact
-            </LensButton>
-          </div>
-        </div>
-      </div>
-
-      {/* follow-up lens + result meta */}
-      <div className="mb-2 flex flex-wrap items-center gap-3.5 px-0.5">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
-          Follow-up
-        </span>
-        <div className="flex gap-0.5 rounded-[9px] border bg-muted/70 p-[3px]">
-          <LensButton
-            href={leadsHref(query, { followUp: null, page: 1 })}
-            active={query.followUp == null}
-          >
-            All
-          </LensButton>
-          {LEADS_FOLLOW_UP_FILTERS.map((f) => (
-            <LensButton
-              key={f}
-              href={leadsHref(query, { followUp: f, page: 1 })}
-              active={query.followUp === f}
-            >
-              {FOLLOW_UP_LABELS[f]}
-            </LensButton>
-          ))}
-        </div>
         <span className="ml-auto text-xs tabular-nums text-muted-foreground">
           <b className="font-semibold text-foreground/80">
             {rangeStart}–{rangeEnd}
@@ -515,9 +508,10 @@ function ContactLeadsTable({ leads }: { leads: Lead[] }) {
 function ContactLeadRow({ lead }: { lead: Lead }) {
   const href = `/leads/${lead.id}`;
   return (
-    <div
+    <LeadsGridRow
+      href={href}
       className={cn(
-        "group relative grid items-center gap-x-2.5 border-t py-3 pl-4 pr-10 transition-colors first:border-t-0 hover:bg-muted/20",
+        "group relative grid cursor-pointer items-center gap-x-2.5 border-t py-3 pl-4 pr-10 transition-colors first:border-t-0 hover:bg-muted/20",
         CONTACT_GRID,
       )}
     >
@@ -573,7 +567,7 @@ function ContactLeadRow({ lead }: { lead: Lead }) {
           <ArrowUpRight className="size-4" />
         </Link>
       </div>
-    </div>
+    </LeadsGridRow>
   );
 }
 
@@ -630,13 +624,16 @@ function PropertyGroupRow({ group }: { group: LeadPropertyGroup }) {
     : null;
   const shownContacts = group.contacts.slice(0, 3);
   const extraContacts = group.contactCount - shownContacts.length;
-  return (
-    <div
-      className={cn(
-        "group relative grid items-center gap-x-2.5 border-t py-3 pl-4 pr-10 transition-colors first:border-t-0 hover:bg-muted/20",
-        PROPERTY_GRID,
-      )}
-    >
+  // The row opens a lead, not the building — the one this row's follow-up
+  // column is about. Its siblings at the same property are one click away in
+  // the lead's projects timeline.
+  const rowLead =
+    group.contacts.find(
+      (l) => l.followUpAt && l.followUpAt === group.earliestFollowUp,
+    ) ?? group.contacts[0];
+  const leadHref = rowLead ? `/leads/${rowLead.id}` : null;
+  const row = (
+    <>
       {/* property */}
       <div className="min-w-0">
         <div className="truncate text-sm font-semibold tracking-tight">
@@ -712,18 +709,32 @@ function PropertyGroupRow({ group }: { group: LeadPropertyGroup }) {
         {shortDate(group.mostRecentContact)}
       </div>
       {/* hover open */}
-      {propertyHref && (
+      {leadHref && (
         <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
           <Link
-            href={propertyHref}
-            title="Open property"
+            href={leadHref}
+            title="Open lead"
             className="flex size-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <ArrowUpRight className="size-4" />
           </Link>
         </div>
       )}
-    </div>
+    </>
+  );
+
+  const rowCls = cn(
+    "group relative grid items-center gap-x-2.5 border-t py-3 pl-4 pr-10 transition-colors first:border-t-0 hover:bg-muted/20",
+    PROPERTY_GRID,
+    leadHref && "cursor-pointer",
+  );
+
+  return leadHref ? (
+    <LeadsGridRow href={leadHref} className={rowCls}>
+      {row}
+    </LeadsGridRow>
+  ) : (
+    <div className={rowCls}>{row}</div>
   );
 }
 

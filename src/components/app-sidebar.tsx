@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
-  Building2,
   ChevronsUpDown,
   ContactRound,
   FileSpreadsheet,
@@ -24,7 +23,6 @@ import {
   Sun,
   UserRoundSearch,
   UsersRound,
-  Waypoints,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
@@ -55,12 +53,6 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Home", icon: House, countKey: null },
-  {
-    href: "/pipeline",
-    label: "Pipeline",
-    icon: Waypoints,
-    countKey: "pipeline" as const,
-  },
   { href: "/leads", label: "Leads", icon: UserRoundSearch, countKey: null },
   {
     href: "/opportunities",
@@ -69,7 +61,6 @@ const NAV_ITEMS = [
     countKey: null,
   },
   { href: "/projects", label: "Jobs", icon: HardHat, countKey: "jobs" as const },
-  { href: "/properties", label: "Properties", icon: Building2, countKey: null },
   { href: "/contacts", label: "Contacts", icon: ContactRound, countKey: null },
   { href: "/reports", label: "Reports", icon: BarChart3, countKey: null },
 ];

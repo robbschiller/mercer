@@ -1,38 +1,22 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import {
-  CircleCheck,
-  CircleX,
-  ContactRound,
-  Eye,
-  FileText,
-  HardHat,
-} from "lucide-react";
+import { ContactRound, UserRoundSearch } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { getOrgContext } from "@/lib/org-context";
-import {
-  getDashboardRecents,
-  getHomeAgenda,
-  getNotifications,
-  getOverdueFollowUps,
-  type NotificationItem,
-} from "@/lib/store";
 import { getMorningBriefAction } from "@/lib/actions/morning-brief";
 import { DashboardHero } from "@/components/dashboard-hero";
 import {
   MorningBrief,
   MorningBriefSkeleton,
 } from "@/components/morning-brief";
-import { DashboardActionPills } from "@/components/dashboard-action-pills";
-import { HomeAgendaSection } from "@/components/home-agenda";
 
+/**
+ * Home is the day's headline plus the two doors that start everything: a
+ * lead (contact + property, which becomes an opportunity) and a bare
+ * contact. Work in flight lives on Pipeline / Jobs — Home does not re-list it.
+ */
 export default async function DashboardPage() {
-  const [ctx, recents, overdue, agenda, notifications] = await Promise.all([
-    getOrgContext(),
-    getDashboardRecents(6),
-    getOverdueFollowUps(20),
-    getHomeAgenda(),
-    getNotifications(),
-  ]);
+  const ctx = await getOrgContext();
   const firstName = pickFirstName(ctx?.name ?? null, ctx?.email ?? null);
 
   return (
@@ -46,121 +30,51 @@ export default async function DashboardPage() {
             </Suspense>
           }
         />
-        <DashboardActionPills overdue={overdue} />
-
-        <HomeAgendaSection agenda={agenda} />
-
-        {notifications.items.length > 0 && (
-          <section className="mt-10">
-            <div className="mb-3.5 flex items-baseline gap-2.5 px-0.5">
-              <h2 className="text-[15px] font-semibold tracking-tight">
-                What happened
-              </h2>
-              <span className="text-xs text-muted-foreground">
-                while you were away
-              </span>
-            </div>
-            <div className="overflow-hidden rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
-              {notifications.items.slice(0, 5).map((n) => (
-                <FeedRow key={n.id} item={n} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {recents.length > 0 && (
-          <section className="mt-10">
-            <div className="mb-3.5 flex items-baseline gap-2.5 px-0.5">
-              <h2 className="text-[15px] font-semibold tracking-tight">
-                Jump back in
-              </h2>
-            </div>
-            <div className="flex gap-2.5 overflow-x-auto pb-2 [scrollbar-width:none]">
-              {recents.map((r) => (
-                <Link
-                  key={`${r.kind}-${r.id}`}
-                  href={r.href}
-                  className="w-44 flex-none rounded-xl border bg-card p-3 transition-[border-color,transform,box-shadow] hover:-translate-y-px hover:border-foreground/20 hover:shadow-[0_1px_2px_rgb(0_0_0/0.05)]"
-                >
-                  <span className="mb-2.5 flex size-[30px] items-center justify-center rounded-lg bg-muted text-foreground/60">
-                    <RecentIcon kind={r.kind} />
-                  </span>
-                  <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
-                    {r.kind}
-                  </p>
-                  <p className="truncate text-[13px] font-semibold tracking-tight">
-                    {r.title}
-                  </p>
-                  <p className="mt-0.5 truncate text-[11.5px] text-muted-foreground">
-                    {r.sub}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
+        <StartHere />
       </div>
     </div>
   );
 }
 
-function RecentIcon({ kind }: { kind: string }) {
-  if (kind === "Job") return <HardHat className="size-4" />;
-  if (kind === "Opportunity") return <FileText className="size-4" />;
-  return <ContactRound className="size-4" />;
-}
+const ENTRY_POINTS: {
+  href: string;
+  label: string;
+  sub: string;
+  icon: LucideIcon;
+}[] = [
+  {
+    href: "/leads/new",
+    label: "Add lead",
+    sub: "A contact and a building with work to do",
+    icon: UserRoundSearch,
+  },
+  {
+    href: "/contacts/new",
+    label: "Add contact",
+    sub: "A person, on their own",
+    icon: ContactRound,
+  },
+];
 
-function relTime(d: Date): string {
-  const mins = Math.round((Date.now() - new Date(d).getTime()) / 60_000);
-  if (mins < 60) return `${Math.max(1, mins)}m ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.round(hrs / 24);
-  if (days < 7)
-    return new Date(d).toLocaleDateString(undefined, { weekday: "short" });
-  return new Date(d).toLocaleDateString();
-}
-
-function FeedRow({ item }: { item: NotificationItem }) {
-  const t = item.title.toLowerCase();
-  const kind = t.includes("accepted")
-    ? "accepted"
-    : t.includes("declined")
-      ? "declined"
-      : "viewed";
+function StartHere() {
   return (
-    <Link
-      href={item.bidId ? `/opportunities/${item.bidId}` : "/pipeline"}
-      className="flex items-center gap-3 border-t px-4 py-3 first:border-t-0 hover:bg-muted/30"
-    >
-      <span
-        className={
-          "flex size-[30px] shrink-0 items-center justify-center rounded-full " +
-          (kind === "accepted"
-            ? "bg-emerald-500/10 text-emerald-600"
-            : kind === "declined"
-              ? "bg-destructive/10 text-destructive"
-              : "bg-blue-600/10 text-blue-600")
-        }
-      >
-        {kind === "accepted" ? (
-          <CircleCheck className="size-[15px]" />
-        ) : kind === "declined" ? (
-          <CircleX className="size-[15px]" />
-        ) : (
-          <Eye className="size-[15px]" />
-        )}
-      </span>
-      <span className="min-w-0 flex-1 truncate text-[13.5px] text-foreground/85">
-        <span className="font-semibold text-foreground">{item.title}</span>
-        {item.body ? (
-          <span className="text-muted-foreground"> — {item.body}</span>
-        ) : null}
-      </span>
-      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-        {relTime(item.occurredAt)}
-      </span>
-    </Link>
+    <div className="grid gap-2.5 sm:grid-cols-2">
+      {ENTRY_POINTS.map(({ href, label, sub, icon: Icon }) => (
+        <Link
+          key={href}
+          href={href}
+          className="group rounded-2xl border bg-card p-4 shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-[border-color,transform,box-shadow] hover:-translate-y-px hover:border-foreground/20 hover:shadow-[0_1px_2px_rgb(0_0_0/0.06)]"
+        >
+          <span className="mb-3 flex size-9 items-center justify-center rounded-[10px] bg-muted text-foreground/60 transition-colors group-hover:bg-foreground group-hover:text-background">
+            <Icon className="size-4" />
+          </span>
+          <p className="text-[13.5px] font-semibold tracking-tight">{label}</p>
+          <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">
+            {sub}
+          </p>
+        </Link>
+      ))}
+    </div>
   );
 }
 

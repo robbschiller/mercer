@@ -3,6 +3,37 @@
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
+/**
+ * Same click behaviour as {@link LeadsRow} for the grid-based property rows on
+ * `/leads` — the whole row opens the lead, while the links inside it (property
+ * record, account, contacts) still go where they say.
+ */
+export function LeadsGridRow({
+  href,
+  className,
+  children,
+}: {
+  href: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+
+  return (
+    <div
+      className={className}
+      onClick={(event) => {
+        const target = event.target as HTMLElement;
+        if (target.closest("a, button, input, select, textarea, label")) return;
+        startTransition(() => router.push(href, { scroll: false }));
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function LeadsRow({
   href,
   active,

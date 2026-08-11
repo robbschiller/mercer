@@ -1004,12 +1004,10 @@ export async function createLeadAction(formData: FormData) {
   revalidatePath("/leads");
   revalidatePath("/pipeline");
   revalidatePath("/dashboard");
-  // "Add & schedule takeoff" lands on the lead where scheduling lives;
-  // plain "Add lead" lands in the pipeline the lead just joined.
-  if (formData.get("next") === "schedule") {
-    redirect(`/leads/${lead.id}`);
-  }
-  redirect("/pipeline");
+  // Both send-off buttons land on the lead itself — it's the record you just
+  // made, it carries the property's whole story, and takeoff scheduling lives
+  // there too.
+  redirect(`/leads/${lead.id}`);
 }
 
 /** Property-finder tier 1: buildings Mercer already knows. */
@@ -1385,15 +1383,17 @@ export async function updatePropertySpecsAction(formData: FormData) {
     formDataToObject(formData),
   );
   const propertyId = (formData.get("propertyId") as string) || "";
+  // The property panel renders on the lead page too — come back to whichever
+  // page posted the form, not always the property record.
+  const back = (formData.get("returnTo") as string) || `/properties/${propertyId}`;
   if (!result.success) {
     const message = result.error.issues[0]?.message ?? "Invalid input";
-    redirect(
-      `/properties/${propertyId}?error=${encodeURIComponent(message)}`,
-    );
+    redirect(`${back}?error=${encodeURIComponent(message)}`);
   }
   const { propertyId: id, ...specs } = result.data;
   await updatePropertySpecs(id, specs);
   revalidatePath(`/properties/${id}`);
+  revalidatePath(back);
 }
 
 export async function startPropertyRelationshipAction(formData: FormData) {
@@ -1401,9 +1401,10 @@ export async function startPropertyRelationshipAction(formData: FormData) {
     formDataToObject(formData),
   );
   const propertyId = (formData.get("propertyId") as string) || "";
+  const back = (formData.get("returnTo") as string) || `/properties/${propertyId}`;
   if (!result.success) {
     const message = result.error.issues[0]?.message ?? "Invalid input";
-    redirect(`/properties/${propertyId}?error=${encodeURIComponent(message)}`);
+    redirect(`${back}?error=${encodeURIComponent(message)}`);
   }
   try {
     await startPropertyRelationship(result.data.kind, {
@@ -1414,11 +1415,10 @@ export async function startPropertyRelationshipAction(formData: FormData) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to add relationship";
-    redirect(
-      `/properties/${result.data.propertyId}?error=${encodeURIComponent(message)}`,
-    );
+    redirect(`${back}?error=${encodeURIComponent(message)}`);
   }
   revalidatePath(`/properties/${result.data.propertyId}`);
+  revalidatePath(back);
   revalidatePath("/leads");
 }
 
@@ -1427,9 +1427,10 @@ export async function endPropertyRelationshipAction(formData: FormData) {
     formDataToObject(formData),
   );
   const propertyId = (formData.get("propertyId") as string) || "";
+  const back = (formData.get("returnTo") as string) || `/properties/${propertyId}`;
   if (!result.success) {
     const message = result.error.issues[0]?.message ?? "Invalid input";
-    redirect(`/properties/${propertyId}?error=${encodeURIComponent(message)}`);
+    redirect(`${back}?error=${encodeURIComponent(message)}`);
   }
   try {
     await endPropertyRelationship(result.data.kind, {
@@ -1439,11 +1440,10 @@ export async function endPropertyRelationshipAction(formData: FormData) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to end relationship";
-    redirect(
-      `/properties/${result.data.propertyId}?error=${encodeURIComponent(message)}`,
-    );
+    redirect(`${back}?error=${encodeURIComponent(message)}`);
   }
   revalidatePath(`/properties/${result.data.propertyId}`);
+  revalidatePath(back);
   revalidatePath("/leads");
 }
 
