@@ -97,7 +97,7 @@ function splitCells(line: string): string[] {
 /* ── Column detection ─────────────────────────────────────────────────── */
 
 const COLUMN_ALIASES: Record<
-  keyof Omit<LeadImportRow, "rawRow" | "csvAddress">,
+  keyof Omit<LeadImportRow, "rawRow" | "csvAddress" | "firstName" | "lastName">,
   string[]
 > = {
   name: ["name", "full name", "contact", "contact name"],
@@ -135,7 +135,7 @@ const STATE_ALIASES = ["state", "province", "region"];
 const ZIP_ALIASES = ["zip", "zip code", "postal code", "postcode"];
 
 export type ColumnMapping = {
-  [K in keyof Omit<LeadImportRow, "rawRow" | "csvAddress">]: string | null;
+  [K in keyof Omit<LeadImportRow, "rawRow" | "csvAddress" | "firstName" | "lastName">]: string | null;
 } & {
   firstName: string | null;
   lastName: string | null;
@@ -227,6 +227,8 @@ export function mapRowsToLeads(
         : propRaw || null;
     out.push({
       name,
+      firstName: first || null,
+      lastName: last || null,
       email: emailRaw || null,
       phone: phoneRaw || null,
       company: companyRaw || null,

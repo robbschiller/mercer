@@ -4,6 +4,40 @@ Running log of in-flight work on the lead-to-close MVP (docs/plan.md). Chronolog
 
 ---
 
+## 2026-09-02 — Jordan's top-of-funnel batch + clean production
+
+**Source:** Jordan's meeting notes (morning), parsed into [`docs/roadmap.md`](roadmap.md). Everything in roadmap Phase 0 and Phase 1 shipped and was runtime-verified on staging (Playwright against `bun run dev -p 3010`, test user `claude-test+phase-a@mercer.dev`).
+
+### Environments (Phase 0)
+- **mercer-prod** Supabase project `ykbbqwpqyxqmzjxhfmgc` (us-east-1) created after upgrading the org to Pro (free tier was at its two-project cap). No `pg_dump` on the box, so the public schema was reconstructed from staging's catalog (38 tables, 51 FKs, 28 CHECKs — legacy `projects` / `agent_runs` left behind) and applied in one transaction, plus buckets `proposals` / `photos` / `attachments` and their 8 storage policies. Drift check: schema.ts ↔ prod exact.
+- Auth: site URL `https://usemercer.com`, allow-list covers the Vercel aliases and localhost, `mailer_autoconfirm` on (mirrors staging; no SMTP configured).
+- Vercel: production env vars replaced (old CLI's `--force` does not overwrite — rm + add), stale `SUPABASE_JWT_SECRET` removed (unused). Preview env, which had **no** database vars at all, now points at staging. `vercel redeploy` of the current main → aliased to usemercer.com; sign-up smoke test created a confirmed user in prod, reached `/onboarding`, then was deleted. Prod has 0 users.
+- The prod DB password lives only in Vercel (sensitive) and the session scratchpad — put it in the password manager.
+
+### Migrations (apply one file at a time)
+- `044_property_name_required.sql` — backfill + `properties.name NOT NULL`.
+- `045_lists.sql` — `lists`, `list_rows`.
+Both applied to staging and included in the prod schema.
+
+### Code
+- 1a: `new-lead-intake.tsx` "Name it" band (property name + job name, both required, ahead of "Who's it for?"); `seedPropertyTitle()`; the old "Name the project" band removed. `createLeadSchema` / `updateLeadSchema` require both. `findOrCreateProperty` always writes a name and lets a typed name replace an address-as-name placeholder.
+- 1b: schema + store (`getLists`, `getList`, `getListRows` w/ search + paging, `getListRow`, `findListByFile`, `createListWithRows`, `markListRowConverted`, `deleteList`), `importListAction`, `deleteListAction`, `listRowToDraft()` feeding the intake's existing draft hydration, hidden `listRowId` stamped in `createLeadAction`. `/lists/*` pages, `DeleteListButton`, proxy matcher, nav.
+- 1c: `work-type-field.tsx`, `getLeadWorkTypes()`, report `workTypes`, lead edit "The work" card, read-mode card.
+- 1d: `PropertyProfile compact` + `Foldable`; intake pinned strip.
+
+### Verified
+- Import of the 19-row fixture minted 0 leads / 0 contacts; duplicate upload rejected; Convert prefilled property, company, contact, source; row stamped; deleting the list kept the lead.
+- Typecheck, lint (3 pre-existing warnings), build clean.
+
+### Phase 2 (same day, after Jordan said "okay phase 2")
+- 046 adds the four tracking columns; applied to staging **and prod** (additive). `bid-summary.tsx`: job name first, `TrackingStrip`, tracking grid in the edit form (`jobSize` select → `isLargeJob`). `opportunities/[id]/page.tsx`: everything below the header folds under "Takeoff, pricing & AI quote" (`<details>`), open on `?open=quote` or a draft in flight. `create-bid.ts` writes `isLargeJob` to the bid and redirects the AI launchpad with `?open=quote#quote`. `account-autocomplete.tsx` gained `onValueChange` / `placeholder` / `required` / `wrapperClassName`; `new-bid-intake.tsx` Client field uses it (Band got `overflowVisible` so the dropdown isn't clipped).
+- Verified: header title = label; fold closed by default, open via flag; edit form order Job name → Property name; save persisted $150,000 / Sep 1 / Sep 15 / Large and the strip rendered them; new-opportunity client suggested "AvalonBay Communities" and set the hidden account id.
+
+### Open
+- Not committed — see handoff. Commit + push deploys the new code to prod via the GitHub webhook.
+- Staging still holds ~1,200 import-minted leads from the old path; a back-fill into lists is optional (roadmap §4 1b).
+- The "Rendered more hooks" browser error seen once during verification was a Fast Refresh artifact from editing the intake while the dev server ran; clean runs show none.
+
 ## 2026-07-09 — Quote engine verified live; PDF now renders the quote lines; catalog CSV import
 
 **Resume steps from 2026-07-08: all done.** Robb restored the Supabase project (and had already uncommented `ANTHROPIC_API_KEY`); 032 and 033 applied individually via the one-off-runner pattern; the quote flow was then verified **end-to-end against the live DB with real Claude** for the first time — scope + takeoff photo → 4 SKU-matched lines with evidence-photo rationale → click-to-edit recompute → versioned PDF → share link → portal acceptance → bid Won with `contract_value` snapshotted → `/bids` Quote column. All under dev user `claude-test+phase-a@mercer.dev` (test bid on Avalon Somerville Station left in place, quote versions v1–v3). The login/drive recipe is persisted in `.claude/skills/verify/SKILL.md`.

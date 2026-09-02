@@ -11,6 +11,7 @@ import {
   Target,
   Waypoints,
   CornerDownRight,
+  PaintRoller,
 } from "lucide-react";
 import {
   getDeclineReasons,
@@ -671,6 +672,40 @@ export default async function ReportsPage() {
                     </span>
                     <span className="w-14 text-right font-mono text-xs font-medium tabular-nums">
                       {s.won > 0 ? `${pct(s.won, s.total)}% won` : "—"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          )}
+
+          {/* work by type — "what was all this work for" (Jordan 2026-09-02) */}
+          {data.workTypes.length > 0 && (
+            <Panel
+              icon={<PaintRoller className="size-[15px]" />}
+              title="Work by type"
+              note="what leads ask for, with rough value and closed-won"
+            >
+              <div className="flex flex-col px-1 py-1">
+                {data.workTypes.map((w, i) => (
+                  <div
+                    key={w.workType}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2.5",
+                      i > 0 && "border-t border-border/60",
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
+                      {w.workType}
+                    </span>
+                    <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                      {w.total} lead{w.total === 1 ? "" : "s"}
+                    </span>
+                    <span className="w-16 text-right font-mono text-xs tabular-nums text-muted-foreground">
+                      {w.estValue > 0 ? moneyK(w.estValue) : "—"}
+                    </span>
+                    <span className="w-14 text-right font-mono text-xs font-medium tabular-nums">
+                      {w.won > 0 ? `${pct(w.won, w.total)}% won` : "—"}
                     </span>
                   </div>
                 ))}

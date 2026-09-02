@@ -250,9 +250,9 @@ export default async function LeadsPage({
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <Button variant="outline" asChild>
-            <Link href="/contacts/import">
+            <Link href="/lists/new">
               <Upload className="size-4" />
-              Import contacts
+              Import list
             </Link>
           </Button>
           <Button asChild>
@@ -789,9 +789,9 @@ function EmptyState({
               </Link>
             </Button>
             <Button variant="outline" asChild>
-              <Link href="/contacts/import">
+              <Link href="/lists/new">
                 <Upload className="size-4" />
-                Import contacts
+                Import list
               </Link>
             </Button>
           </div>

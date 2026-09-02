@@ -23,6 +23,8 @@ import {
   Sun,
   UserRoundSearch,
   UsersRound,
+  ClipboardList,
+  Upload,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
@@ -53,6 +55,7 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Home", icon: House, countKey: null },
+  { href: "/lists", label: "Lists", icon: ClipboardList, countKey: null },
   { href: "/leads", label: "Leads", icon: UserRoundSearch, countKey: null },
   {
     href: "/opportunities",
@@ -203,6 +206,18 @@ export function AppSidebar({
                     <ContactRound className="size-4" />
                   </span>
                   <span className="text-[13.5px] font-medium">New contact</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild className="rounded-[10px] p-0">
+                <Link
+                  href="/lists/new"
+                  onClick={dismissOnMobile}
+                  className="flex w-full items-center gap-3 px-2.5 py-2"
+                >
+                  <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-muted text-foreground/70">
+                    <Upload className="size-4" />
+                  </span>
+                  <span className="text-[13.5px] font-medium">Import list</span>
                 </Link>
               </DropdownMenuItem>
             </DropdownMenuContent>

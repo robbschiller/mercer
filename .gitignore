@@ -48,3 +48,6 @@ next-env.d.ts
 .claude/launch.json
 .claude/scheduled_tasks.lock
 .env*
+
+# Supabase CLI link cache
+supabase/.temp/

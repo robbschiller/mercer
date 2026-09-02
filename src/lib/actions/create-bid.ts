@@ -25,12 +25,13 @@ export async function createBidAction(formData: FormData) {
   let created: { bid: Awaited<ReturnType<typeof createBid>>; defaults: Awaited<ReturnType<typeof getUserDefaults>> } | null = null;
   try {
     const { contactId, size, next, ...bidData } = result.data;
-    void size;
     void next;
     const [bid, defaults] = await Promise.all([
       createBid({
         ...bidData,
         primaryContactId: contactId ?? undefined,
+        // Size lives on the bid (046); the lead copy below is kept in sync.
+        isLargeJob: size == null ? null : size === "large",
       }),
       getUserDefaults(),
     ]);
@@ -58,7 +59,7 @@ export async function createBidAction(formData: FormData) {
 
   // The AI-draft launchpad lands on the quote engine; empty bids on the bid.
   if (result.data.next === "draft") {
-    redirect(`/opportunities/${created!.bid.id}#quote`);
+    redirect(`/opportunities/${created!.bid.id}?open=quote#quote`);
   }
   redirect(`/opportunities/${created!.bid.id}`);
 }

@@ -2,7 +2,6 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { after } from "next/server";
 import {
   updateBid,
   deleteBid,
@@ -30,7 +29,10 @@ import {
   getCompanyProfile,
   getPhotos,
   createLead,
-  createLeadsBatch,
+  createListWithRows,
+  deleteList,
+  findListByFile,
+  markListRowConverted,
   searchAccounts,
   searchKnownProperties,
   updateLead,
@@ -94,7 +96,6 @@ import {
   mapRowsToCatalogItems,
 } from "./catalog/csv";
 import {
-  runEnrichmentForBatch,
   runEnrichmentForLead,
 } from "./leads/enrichment-runner";
 import { createClient } from "./supabase/server";
@@ -127,7 +128,7 @@ import {
   declineProposalShareSchema,
   createLeadSchema,
   createContactSchema,
-  importLeadsSchema,
+  importListSchema,
   updateLeadStatusSchema,
   scheduleTakeoffSchema,
   startPropertyRelationshipSchema,
@@ -291,8 +292,8 @@ export async function updateBidAction(formData: FormData) {
     redirect(`/opportunities/${id}?error=${encodeURIComponent(message)}`);
   }
 
-  const { id, ...data } = result.data;
-  await updateBid(id, data);
+  const { id, jobSize, ...data } = result.data;
+  await updateBid(id, { ...data, ...(jobSize == null ? {} : { isLargeJob: jobSize }) });
   redirect(`/opportunities/${id}`);
 }
 
@@ -982,7 +983,13 @@ export async function createLeadAction(formData: FormData) {
     redirect(`/leads/new?error=${encodeURIComponent(message)}`);
   }
 
-  const lead = await createLead(result.data);
+  const { listRowId, ...leadInput } = result.data;
+  const lead = await createLead(leadInput);
+  // Convert (1b): the list row stays on its list, marked as this lead.
+  if (listRowId) {
+    const converted = await markListRowConverted(listRowId, lead.id);
+    if (converted) revalidatePath(`/lists/${converted.listId}`);
+  }
   // Specs/RFPs/referral emails arrive with the lead (fix-list #1). A failed
   // file must not lose the lead itself — surface it on the lead instead.
   const files = formData
@@ -1270,16 +1277,21 @@ export async function addCatalogLineItemAction(formData: FormData) {
  * "pending" → schedule enrichment after the response. Redirects immediately
  * so large trade-show files do not sit inside one long-running server action.
  */
-export async function importLeadsAction(formData: FormData) {
-  const requestedReturnTo = formData.get("returnTo");
-  const returnTo = requestedReturnTo === "/contacts" ? "/contacts" : "/leads";
-  const importPath = `${returnTo}/import`;
-  const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) {
+/**
+ * Import a CSV as a List (1b). Rows land on the list and nowhere else — no
+ * contacts, properties, accounts, or leads are minted here; Convert on the
+ * list page does that one person at a time through createLeadAction.
+ */
+export async function importListAction(formData: FormData) {
+  const importPath = "/lists/new";
+  const fileEntry = formData.get("file");
+  if (!(fileEntry instanceof File) || fileEntry.size === 0) {
     redirect(`${importPath}?error=${encodeURIComponent("Select a CSV file")}`);
   }
+  const file = fileEntry as File;
 
-  const parsedMeta = importLeadsSchema.safeParse({
+  const parsedMeta = importListSchema.safeParse({
+    name: formData.get("name"),
     sourceTag: formData.get("sourceTag"),
   });
   if (!parsedMeta.success) {
@@ -1287,12 +1299,11 @@ export async function importLeadsAction(formData: FormData) {
     redirect(`${importPath}?error=${encodeURIComponent(message)}`);
   }
 
-  const text = await (file as File).text();
+  const text = await file.text();
   const { headers, rows } = parseCsv(text);
-
   if (headers.length === 0 || rows.length === 0) {
     redirect(
-      `${importPath}?error=${encodeURIComponent("CSV appears empty or malformed")}`
+      `${importPath}?error=${encodeURIComponent("CSV appears empty or malformed")}`,
     );
   }
 
@@ -1300,31 +1311,53 @@ export async function importLeadsAction(formData: FormData) {
   if (!mapping.name && !mapping.firstName && !mapping.lastName) {
     redirect(
       `${importPath}?error=${encodeURIComponent(
-        `Could not find a name column. Headers seen: ${headers.join(", ")}`
-      )}`
+        `Could not find a name column. Headers seen: ${headers.join(", ")}`,
+      )}`,
     );
   }
 
-  const leadsToInsert = mapRowsToLeads(rows, mapping);
-  if (leadsToInsert.length === 0) {
+  const mapped = mapRowsToLeads(rows, mapping);
+  if (mapped.length === 0) {
     redirect(
-      `${importPath}?error=${encodeURIComponent("No rows with a name value")}`
+      `${importPath}?error=${encodeURIComponent("No rows with a name value")}`,
     );
   }
 
-  const inserted = await createLeadsBatch(leadsToInsert, parsedMeta.data.sourceTag ?? null);
+  // Same file, same row count, same org: that's a re-upload, not a new list.
+  const existing = await findListByFile(file.name, mapped.length);
+  if (existing) {
+    const when = existing.createdAt.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+    redirect(
+      `${importPath}?error=${encodeURIComponent(
+        `"${file.name}" was already imported as "${existing.name}" on ${when}. Delete that list first if you want to re-import it.`,
+      )}`,
+    );
+  }
 
-  after(async () => {
-    try {
-      await runEnrichmentForBatch(inserted);
-    } catch (err) {
-      console.error("[importLeadsAction] enrichment batch error:", err);
-    }
+  const list = await createListWithRows({
+    name:
+      parsedMeta.data.name?.trim() ||
+      file.name.replace(/\.csv$/i, "").trim() ||
+      "Imported list",
+    sourceTag: parsedMeta.data.sourceTag?.trim() || null,
+    fileName: file.name,
+    mapping,
+    rows: mapped,
   });
 
-  revalidatePath("/leads");
-  revalidatePath("/contacts");
-  redirect(`${returnTo}?imported=${inserted.length}`);
+  revalidatePath("/lists");
+  redirect(`/lists/${list.id}?imported=${mapped.length}`);
+}
+
+export async function deleteListAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "").trim();
+  if (id) await deleteList(id);
+  revalidatePath("/lists");
+  redirect("/lists");
 }
 
 export async function updateLeadStatusAction(formData: FormData) {

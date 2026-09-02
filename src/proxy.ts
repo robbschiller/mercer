@@ -28,6 +28,7 @@ export const config = {
   matcher: [
     "/dashboard/:path*",
     "/contacts/:path*",
+    "/lists/:path*",
     "/leads/:path*",
     "/takeoff-queue/:path*",
     "/pipeline/:path*",

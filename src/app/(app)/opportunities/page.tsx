@@ -45,6 +45,11 @@ function bidTotal(bid: BidSummary): number | null {
     const n = Number(bid.contractValue);
     if (Number.isFinite(n)) return n;
   }
+  // Phase 2: a quote typed by hand beats the engine's estimate.
+  if (bid.quoteAmount != null) {
+    const n = Number(bid.quoteAmount);
+    if (Number.isFinite(n)) return n;
+  }
   const pricing = calculateBidPricing({
     totalSqft: bid.totalSqft,
     coverageSqftPerGallon: bid.coverageSqftPerGallon

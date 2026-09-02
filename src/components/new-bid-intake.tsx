@@ -40,6 +40,7 @@ import {
   type FinderBuilding,
 } from "@/components/property-finder";
 import { cn } from "@/lib/utils";
+import { AccountAutocomplete } from "@/components/account-autocomplete";
 
 export type BidLeadPrefill = {
   id: string;
@@ -429,6 +430,7 @@ export function NewBidIntake({
         <Band
           num="1"
           title="The project"
+          overflowVisible
           note={
             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/80">
               <Pencil className="size-[13px]" />
@@ -439,14 +441,18 @@ export function NewBidIntake({
           <FieldLabel>Client</FieldLabel>
           <div className="flex h-[46px] items-center gap-2.5 rounded-[11px] border bg-card px-3.5 transition-[border-color,box-shadow] focus-within:border-foreground/35 focus-within:shadow-[0_0_0_3px_rgb(0_0_0/0.06)]">
             <Briefcase className="size-4 shrink-0 text-muted-foreground" />
-            <input
+            {/* Same register the lead form uses: picking a match links the
+                account instead of minting a near-duplicate (Phase 2 parity). */}
+            <AccountAutocomplete
+              key={building ? `${building.kind}:${buildingName(building)}` : "none"}
               name="clientName"
-              value={client}
-              onChange={(e) => setClient(e.target.value)}
+              hiddenIdName="clientAccountId"
+              defaultValue={client}
+              onValueChange={setClient}
               required
               placeholder="Management company or owner…"
-              autoComplete="off"
-              className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+              wrapperClassName="min-w-0 flex-1"
+              className="h-auto border-none bg-transparent p-0 text-sm shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/60"
             />
           </div>
           {known && client ? (
@@ -715,15 +721,23 @@ function Band({
   num,
   title,
   note,
+  overflowVisible,
   children,
 }: {
   num: string;
   title: string;
   note: React.ReactNode;
+  /** Bands hosting dropdowns must not clip them. */
+  overflowVisible?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div className="mb-3.5 overflow-hidden rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
+    <div
+      className={cn(
+        "mb-3.5 rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04)]",
+        overflowVisible ? "overflow-visible" : "overflow-hidden",
+      )}
+    >
       <div className="flex items-center gap-3 px-[18px] pt-[15px]">
         <span className="grid size-[26px] shrink-0 place-items-center rounded-full bg-foreground font-mono text-xs text-background">
           {num}

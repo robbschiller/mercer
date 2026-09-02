@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { ChevronRight } from "lucide-react";
 import {
   getBidPageData,
   getProjectByBidId,
@@ -44,9 +45,9 @@ export default async function BidPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; open?: string }>;
 }) {
-  const [{ id }, { error }] = await Promise.all([params, searchParams]);
+  const [{ id }, { error, open }] = await Promise.all([params, searchParams]);
   const [
     data,
     project,
@@ -104,7 +105,17 @@ export default async function BidPage({
     })),
   });
 
-  const bidLabel = bid.propertyName || bid.clientName || "Untitled opportunity";
+  const bidLabel =
+    bid.label || bid.propertyName || bid.clientName || "Untitled opportunity";
+  // Phase 2: the opportunity is a tracking record first. The takeoff /
+  // pricing / AI-quote machinery stays, folded, unless a draft is in flight
+  // or the launchpad asked for it.
+  const takeoffOpen = open === "quote" || bid.draftScopeText != null;
+  const takeoffSummary = [
+    `${proposals.length} version${proposals.length === 1 ? "" : "s"}`,
+    `${lineItems.length} line item${lineItems.length === 1 ? "" : "s"}`,
+    `${buildings.length} building${buildings.length === 1 ? "" : "s"}`,
+  ].join(" · ");
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8 flex flex-col gap-6">
@@ -121,7 +132,11 @@ export default async function BidPage({
         </div>
       )}
 
-      <BidSummary bid={bid} />
+      <BidSummary
+        bid={bid}
+        quoteTotal={pricing.grandTotal}
+        contactName={primaryContactName}
+      />
 
       {project && (
         <Card>
@@ -159,6 +174,25 @@ export default async function BidPage({
         </Card>
       )}
 
+      <details
+        open={takeoffOpen}
+        className="group rounded-xl border bg-card shadow-sm"
+      >
+        <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 [&::-webkit-details-marker]:hidden">
+          <span className="grid size-7 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground transition-transform group-open:rotate-90">
+            <ChevronRight className="size-4" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">
+              Takeoff, pricing &amp; AI quote
+            </span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              {takeoffSummary} · optional — proposals can still be written
+              outside Mercer
+            </span>
+          </span>
+        </summary>
+        <div className="flex flex-col gap-6 border-t px-5 pb-5 pt-5">
       <div id="quote" className="scroll-mt-6" />
       <QuoteEngine
         bid={bid}
@@ -250,6 +284,8 @@ export default async function BidPage({
           </CardContent>
         </Card>
       )}
+        </div>
+      </details>
 
       <Card className="border-destructive/50">
         <CardContent className="flex items-center justify-between pt-6">

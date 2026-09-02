@@ -144,6 +144,7 @@ export function PropertyProfile({
   startLeadHref = "/leads/new",
   headerSlot,
   belowTimelineSlot,
+  compact = false,
 }: {
   detail: PropertyDetail;
   history: PropertyRelationshipHistory;
@@ -162,6 +163,12 @@ export function PropertyProfile({
   headerSlot?: React.ReactNode;
   /** Lead-scoped attachments/photos, appended to the left column. */
   belowTimelineSlot?: React.ReactNode;
+  /**
+   * Lead page (Jordan 2026-09-02: "I just want to see the stuff that
+   * matters"): fields-first hero — no aerial tile, no facts row, no ledger
+   * rail — and the property panels folded under a disclosure.
+   */
+  compact?: boolean;
 }) {
   const { property, managementAccount, account, ownerAccount, ownerParty } =
     detail;
@@ -259,7 +266,14 @@ export function PropertyProfile({
       </Link>
 
       {/* ── Hero ── */}
-      <div className="mb-4 grid grid-cols-1 gap-6 rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] md:grid-cols-[176px_minmax(0,1fr)] lg:grid-cols-[176px_minmax(0,1fr)_216px]">
+      <div
+        className={cn(
+          "mb-4 grid grid-cols-1 gap-6 rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgb(0_0_0/0.04)]",
+          !compact &&
+            "md:grid-cols-[176px_minmax(0,1fr)] lg:grid-cols-[176px_minmax(0,1fr)_216px]",
+        )}
+      >
+        {!compact && (
         <div className="relative min-h-[150px] overflow-hidden rounded-xl bg-muted">
           {property.satelliteImageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -278,6 +292,7 @@ export function PropertyProfile({
             Aerial
           </span>
         </div>
+        )}
 
         <div className="flex min-w-0 flex-col">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
@@ -308,6 +323,7 @@ export function PropertyProfile({
               {property.address}
             </p>
           )}
+          {!compact && (
           <div className="mt-auto grid grid-cols-1 gap-4 border-t pt-4 sm:grid-cols-3 sm:gap-5 [&:not(:first-child)]:mt-5">
             <HeroFact
               icon={<Building className="size-3" />}
@@ -356,8 +372,10 @@ export function PropertyProfile({
               }
             />
           </div>
+          )}
         </div>
 
+        {!compact && (
         <div className="flex flex-col justify-center gap-2.5 border-t pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
           <div className="flex items-baseline justify-between gap-2.5">
             <span className="text-xs text-muted-foreground">Client since</span>
@@ -384,6 +402,7 @@ export function PropertyProfile({
             </span>
           </div>
         </div>
+        )}
       </div>
 
       {headerSlot}
@@ -414,6 +433,12 @@ export function PropertyProfile({
         </div>
       )}
 
+      {compact && belowTimelineSlot}
+
+      <Foldable
+        folded={compact}
+        summary="Property — history, specs, photos & contacts"
+      >
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_424px]">
         {/* ── Left column ── */}
         <div className="flex min-w-0 flex-col gap-5">
@@ -613,7 +638,7 @@ export function PropertyProfile({
             </div>
           </Panel>
 
-          {belowTimelineSlot}
+          {!compact && belowTimelineSlot}
         </div>
 
         {/* ── Right column ── */}
@@ -870,7 +895,29 @@ export function PropertyProfile({
           />
         </div>
       </details>
+      </Foldable>
     </>
+  );
+}
+
+/** Lead page folds the property's full profile away; the property page shows it flat. */
+function Foldable({
+  folded,
+  summary,
+  children,
+}: {
+  folded: boolean;
+  summary: string;
+  children: React.ReactNode;
+}) {
+  if (!folded) return <>{children}</>;
+  return (
+    <details className="mt-2 rounded-2xl border bg-card px-5 py-4 shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
+      <summary className="cursor-pointer text-sm font-medium text-foreground/80 transition-colors hover:text-foreground">
+        {summary}
+      </summary>
+      <div className="mt-5">{children}</div>
+    </details>
   );
 }
 

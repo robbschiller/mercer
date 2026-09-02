@@ -156,11 +156,11 @@ export default async function ContactsPage({
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <Link
-            href="/contacts/import"
+            href="/lists/new"
             className="inline-flex h-9 items-center gap-1.5 rounded-lg border bg-card px-3.5 text-[13px] font-medium text-foreground/80 transition-colors hover:bg-muted"
           >
             <Upload className="size-3.5" />
-            Import
+            Import list
           </Link>
           <Link
             href="/contacts/new"
@@ -273,13 +273,13 @@ export default async function ContactsPage({
           <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
             {q
               ? "Try a different name or company."
-              : "Import a trade-show CSV or add people as leads come in — every yes starts with a name."}
+              : "People show up here when a list row is converted or a lead is added — every yes starts with a name."}
           </p>
           <Link
-            href={q ? "/contacts" : "/contacts/import"}
+            href={q ? "/contacts" : "/lists/new"}
             className="mt-5 inline-flex h-9 items-center gap-1.5 rounded-lg border bg-card px-3.5 text-[13px] font-medium transition-colors hover:bg-muted"
           >
-            {q ? "Clear search" : "Import contacts"}
+            {q ? "Clear search" : "Import a list"}
           </Link>
         </div>
       ) : grouped ? (

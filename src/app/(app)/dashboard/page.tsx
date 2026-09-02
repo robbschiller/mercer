@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { ContactRound, UserRoundSearch } from "lucide-react";
+import { ContactRound, Upload, UserRoundSearch } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { getOrgContext } from "@/lib/org-context";
 import { getMorningBriefAction } from "@/lib/actions/morning-brief";
@@ -54,11 +54,17 @@ const ENTRY_POINTS: {
     sub: "A person, on their own",
     icon: ContactRound,
   },
+  {
+    href: "/lists/new",
+    label: "Import list",
+    sub: "A CSV of people — convert the real ones into leads",
+    icon: Upload,
+  },
 ];
 
 function StartHere() {
   return (
-    <div className="grid gap-2.5 sm:grid-cols-2">
+    <div className="grid gap-2.5 sm:grid-cols-3">
       {ENTRY_POINTS.map(({ href, label, sub, icon: Icon }) => (
         <Link
           key={href}

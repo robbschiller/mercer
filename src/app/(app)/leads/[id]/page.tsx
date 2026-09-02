@@ -11,6 +11,8 @@ import {
   getPropertyRelationshipHistory,
   getPropertyDeals,
   listAssignableMembers,
+  getLeadWorkTypes,
+  getLeadSourceTags,
 } from "@/lib/store";
 import { scheduleTakeoffAction } from "@/lib/actions";
 import { LeadDetailBody } from "@/components/lead-detail-body";
@@ -60,13 +62,24 @@ export default async function LeadDetailPage({
   const lead = await getLead(id);
   if (!lead) notFound();
 
-  const [linkedBid, photos, attachments, attempts, members, contact] =
+  const [
+    linkedBid,
+    photos,
+    attachments,
+    attempts,
+    members,
+    workTypes,
+    sources,
+    contact,
+  ] =
     await Promise.all([
       getLatestBidForLead(id),
       getPhotos("lead", id),
       getAttachments("lead", id),
       getLeadContactAttempts(id),
       listAssignableMembers(),
+      getLeadWorkTypes(),
+      getLeadSourceTags(),
       lead.primaryContactId
         ? getContactWithAccount(lead.primaryContactId)
         : Promise.resolve(null),
@@ -101,6 +114,8 @@ export default async function LeadDetailPage({
             linkedBid={linkedBid}
             error={error}
             closeHref="/leads"
+            workTypes={workTypes}
+            sources={sources}
             hideIdentity
           />
         </div>
@@ -141,6 +156,8 @@ export default async function LeadDetailPage({
           linkedBid={linkedBid}
           error={error}
           closeHref="/leads"
+            workTypes={workTypes}
+            sources={sources}
         />
         {lead.status === "takeoff" && <TakeoffCard lead={lead} />}
         {leadFiles}
@@ -176,6 +193,7 @@ export default async function LeadDetailPage({
         returnTo={`/leads/${id}`}
         headerSlot={workflow}
         belowTimelineSlot={leadFiles}
+        compact
       />
     </div>
   );

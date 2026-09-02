@@ -16,12 +16,21 @@ export function AccountAutocomplete({
   hiddenIdName = "accountId",
   defaultValue = "",
   className,
+  wrapperClassName,
+  placeholder,
+  required,
+  onValueChange,
 }: {
   id?: string;
   name?: string;
   hiddenIdName?: string;
   defaultValue?: string;
   className?: string;
+  wrapperClassName?: string;
+  placeholder?: string;
+  required?: boolean;
+  /** Fires on every keystroke and on pick — for callers that mirror the value. */
+  onValueChange?: (value: string) => void;
 }) {
   const generatedId = useId();
   const inputId = id ?? `${generatedId}-company`;
@@ -94,12 +103,14 @@ export function AccountAutocomplete({
     const next = e.target.value;
     setValue(next);
     setAccountId(null);
+    onValueChange?.(next);
     scheduleFetch(next);
   }
 
   function pick(s: Suggestion) {
     setValue(s.name);
     setAccountId(s.id);
+    onValueChange?.(s.name);
     setSuggestions([]);
     setOpen(false);
     setActiveIndex(-1);
@@ -131,7 +142,7 @@ export function AccountAutocomplete({
     open && searched && !loading && suggestions.length === 0 && value.trim().length >= MIN_QUERY_LEN;
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className={cn("relative", wrapperClassName)}>
       <Input
         ref={inputRef}
         id={inputId}
@@ -146,6 +157,8 @@ export function AccountAutocomplete({
         }}
         onKeyDown={onKeyDown}
         autoComplete="off"
+        placeholder={placeholder}
+        required={required}
         role="combobox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}

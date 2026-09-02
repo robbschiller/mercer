@@ -26,11 +26,9 @@ import {
 } from "lucide-react";
 import { createLeadAction, searchAccountsAction } from "@/lib/actions";
 import { extractLeadDraftAction } from "@/lib/actions/extract-lead";
-import { takeLeadDraft } from "@/lib/lead-draft";
+import { takeLeadDraft, type ExtractedLeadDraft } from "@/lib/lead-draft";
 import type { ContactRegisterRow, KnownBuilding } from "@/lib/store";
 import {
-  AerialBuildingCard,
-  Fact,
   PropertyFinder,
   buildingAddress,
   buildingName,
@@ -40,6 +38,7 @@ import {
   type FinderBuilding,
 } from "@/components/property-finder";
 import { cn } from "@/lib/utils";
+import { WorkTypeField } from "@/components/work-type-field";
 
 const AVATAR_TINTS = [
   "bg-blue-600",
@@ -63,6 +62,18 @@ function initials(name: string): string {
     .join("");
 }
 
+/**
+ * Seed for the Property name field once a building is locked: a real name
+ * from the finder, or blank when all the finder had was an address (so the
+ * user types the community's name rather than accepting "123 Main St").
+ */
+function seedPropertyTitle(b: FinderBuilding): string {
+  if (b.kind === "custom") return b.text;
+  const n = (b.name ?? "").trim();
+  const a = (b.address ?? "").trim();
+  return n && n !== a ? n : "";
+}
+
 const SCOPE = [
   "Full exterior",
   "Breezeways",
@@ -82,16 +93,27 @@ const DEFAULT_SOURCES = [
 export function NewLeadIntake({
   contacts,
   sources,
+  workTypes,
   error,
+  prefill = null,
+  listRowId = null,
+  listName = null,
 }: {
   contacts: ContactRegisterRow[];
   sources: string[];
+  /** Work types this org has used before — offered back as chips (1c). */
+  workTypes: string[];
   error: string | null;
+  /** Convert (1b): server-side prefill from a list row. */
+  prefill?: ExtractedLeadDraft | null;
+  listRowId?: string | null;
+  listName?: string | null;
 }) {
   const [building, setBuilding] = useState<FinderBuilding | null>(null);
 
   /* band state */
   const [projectName, setProjectName] = useState("");
+  const [propertyTitle, setPropertyTitle] = useState("");
   const [contactId, setContactId] = useState<string | null>(null);
   const [newContact, setNewContact] = useState(false);
   const [contactQuery, setContactQuery] = useState("");
@@ -136,7 +158,9 @@ export function NewLeadIntake({
   // D1: hydrate from a draft the Home composer extracted out of a dropped
   // spec/email. Everything lands editable — review-before-save, never silent.
   useEffect(() => {
-    const { draft, files: droppedFiles } = takeLeadDraft();
+    const { draft: stashed, files: droppedFiles } = takeLeadDraft();
+    // A composer draft (D1) or a list-row prefill (1b) — same hydration.
+    const draft = stashed ?? prefill;
     if (!draft) return;
     const propertyLabel =
       draft.propertyName ?? draft.propertyAddress ?? "New property";
@@ -148,12 +172,13 @@ export function NewLeadIntake({
       lng: null,
       placeId: null,
     });
-    setProjectName(draft.projectName ?? propertyLabel);
+    setProjectName(draft.projectName ?? "");
+    setPropertyTitle(draft.propertyName ?? "");
     if (draft.company) setCompany(draft.company);
     if (draft.source) setSource(draft.source);
     if (draft.isLargeJob != null) setLargeJob(draft.isLargeJob);
     if (draft.scope.length > 0)
-      setScope(new Set(draft.scope.filter((s) => SCOPE.includes(s))));
+      setScope(new Set(draft.scope));
     if (draft.scopeSummary) setNotes(draft.scopeSummary);
     const contactName = [draft.contactFirstName, draft.contactLastName]
       .filter(Boolean)
@@ -207,9 +232,11 @@ export function NewLeadIntake({
 
   function lock(b: FinderBuilding) {
     setBuilding(b);
-    // Suggested project name (Jordan C2): the property name is a fine
-    // default, but it stays fully editable — it's the record's display name.
-    setProjectName(buildingName(b));
+    // Property name and job name are separate fields (Jordan 2026-09-02).
+    // The finder seeds the property name only when it found a real name
+    // rather than an address; the job name always starts blank.
+    setPropertyTitle(seedPropertyTitle(b));
+    setProjectName("");
     if (b.kind === "known") {
       if (b.primaryContactId) setContactId(b.primaryContactId);
       if (b.managementName) setCompany(b.managementName);
@@ -220,6 +247,7 @@ export function NewLeadIntake({
   function backToFinder() {
     setBuilding(null);
     setProjectName("");
+    setPropertyTitle("");
     setContactId(null);
     setNewContact(false);
     setCompany("");
@@ -258,16 +286,17 @@ export function NewLeadIntake({
 
   const name = building ? buildingName(building) : "";
   const address = building ? buildingAddress(building) : "";
-  /** What the project name falls back to when nobody opens the accordion. */
-  const suggestedName = name || address;
   /** How much of the optional half is filled — shown on the closed summary. */
   const moreCount =
-    (projectName.trim() && projectName.trim() !== suggestedName ? 1 : 0) +
     (scope.size > 0 ? 1 : 0) +
     (source ? 1 : 0) +
     (rough.trim() ? 1 : 0) +
     (notes.trim() ? 1 : 0) +
     (files.length > 0 ? 1 : 0);
+  const allWorkTypes = useMemo(
+    () => [...new Set([...workTypes, ...SCOPE])],
+    [workTypes],
+  );
   const allSources = useMemo(() => {
     const merged = [...sources, ...DEFAULT_SOURCES];
     return [...new Set(merged)].slice(0, 7);
@@ -276,7 +305,7 @@ export function NewLeadIntake({
   // Who's it for — shown once the building is locked, not during the search.
   const whoBand = (
         <Band
-          num="1"
+          num="2"
           overflowVisible
           title="Who's it for?"
           note={
@@ -523,6 +552,67 @@ export function NewLeadIntake({
         </Band>
   );
 
+  // Name it — property name and job name, both required, both visible.
+  // Jordan 2026-09-02: "there's never a time where we do something where
+  // there's not a name" / "I think it's good if we just separate those".
+  const nameBand = (
+    <Band
+      num="1"
+      title="Name it"
+      note={
+        propertyTitle.trim() && projectName.trim() ? (
+          <BandNote done icon={<Check className="size-[13px]" />}>
+            Named
+          </BandNote>
+        ) : (
+          <BandNote icon={<Tag className="size-[13px]" />}>
+            Property and job
+          </BandNote>
+        )
+      }
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <FieldLabel>Property name</FieldLabel>
+          <SlimField>
+            <Building2 className="size-4 shrink-0 text-muted-foreground" />
+            <input
+              name="propertyName"
+              value={propertyTitle}
+              onChange={(e) => setPropertyTitle(e.target.value)}
+              placeholder='e.g. "Palmetto Crossing"'
+              autoComplete="off"
+              required
+              className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+            />
+          </SlimField>
+          <p className="mt-2 text-xs text-muted-foreground">
+            What the community is called — not the address.
+          </p>
+        </div>
+        <div>
+          <FieldLabel>Job name</FieldLabel>
+          <SlimField>
+            <Tag className="size-4 shrink-0 text-muted-foreground" />
+            <input
+              name="name"
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
+              placeholder='e.g. "Full exterior repaint"'
+              autoComplete="off"
+              required
+              className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+            />
+          </SlimField>
+          <p className="mt-2 text-xs text-muted-foreground">
+            What they want done. Carries to the opportunity when this
+            converts.
+          </p>
+        </div>
+      </div>
+    </Band>
+  );
+
   /* ═══════════ 7a — FINDER ═══════════ */
   if (!building) {
     return (
@@ -580,7 +670,7 @@ export function NewLeadIntake({
         <p className="mt-1.5 max-w-[560px] text-sm text-muted-foreground">
           {isKnown
             ? `You painted ${name} before. The owner, the contact, and the history came with it — confirm the scope and the lead is in.`
-            : "The building's pinned. Add who it's for and what the work is — that's the whole lead."}
+            : "The building's pinned. Name it, say who it's for and what the work is — that's the whole lead."}
         </p>
       </header>
 
@@ -590,10 +680,20 @@ export function NewLeadIntake({
         </div>
       )}
 
+      {listRowId && (
+        <div className="mb-4 rounded-xl border border-emerald-600/30 bg-emerald-600/5 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-400">
+          Converting from the list{listName ? <> “{listName}”</> : null} —
+          everything below came off the row. Fix anything that&apos;s off, name
+          the job, and add the lead.
+        </div>
+      )}
+
       <form action={createLeadAction} className="flex flex-col">
         {/* hidden payload */}
-        <input type="hidden" name="propertyName" value={name} />
         <input type="hidden" name="resolvedAddress" value={address} />
+        {listRowId && (
+          <input type="hidden" name="listRowId" value={listRowId} />
+        )}
         {isKnown && knownB && (
           <input type="hidden" name="propertyId" value={knownB.id} />
         )}
@@ -619,106 +719,64 @@ export function NewLeadIntake({
         )}
         <input type="hidden" name="company" value={company} />
         <input type="hidden" name="accountId" value={accountId ?? ""} />
-        <input
-          type="hidden"
-          name="scopeCategory"
-          value={[...scope].join(", ")}
-        />
         <input type="hidden" name="sourceTag" value={source ?? ""} />
         <input type="hidden" name="estValue" value={rough} />
         {largeJob && <input type="hidden" name="isLargeJob" value="on" />}
 
-        <AerialBuildingCard
-          building={building}
-          onBack={backToFinder}
-          banner={
-            isKnown && knownB ? (
-              <div className="flex items-center gap-3 border-t border-emerald-600/25 bg-emerald-600/10 px-5 py-3">
-                <span className="grid size-[30px] shrink-0 place-items-center rounded-[9px] bg-emerald-600 text-white">
-                  <BadgeCheck className="size-4" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[13.5px] font-semibold text-emerald-800 dark:text-emerald-300">
-                    Mercer knows this building
-                  </span>
-                  <span className="mt-0.5 block truncate text-[12.5px] text-emerald-700/90 dark:text-emerald-400/90">
-                    {knownB.lastWonAt
-                      ? `Painted ${monthYear(knownB.lastWonAt)} · `
-                      : ""}
-                    <span className="font-mono tabular-nums">
-                      {knownB.jobs} job{knownB.jobs === 1 ? "" : "s"}
-                    </span>{" "}
-                    ·{" "}
-                    <span className="font-mono tabular-nums">
-                      {moneyK(knownB.lifetime)}
-                    </span>{" "}
-                    lifetime
-                  </span>
-                </span>
-                <a
-                  href={`/properties/${knownB.id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="shrink-0 text-[12.5px] font-medium text-blue-700 hover:underline dark:text-blue-400"
-                >
-                  View history
-                </a>
-              </div>
-            ) : (
-              <div className="flex items-center gap-3 border-t bg-muted/20 px-5 py-3">
-                <span className="grid size-[30px] shrink-0 place-items-center rounded-[9px] bg-muted text-foreground/60">
-                  <Sparkles className="size-4" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[13.5px] font-semibold text-foreground/80">
-                    New to Mercer
-                  </span>
-                  <span className="mt-0.5 block text-[12.5px] text-muted-foreground">
-                    We&apos;ll create the property record when you add the lead
-                    — no duplicate.
-                  </span>
-                </span>
-              </div>
-            )
-          }
-          facts={
-            isKnown && knownB ? (
-              <>
-                {knownB.managementName && (
-                  <Fact icon={<Briefcase className="size-[13px]" />}>
-                    {knownB.managementName}
-                  </Fact>
-                )}
-                {knownB.lastWonAt && (
-                  <Fact icon={<RotateCcw className="size-[13px]" />}>
-                    Last painted{" "}
-                    <b className="font-mono font-medium">
-                      {monthYear(knownB.lastWonAt)}
-                    </b>
-                  </Fact>
-                )}
-                {due && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11.5px] font-semibold text-amber-700 dark:text-amber-400">
-                    <RotateCcw className="size-3" />
-                    Repaint due
-                  </span>
-                )}
-              </>
-            ) : (
-              <>
-                <Fact icon={<MapPin className="size-[13px]" />}>
-                  {address || "Address pending"}
-                </Fact>
-                <Fact icon={<Building2 className="size-[13px]" />}>
-                  Units —{" "}
-                  <span className="text-muted-foreground/70">
-                    add on takeoff
-                  </span>
-                </Fact>
-              </>
-            )
-          }
-        />
+        {/* Pinned building — one line, no map (Jordan 2026-09-02: "where the
+            building is does not matter at all"). */}
+        <div className="mb-3.5 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border bg-card px-[18px] py-3 shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
+          <span className="grid size-[26px] shrink-0 place-items-center rounded-full bg-muted text-foreground/60">
+            <MapPin className="size-[13px]" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[14.5px] font-semibold tracking-tight">
+              {name || "New property"}
+            </span>
+            <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+              {isKnown && knownB ? (
+                <>
+                  Mercer knows this building
+                  {knownB.lastWonAt
+                    ? ` · painted ${monthYear(knownB.lastWonAt)}`
+                    : ""}
+                  {" · "}
+                  {knownB.jobs} job{knownB.jobs === 1 ? "" : "s"} ·{" "}
+                  {moneyK(knownB.lifetime)} lifetime
+                  {knownB.managementName ? ` · ${knownB.managementName}` : ""}
+                </>
+              ) : (
+                address ||
+                "Address pending — the property record is created when you add the lead"
+              )}
+            </span>
+          </span>
+          {isKnown && knownB && (
+            <a
+              href={`/properties/${knownB.id}`}
+              target="_blank"
+              rel="noreferrer"
+              className="shrink-0 text-[12.5px] font-medium text-blue-700 hover:underline dark:text-blue-400"
+            >
+              View history
+            </a>
+          )}
+          {due && (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11.5px] font-semibold text-amber-700 dark:text-amber-400">
+              <RotateCcw className="size-3" />
+              Repaint due
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={backToFinder}
+            className="shrink-0 text-[12.5px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            not it? search again
+          </button>
+        </div>
+
+        {nameBand}
 
         {whoBand}
 
@@ -731,7 +789,7 @@ export function NewLeadIntake({
             </span>
             <span className="min-w-0">
               <span className="block text-[15px] font-semibold tracking-tight">
-                Add more — project name, scope, source, notes &amp; files
+                Add more — scope, source, notes &amp; files
               </span>
               <span className="mt-0.5 block text-xs text-muted-foreground">
                 All optional. This is really where the bid starts — fill it in
@@ -745,47 +803,6 @@ export function NewLeadIntake({
             </span>
           </summary>
 
-          {/* ── name the project ── */}
-          <Band
-            title="Name the project"
-            note={
-              <BandNote done={projectName.trim() !== suggestedName}>
-                {projectName.trim() === suggestedName
-                  ? "From the property"
-                  : "Renamed"}
-              </BandNote>
-            }
-          >
-            <FieldLabel>
-              Project name{" "}
-              <span className="font-normal normal-case tracking-normal text-muted-foreground/70">
-                — the quick synopsis this lead shows up as, everywhere
-              </span>
-            </FieldLabel>
-            <SlimField>
-              <Tag className="size-4 shrink-0 text-muted-foreground" />
-              <input
-                name="name"
-                value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
-                onBlur={() => {
-                  // Cleared by hand? Fall back to the building — the action
-                  // requires a name and this field can be left folded away.
-                  if (!projectName.trim()) setProjectName(suggestedName);
-                }}
-                placeholder='e.g. "Nona Terrace" or "Villas at Parkway – breezeways"'
-                autoComplete="off"
-                className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
-              />
-            </SlimField>
-            <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
-              <Sparkles className="mt-px size-[13px] shrink-0 text-emerald-600" />
-              Suggested from the property — rename it to whatever you&apos;d
-              call it out loud. It carries to the opportunity when this
-              converts.
-            </p>
-          </Band>
-
         {/* ── what ── */}
         <Band
           title="What's the work?"
@@ -796,40 +813,23 @@ export function NewLeadIntake({
               </BandNote>
             ) : (
               <BandNote icon={<Hand className="size-[13px]" />}>
-                Tap the scope
+                What are they asking for?
               </BandNote>
             )
           }
         >
-          <FieldLabel>Scope</FieldLabel>
-          <div className="flex flex-wrap gap-2">
-            {SCOPE.map((s) => {
-              const sel = scope.has(s);
-              return (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() =>
-                    setScope((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(s)) next.delete(s);
-                      else next.add(s);
-                      return next;
-                    })
-                  }
-                  className={cn(
-                    "inline-flex h-[38px] items-center gap-1.5 rounded-[10px] border px-3.5 text-[13.5px] font-medium transition-colors active:translate-y-px",
-                    sel
-                      ? "border-foreground bg-foreground text-background"
-                      : "bg-card text-foreground/80 hover:border-foreground/25 hover:bg-muted/40",
-                  )}
-                >
-                  {sel && <Check className="size-[15px]" />}
-                  {s}
-                </button>
-              );
-            })}
-          </div>
+          <FieldLabel>
+            Work type{" "}
+            <span className="font-normal normal-case tracking-normal text-muted-foreground/70">
+              — type it once, it&apos;s a chip next time
+            </span>
+          </FieldLabel>
+          <WorkTypeField
+            value={[...scope]}
+            onChange={(next) => setScope(new Set(next))}
+            suggestions={allWorkTypes}
+            placeholder='e.g. "Curb replacement"'
+          />
 
           <button
             type="button"

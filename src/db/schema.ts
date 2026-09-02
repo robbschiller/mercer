@@ -78,7 +78,8 @@ export const properties = pgTable("properties", {
   ),
   /** The legal owner — the lienable party Notice to Owner must reach. */
   ownerAccountId: uuid("owner_account_id").references(() => accounts.id),
-  name: text("name"),
+  /** Always present (044): the community's name, never just the address. */
+  name: text("name").notNull(),
   address: text("address"),
   latitude: doublePrecision("latitude"),
   longitude: doublePrecision("longitude"),
@@ -266,6 +267,13 @@ export const bids = pgTable("bids", {
   clientName: text("client_name").notNull(),
   /** Human label for the scoped opportunity, e.g. "Blue section". */
   label: text("label"),
+  /* ── Tracking fields (046, Phase 2 — Jordan 2026-09-02: "I'd rather us
+        just have fields"): the quote as a typed number and two dates. ── */
+  quoteAmount: numeric("quote_amount"),
+  quoteSentAt: date("quote_sent_at"),
+  decisionDueAt: date("decision_due_at"),
+  /** Small/large fork on the bid itself; null falls back to the lead's. */
+  isLargeJob: boolean("is_large_job"),
   notes: text("notes").notNull().default(""),
   status: text("status", { enum: BID_STATUSES })
     .notNull()
@@ -1033,4 +1041,55 @@ export const onboardings = pgTable("onboardings", {
   themeConfirmedAt: timestamp("theme_confirmed_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   skipped: boolean("skipped").notNull().default(false),
+});
+
+/**
+ * Lists (045) — Jordan 2026-09-02: "just raw CSV of people … unrelated object
+ * to anything else, lives on its own." An uploaded file becomes one list and
+ * its rows; nothing else is minted until a row is explicitly converted into a
+ * lead (which is when the contact, property, and account get created).
+ */
+export const lists = pgTable("lists", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  name: text("name").notNull(),
+  /** Becomes the lead's source tag when a row converts. */
+  sourceTag: text("source_tag"),
+  fileName: text("file_name"),
+  rowCount: integer("row_count").notNull().default(0),
+  /** Detected header → field mapping, kept so a bad auto-map is visible. */
+  mapping: jsonb("mapping").$type<Record<string, string | null>>(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const listRows = pgTable("list_rows", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  listId: uuid("list_id")
+    .notNull()
+    .references(() => lists.id, { onDelete: "cascade" }),
+  /** Order in the uploaded file. */
+  position: integer("position").notNull().default(0),
+  name: text("name").notNull(),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  email: text("email"),
+  phone: text("phone"),
+  company: text("company"),
+  propertyName: text("property_name"),
+  address: text("address"),
+  rawRow: jsonb("raw_row").$type<Record<string, string>>(),
+  /** Set by Convert — the row stays on the list, marked done. */
+  convertedLeadId: uuid("converted_lead_id").references(() => leads.id, {
+    onDelete: "set null",
+  }),
+  convertedAt: timestamp("converted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });

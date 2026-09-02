@@ -18,6 +18,7 @@ import {
 } from "@/lib/actions";
 import { leadFullName } from "@/lib/leads/name";
 import { AccountAutocomplete } from "@/components/account-autocomplete";
+import { WorkTypeField } from "@/components/work-type-field";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,8 @@ export function LeadDetailBody({
   error,
   closeHref,
   hideIdentity = false,
+  workTypes = [],
+  sources = [],
 }: {
   lead: Lead;
   contact: LeadContactCard | null;
@@ -72,6 +75,9 @@ export function LeadDetailBody({
    * status badges. Side-panel callers keep the full header.
    */
   hideIdentity?: boolean;
+  /** Org vocabulary for the edit form's work-type and source fields (1c). */
+  workTypes?: string[];
+  sources?: string[];
 }) {
   const [isEditing, setIsEditing] = useState(false);
 
@@ -140,6 +146,8 @@ export function LeadDetailBody({
           lead={lead}
           contact={contact}
           onDone={() => setIsEditing(false)}
+        workTypes={workTypes}
+          sources={sources}
         />
       ) : (
         <>
@@ -254,6 +262,36 @@ export function LeadDetailBody({
 
           <Card>
             <CardHeader>
+              <CardTitle className="text-base">The work</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2 text-sm">
+              {lead.scopeCategory && lead.scopeCategory.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {lead.scopeCategory.map((s) => (
+                    <Badge key={s} variant="secondary">
+                      {s}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-muted-foreground/60">
+                  No work type yet — add one in Edit.
+                </span>
+              )}
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                <span>
+                  Rough $:{" "}
+                  {lead.estValue
+                    ? `$${Number(lead.estValue).toLocaleString("en-US")}`
+                    : "—"}
+                </span>
+                <span>Job size: {lead.isLargeJob ? "Large (2+ weeks)" : "Small"}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle className="text-base">Pipeline status</CardTitle>
             </CardHeader>
             <CardContent>
@@ -303,10 +341,14 @@ function EditForm({
   lead,
   contact,
   onDone,
+  workTypes,
+  sources,
 }: {
   lead: Lead;
   contact: LeadContactCard | null;
   onDone: () => void;
+  workTypes: string[];
+  sources: string[];
 }) {
   const [first, last] = splitName(contact?.name ?? "");
   return (
@@ -315,10 +357,10 @@ function EditForm({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Project</CardTitle>
+          <CardTitle className="text-base">Job</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm">
-          <Field label="Project name" htmlFor="lead-name">
+          <Field label="Job name" htmlFor="lead-name">
             <Input
               id="lead-name"
               name="name"
@@ -379,6 +421,7 @@ function EditForm({
               id="lead-property"
               name="propertyName"
               defaultValue={lead.propertyName ?? ""}
+              required
             />
           </Field>
           <Field label="Property address" htmlFor="lead-address">
@@ -408,6 +451,58 @@ function EditForm({
               defaultValue={contact?.accountName ?? lead.company ?? ""}
             />
           </Field>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">The work</CardTitle>
+          <CardDescription className="text-xs">
+            Type what they asked for — anything you&apos;ve used before is
+            offered back as a chip.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 text-sm">
+          <WorkTypeField
+            defaultValue={lead.scopeCategory ?? []}
+            suggestions={workTypes}
+            placeholder='e.g. "Curb replacement"'
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Rough $" htmlFor="lead-est">
+              <Input
+                id="lead-est"
+                name="estValue"
+                type="number"
+                min="0"
+                step="1000"
+                defaultValue={lead.estValue ?? ""}
+              />
+            </Field>
+            <Field label="Source" htmlFor="lead-source">
+              <Input
+                id="lead-source"
+                name="sourceTag"
+                list="lead-source-options"
+                autoComplete="off"
+                defaultValue={lead.sourceTag ?? ""}
+              />
+              <datalist id="lead-source-options">
+                {sources.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
+            </Field>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="isLargeJob"
+              defaultChecked={lead.isLargeJob}
+              className="size-4 accent-foreground"
+            />
+            Large job (2+ weeks)
+          </label>
         </CardContent>
       </Card>
 

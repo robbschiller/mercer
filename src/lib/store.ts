@@ -35,6 +35,8 @@ import {
   tasks,
   orgKnowledgeFiles,
   bidBudgets,
+  lists,
+  listRows,
 } from "@/db/schema";
 import type { BidBudgetData } from "@/lib/budget";
 import { parseBudgetData } from "@/lib/budget";
@@ -284,6 +286,7 @@ export async function createBid(
         | "propertyId"
         | "primaryContactId"
         | "label"
+        | "isLargeJob"
       >
     >
 ) {
@@ -437,6 +440,10 @@ export async function updateBid(
       | "draftScopeText"
       | "draftChangeLog"
       | "draftClarifications"
+      | "quoteAmount"
+      | "quoteSentAt"
+      | "decisionDueAt"
+      | "isLargeJob"
     >
   >
 ) {
@@ -1800,7 +1807,7 @@ export async function getJobScheduleContext(
   const user = await requireUser();
   const [bidRows, bldgRows] = await Promise.all([
     db
-      .select({ isLargeJob: leads.isLargeJob })
+      .select({ isLargeJob: leads.isLargeJob, bidIsLargeJob: bids.isLargeJob })
       .from(bids)
       .leftJoin(leads, eq(bids.leadId, leads.id))
       .where(and(eq(bids.id, bidId), eq(bids.userId, user.ownerUserId)))
@@ -1813,7 +1820,8 @@ export async function getJobScheduleContext(
       .where(eq(buildings.bidId, bidId)),
   ]);
   return {
-    isLargeJob: bidRows[0]?.isLargeJob ?? null,
+    // The bid's own size wins (046); leads keep it for bids created before.
+    isLargeJob: bidRows[0]?.bidIsLargeJob ?? bidRows[0]?.isLargeJob ?? null,
     buildingsTotal: Number(bldgRows[0]?.total ?? 0),
   };
 }
@@ -4040,6 +4048,8 @@ export async function getContactDetail(
 
 export type LeadImportRow = {
   name: string;
+  firstName: string | null;
+  lastName: string | null;
   email: string | null;
   phone: string | null;
   company: string | null;
@@ -4472,7 +4482,10 @@ async function findOrCreateProperty(input: {
 }): Promise<Property | null> {
   const address = cleanText(input.address);
   const name = cleanText(input.name);
-  if (!address && !name) return null;
+  // properties.name is NOT NULL (044): fall back to the address when the
+  // caller had no real name, so the row is still identifiable.
+  const displayName = name ?? address;
+  if (!displayName) return null;
 
   const identityCondition = address
     ? sql`lower(btrim(${properties.address})) = lower(${address})`
@@ -4493,7 +4506,12 @@ async function findOrCreateProperty(input: {
         input.accountId ??
         null,
       ownerAccountId: existing[0].ownerAccountId ?? input.ownerAccountId ?? null,
-      name: existing[0].name ?? name,
+      // A real typed name replaces an address-as-name placeholder; an
+      // existing real name is never overwritten by intake.
+      name:
+        existing[0].name && existing[0].name !== existing[0].address
+          ? existing[0].name
+          : (name ?? existing[0].name),
       address: existing[0].address ?? address,
       latitude: existing[0].latitude ?? input.latitude ?? null,
       longitude: existing[0].longitude ?? input.longitude ?? null,
@@ -4531,7 +4549,7 @@ async function findOrCreateProperty(input: {
       managementAccountId:
         input.managementAccountId ?? input.accountId ?? null,
       ownerAccountId: input.ownerAccountId ?? null,
-      name,
+      name: displayName,
       address,
       latitude: input.latitude ?? null,
       longitude: input.longitude ?? null,
@@ -4690,103 +4708,6 @@ async function createLeadContactLink(input: {
   });
 }
 
-/**
- * Bulk-insert leads from a CSV import. All rows share the same `sourceTag`
- * and land with enrichment_status = 'pending' so the enrichment worker can
- * pick them up. Returns the inserted rows (with ids) for downstream enqueue.
- */
-export async function createLeadsBatch(
-  rows: LeadImportRow[],
-  sourceTag: string | null
-): Promise<Lead[]> {
-  if (rows.length === 0) return [];
-  const user = await requireUser();
-  const inserted: Lead[] = [];
-
-  for (const r of rows) {
-    const account = await findOrCreateAccount({
-      userId: user.ownerUserId,
-      name: r.company,
-      sourceTag,
-    });
-    const property = await findOrCreateProperty({
-      userId: user.ownerUserId,
-      accountId: account?.id ?? null,
-      name: r.propertyName,
-      address: r.csvAddress,
-      sourceTag,
-      rawSource: r.rawRow,
-      enrichmentStatus: "pending",
-    });
-    const contact = await findOrCreateContact({
-      userId: user.ownerUserId,
-      accountId: account?.id ?? null,
-      name: r.name,
-      email: r.email,
-      phone: r.phone,
-      title: rawRole(r.rawRow),
-      sourceTag,
-    });
-    const propertyContact = await upsertPropertyContact({
-      userId: user.ownerUserId,
-      propertyId: property?.id ?? null,
-      contactId: contact.id,
-      role: rawRole(r.rawRow),
-      sourceTag,
-      importRef: r.rawRow,
-    });
-    const leadRows = await db
-      .insert(leads)
-      .values({
-        userId: user.ownerUserId,
-        accountId: account?.id ?? null,
-        propertyId: property?.id ?? null,
-        primaryContactId: contact.id,
-        sourceTag,
-        name: r.name,
-        email: r.email,
-        phone: r.phone,
-        company: r.company,
-        propertyName: r.propertyName,
-        resolvedAddress: r.csvAddress,
-        rawRow: r.rawRow,
-        enrichmentStatus: "pending" as const,
-      })
-      .returning();
-    const lead = leadRows[0];
-    await createLeadContactLink({
-      userId: user.ownerUserId,
-      leadId: lead.id,
-      contactId: contact.id,
-      propertyContactId: propertyContact?.id ?? null,
-      role: "primary",
-      isPrimary: true,
-    });
-    await createActivityEvent({
-      userId: user.ownerUserId,
-      leadId: lead.id,
-      contactId: contact.id,
-      propertyId: property?.id ?? null,
-      accountId: account?.id ?? null,
-      type: "import",
-      title: "Lead imported",
-      body: "",
-      metadata: { sourceTag, rawRow: r.rawRow },
-      occurredAt: lead.createdAt,
-    });
-    await writeAuditLog({
-      userId: user.ownerUserId,
-      entityType: "lead",
-      entityId: lead.id,
-      action: "create",
-      newValues: lead,
-      source: "import",
-    });
-    inserted.push(lead);
-  }
-
-  return inserted;
-}
 
 export async function updateLeadEnrichment(
   id: string,
@@ -4853,6 +4774,10 @@ export async function updateLead(
       | "propertyName"
       | "resolvedAddress"
       | "notes"
+      | "scopeCategory"
+      | "estValue"
+      | "isLargeJob"
+      | "sourceTag"
     >
   > & {
     /** The person's name — writes to the contact record, never the lead title. */
@@ -6572,6 +6497,22 @@ export async function getLeadSourceTags(): Promise<string[]> {
     .sort();
 }
 
+/**
+ * Every work type this org has ever typed — the vocabulary the intake and
+ * edit forms offer back (Jordan 2026-09-02: "it saves it too, so that you can
+ * select it again next time").
+ */
+export async function getLeadWorkTypes(): Promise<string[]> {
+  const user = await requireUser();
+  const rows = await db.execute(sql`
+    select distinct trim(wt) as wt
+    from leads, unnest(coalesce(scope_category, '{}'::text[])) as wt
+    where user_id = ${user.ownerUserId} and trim(wt) <> ''
+    order by 1
+  `);
+  return (rows as unknown as { wt: string }[]).map((r) => r.wt);
+}
+
 /** Dollar amounts from latest proposal snapshot per bid (`grandTotal`), optional lead source filter. */
 export type DashboardPipelineFinances = {
   /** Open work: bids still in play (draft or sent). */
@@ -8091,6 +8032,13 @@ export type ReportData = {
   bidFunnel: Array<{ status: BidStatus; count: number }>;
   /** Top lead sources with closed-won counts. */
   sources: Array<{ sourceTag: string | null; total: number; won: number }>;
+  /** "What was all this work for" — leads by work type (1c). */
+  workTypes: Array<{
+    workType: string;
+    total: number;
+    estValue: number;
+    won: number;
+  }>;
   pipeline: DashboardPipelineFinances;
   /** Jobs delivered (complete / warranty_watch) with a contract value. */
   delivered: ReportJobsSlice;
@@ -8141,6 +8089,7 @@ export async function getReportData(): Promise<ReportData> {
     takeoffBookedRows,
     bidFunnelRows,
     sourceRows,
+    workTypeRows,
     pipeline,
     deliveredRows,
     activeRows,
@@ -8182,6 +8131,17 @@ export async function getReportData(): Promise<ReportData> {
       .groupBy(leads.sourceTag)
       .orderBy(sql`count(*) desc`)
       .limit(8),
+    db.execute(sql`
+      select wt as work_type,
+        count(*)::int as total,
+        coalesce(sum(est_value::numeric), 0)::float as est_value,
+        count(*) filter (where status = 'won')::int as won
+      from leads, unnest(coalesce(scope_category, '{}'::text[])) as wt
+      where user_id = ${user.ownerUserId} and trim(wt) <> ''
+      group by wt
+      order by count(*) desc
+      limit 12
+    `),
     getDashboardPipelineFinances(),
     db.execute(jobsQuery(["complete", "warranty_watch"])),
     db.execute(
@@ -8250,6 +8210,19 @@ export async function getReportData(): Promise<ReportData> {
     sources: sourceRows.map((r) => ({
       sourceTag: r.sourceTag,
       total: Number(r.total),
+      won: Number(r.won),
+    })),
+    workTypes: (
+      workTypeRows as unknown as {
+        work_type: string;
+        total: number;
+        est_value: number;
+        won: number;
+      }[]
+    ).map((r) => ({
+      workType: r.work_type,
+      total: Number(r.total),
+      estValue: Number(r.est_value),
       won: Number(r.won),
     })),
     pipeline,
@@ -8996,4 +8969,186 @@ export async function saveDraftClarifications(
     .update(bids)
     .set({ draftClarifications: clarifications, updatedAt: new Date() })
     .where(eq(bids.id, bidId));
+}
+
+// ── Lists (1b) ──────────────────────────────────────────────────────────────
+// Jordan 2026-09-02: a list is raw people that "lives on its own". Rows are
+// inert until Convert, which routes through createLead so the contact,
+// property, account, and lead are minted by the one existing write path.
+
+export type List = typeof lists.$inferSelect;
+export type ListRow = typeof listRows.$inferSelect;
+export type ListSummary = List & { convertedCount: number };
+
+export async function getLists(): Promise<ListSummary[]> {
+  const user = await requireUser();
+  const rows = await db
+    .select({
+      list: lists,
+      convertedCount: sql<number>`(
+        select count(*) from ${listRows}
+        where ${listRows.listId} = ${lists.id}
+          and ${listRows.convertedLeadId} is not null
+      )`,
+    })
+    .from(lists)
+    .where(eq(lists.userId, user.ownerUserId))
+    .orderBy(desc(lists.createdAt));
+  return rows.map((r) => ({ ...r.list, convertedCount: Number(r.convertedCount) }));
+}
+
+export async function getList(id: string): Promise<List | null> {
+  const user = await requireUser();
+  const rows = await db
+    .select()
+    .from(lists)
+    .where(and(eq(lists.id, id), eq(lists.userId, user.ownerUserId)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getListRows(
+  listId: string,
+  opts: { q?: string | null; limit?: number; offset?: number } = {},
+): Promise<{ rows: ListRow[]; total: number; convertedCount: number }> {
+  const user = await requireUser();
+  const term = opts.q?.trim();
+  const conds = [
+    eq(listRows.userId, user.ownerUserId),
+    eq(listRows.listId, listId),
+  ];
+  if (term) {
+    const like = `%${term}%`;
+    conds.push(
+      sql`(${listRows.name} ilike ${like}
+        or coalesce(${listRows.company}, '') ilike ${like}
+        or coalesce(${listRows.propertyName}, '') ilike ${like}
+        or coalesce(${listRows.email}, '') ilike ${like})`,
+    );
+  }
+  const where = and(...conds);
+  const [rows, counts] = await Promise.all([
+    db
+      .select()
+      .from(listRows)
+      .where(where)
+      .orderBy(listRows.position, listRows.name)
+      .limit(opts.limit ?? 200)
+      .offset(opts.offset ?? 0),
+    db
+      .select({
+        total: sql<number>`count(*)`,
+        converted: sql<number>`count(*) filter (where ${listRows.convertedLeadId} is not null)`,
+      })
+      .from(listRows)
+      .where(where),
+  ]);
+  return {
+    rows,
+    total: Number(counts[0]?.total ?? 0),
+    convertedCount: Number(counts[0]?.converted ?? 0),
+  };
+}
+
+export async function getListRow(
+  id: string,
+): Promise<(ListRow & { list: List }) | null> {
+  const user = await requireUser();
+  const rows = await db
+    .select({ row: listRows, list: lists })
+    .from(listRows)
+    .innerJoin(lists, eq(lists.id, listRows.listId))
+    .where(and(eq(listRows.id, id), eq(listRows.userId, user.ownerUserId)))
+    .limit(1);
+  return rows[0] ? { ...rows[0].row, list: rows[0].list } : null;
+}
+
+/** Same file name + row count for this org = the same upload (idempotency). */
+export async function findListByFile(
+  fileName: string,
+  rowCount: number,
+): Promise<List | null> {
+  const user = await requireUser();
+  const rows = await db
+    .select()
+    .from(lists)
+    .where(
+      and(
+        eq(lists.userId, user.ownerUserId),
+        eq(lists.fileName, fileName),
+        eq(lists.rowCount, rowCount),
+      ),
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function createListWithRows(input: {
+  name: string;
+  sourceTag: string | null;
+  fileName: string | null;
+  mapping: Record<string, string | null>;
+  rows: LeadImportRow[];
+}): Promise<List> {
+  const user = await requireUser();
+  const inserted = await db
+    .insert(lists)
+    .values({
+      userId: user.ownerUserId,
+      name: input.name,
+      sourceTag: input.sourceTag,
+      fileName: input.fileName,
+      rowCount: input.rows.length,
+      mapping: input.mapping,
+    })
+    .returning();
+  const list = inserted[0];
+  const CHUNK = 500;
+  for (let i = 0; i < input.rows.length; i += CHUNK) {
+    await db.insert(listRows).values(
+      input.rows.slice(i, i + CHUNK).map((r, j) => ({
+        userId: user.ownerUserId,
+        listId: list.id,
+        position: i + j,
+        name: r.name,
+        firstName: r.firstName,
+        lastName: r.lastName,
+        email: r.email,
+        phone: r.phone,
+        company: r.company,
+        propertyName: r.propertyName,
+        address: r.csvAddress,
+        rawRow: r.rawRow,
+      })),
+    );
+  }
+  await writeAuditLog({
+    userId: user.ownerUserId,
+    entityType: "list",
+    entityId: list.id,
+    action: "create",
+    newValues: list,
+    source: "import",
+  });
+  return list;
+}
+
+export async function markListRowConverted(
+  rowId: string,
+  leadId: string,
+): Promise<{ listId: string } | null> {
+  const user = await requireUser();
+  const updated = await db
+    .update(listRows)
+    .set({ convertedLeadId: leadId, convertedAt: new Date() })
+    .where(and(eq(listRows.id, rowId), eq(listRows.userId, user.ownerUserId)))
+    .returning({ listId: listRows.listId });
+  return updated[0] ?? null;
+}
+
+export async function deleteList(id: string): Promise<void> {
+  const user = await requireUser();
+  await db
+    .delete(lists)
+    .where(and(eq(lists.id, id), eq(lists.userId, user.ownerUserId)));
 }

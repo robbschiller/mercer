@@ -117,10 +117,35 @@ export const createBidSchema = z.object({
   next: optionalText,
 });
 
+/** "YYYY-MM-DD" from a date input, or null when blank. */
+const formOptionalDate = z
+  .union([z.string(), z.null(), z.undefined()])
+  .transform((v) => (v == null ? "" : v.trim()))
+  .refine((v) => v === "" || /^\d{4}-\d{2}-\d{2}$/.test(v), {
+    message: "Use a calendar date",
+  })
+  .transform((v) => (v === "" ? null : v));
+
+/** Money typed by hand; stored as numeric text. */
+const formOptionalMoney = z
+  .preprocess(
+    (v) => (v === "" || v == null ? null : Number(v)),
+    z.union([z.number().finite().nonnegative(), z.null()]),
+  )
+  .transform((v) => (v == null ? null : String(v)));
+
 export const updateBidSchema = z.object({
   id: z.string().uuid("Invalid opportunity ID"),
   propertyName: z.string().min(1, "Property name is required"),
   label: optionalText,
+  /* Tracking fields (Phase 2). */
+  quoteAmount: formOptionalMoney,
+  quoteSentAt: formOptionalDate,
+  decisionDueAt: formOptionalDate,
+  /** "" → leave as is (null), else small/large. */
+  jobSize: z
+    .union([z.enum(["small", "large"]), z.literal(""), z.undefined(), z.null()])
+    .transform((v) => (v === "large" ? true : v === "small" ? false : null)),
   address: z.string().min(1, "Address is required"),
   clientName: z.string().min(1, "Client name is required"),
   notes: z.string().default(""),
@@ -306,7 +331,8 @@ const optionalEmail = z
   .transform((v) => (v === "" ? null : v));
 
 export const createLeadSchema = z.object({
-  name: z.string().trim().min(1, "Name is required"),
+  /** The job name — "Full exterior repaint", never a person or the property. */
+  name: z.string().trim().min(1, "Job name is required"),
   contactName: optionalText,
   sourceTag: optionalText,
   email: optionalEmail,
@@ -317,6 +343,8 @@ export const createLeadSchema = z.object({
   propertyId: formOptionalUuid,
   /** Finder: attach an existing contact instead of minting one. */
   contactId: formOptionalUuid,
+  /** Convert (1b): the list row this lead came from — stamped as converted. */
+  listRowId: formOptionalUuid,
   latitude: z.preprocess(
     (v) => (v === "" || v == null ? null : Number(v)),
     z.union([z.number().finite(), z.null()]),
@@ -326,7 +354,7 @@ export const createLeadSchema = z.object({
     z.union([z.number().finite(), z.null()]),
   ),
   googlePlaceId: optionalText,
-  propertyName: optionalText,
+  propertyName: z.string().trim().min(1, "Property name is required"),
   resolvedAddress: optionalText,
   notes: z
     .union([z.string(), z.undefined()])
@@ -473,6 +501,11 @@ export const addCatalogLineItemSchema = z.object({
   quantity: z.coerce.number().positive().default(1),
 });
 
+export const importListSchema = z.object({
+  name: optionalText,
+  sourceTag: optionalText,
+});
+
 export const importLeadsSchema = z.object({
   sourceTag: optionalText,
 });
@@ -489,17 +522,39 @@ export const scheduleTakeoffSchema = z.object({
 
 export const updateLeadSchema = z.object({
   id: z.string().uuid("Invalid lead ID"),
-  name: z.string().trim().min(1, "Project name is required"),
+  name: z.string().trim().min(1, "Job name is required"),
   contactFirstName: optionalText,
   contactLastName: optionalText,
   email: optionalEmail,
   phone: optionalText,
   company: optionalText,
-  propertyName: optionalText,
+  propertyName: z.string().trim().min(1, "Property name is required"),
   resolvedAddress: optionalText,
   notes: z
     .union([z.string(), z.undefined()])
     .transform((v) => (v ?? "").trim()),
+  sourceTag: optionalText,
+  isLargeJob: z.preprocess(
+    (v) => v === "on" || v === "true" || v === true,
+    z.boolean(),
+  ),
+  estValue: z
+    .preprocess(
+      (v) => (v === "" || v == null ? null : Number(v)),
+      z.union([z.number().finite(), z.null()]),
+    )
+    .transform((v) => (v == null ? null : String(v))),
+  scopeCategory: z.preprocess(
+    (v) => {
+      if (typeof v !== "string") return null;
+      const arr = v
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return arr.length ? arr : null;
+    },
+    z.union([z.array(z.string()), z.null()]),
+  ),
 });
 
 export const enrichLeadActionSchema = z.object({
