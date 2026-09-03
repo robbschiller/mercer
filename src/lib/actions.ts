@@ -217,7 +217,10 @@ export async function signUpAction(formData: FormData) {
     redirect(`/signup?error=${encodeURIComponent(error.message)}`);
   }
 
-  redirect("/login?message=Check your email to confirm your account");
+  // Email auto-confirm is on for this project, so signUp already set the
+  // session cookie — go straight in rather than telling people to wait for a
+  // confirmation email that never comes.
+  redirect("/dashboard");
 }
 
 export async function signOutAction() {
