@@ -36,9 +36,11 @@ import { DeleteBidButton } from "@/components/delete-bid-button";
 import { OsmFootprintsSection } from "@/components/osm-footprints-section";
 import { OsmFootprintsSkeleton } from "@/components/page-loading";
 import {
+  bidStatusLabel,
   projectStatusLabel,
   projectStatusVariant,
 } from "@/lib/status-meta";
+import { PageContainer, PageError, PageHeader } from "@/components/page-chrome";
 
 export default async function BidPage({
   params,
@@ -118,24 +120,34 @@ export default async function BidPage({
   ].join(" · ");
 
   return (
-    <div className="container mx-auto max-w-5xl px-4 py-8 flex flex-col gap-6">
+    <PageContainer className="flex flex-col gap-6">
       <BreadcrumbLabel segment={id} label={bidLabel} />
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/opportunities">&larr; Opportunities</Link>
-        </Button>
-      </div>
-
-      {error && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+      <PageHeader
+        className="mb-0"
+        back={{ href: "/opportunities", label: "Opportunities" }}
+        title={bidLabel}
+        badge={<Badge variant="secondary">{bidStatusLabel(bid.status)}</Badge>}
+        description={
+          [
+            bid.label ? bid.propertyName : null,
+            bid.clientName &&
+            bid.clientName !== bid.label &&
+            bid.clientName !== bid.propertyName
+              ? bid.clientName
+              : null,
+            bid.address,
+          ]
+            .filter(Boolean)
+            .join(" · ") || undefined
+        }
+      />
+      <PageError message={error} />
 
       <BidSummary
         bid={bid}
         quoteTotal={pricing.grandTotal}
         contactName={primaryContactName}
+        compact
       />
 
       {project && (
@@ -298,6 +310,6 @@ export default async function BidPage({
           <DeleteBidButton bid={bid} />
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 }

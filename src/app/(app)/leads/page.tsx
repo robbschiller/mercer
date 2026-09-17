@@ -2,9 +2,9 @@ import Link from "next/link";
 import {
   ArrowUpRight,
   Building2,
-  Search,
   Upload,
   UserPlus,
+  UserRoundSearch,
 } from "lucide-react";
 import {
   LEADS_FOLLOW_UP_FILTERS,
@@ -12,6 +12,7 @@ import {
   LEADS_SORTS,
   getLeadPropertyGroups,
   getLeadSourceOptions,
+  getLeadStatusCounts,
   getLeads,
   type Lead,
   type LeadPropertyGroup,
@@ -27,6 +28,24 @@ import {
 } from "@/lib/status-meta";
 import { leadFullName } from "@/lib/leads/name";
 import { LeadsGridRow } from "@/components/leads-row";
+import {
+  EmptyState,
+  FilterChip,
+  FilterChipRow,
+  PageContainer,
+  PageError,
+  PageHeader,
+  PageNotice,
+  Pagination,
+  ResultSummary,
+  SearchForm,
+  Segmented,
+  SegmentedLink,
+  TABLE_HEAD_CELL,
+  TableFrame,
+  Toolbar,
+  ToolbarSelect,
+} from "@/components/page-chrome";
 import { cn } from "@/lib/utils";
 
 type LeadsView = "property" | "contact";
@@ -182,11 +201,12 @@ export default async function LeadsPage({
     offset: (query.page - 1) * query.limit,
   };
 
-  const [listResult, sourceOptions] = await Promise.all([
+  const [listResult, sourceOptions, counts] = await Promise.all([
     query.view === "property"
       ? getLeadPropertyGroups(listOptions)
       : getLeads(listOptions),
     getLeadSourceOptions(),
+    getLeadStatusCounts({ sourceTag: query.source }),
   ]);
 
   const propertyGroups = "groups" in listResult ? listResult.groups : null;
@@ -200,87 +220,42 @@ export default async function LeadsPage({
   const rangeEnd = offset + visible;
 
   return (
-    <div className="relative mx-auto w-full max-w-[1240px] px-6 pb-24 pt-7">
-      {/* header — the sidebar already says Leads, so the row carries the
-          attribute filters instead of a title. */}
-      <header className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-3">
-        <h1 className="sr-only">Leads</h1>
-        <div className="flex items-center gap-2.5">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
-            View
-          </span>
-          <div className="flex gap-0.5 rounded-[9px] border bg-muted/70 p-[3px]">
-            <LensButton
-              href={leadsHref(query, { view: "property", page: 1 })}
-              active={query.view === "property"}
-            >
-              <Building2 className="size-3" />
-              By property
-            </LensButton>
-            <LensButton
-              href={leadsHref(query, { view: "contact", page: 1 })}
-              active={query.view === "contact"}
-            >
-              <UserPlus className="size-3" />
-              By contact
-            </LensButton>
-          </div>
-        </div>
-        <div className="flex items-center gap-2.5">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
-            Follow-up
-          </span>
-          <div className="flex gap-0.5 rounded-[9px] border bg-muted/70 p-[3px]">
-            <LensButton
-              href={leadsHref(query, { followUp: null, page: 1 })}
-              active={query.followUp == null}
-            >
-              All
-            </LensButton>
-            {LEADS_FOLLOW_UP_FILTERS.map((f) => (
-              <LensButton
-                key={f}
-                href={leadsHref(query, { followUp: f, page: 1 })}
-                active={query.followUp === f}
-              >
-                {FOLLOW_UP_LABELS[f]}
-              </LensButton>
-            ))}
-          </div>
-        </div>
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          <Button variant="outline" asChild>
-            <Link href="/lists/new">
-              <Upload className="size-4" />
-              Import list
-            </Link>
-          </Button>
-          <Button asChild>
-            <Link href="/leads/new">
-              <UserPlus className="size-4" />
-              New lead
-            </Link>
-          </Button>
-        </div>
-      </header>
+    <PageContainer>
+      <PageHeader
+        eyebrow={{ icon: <UserRoundSearch className="size-3.5" />, label: "Intake" }}
+        title="Leads"
+        description="Everyone who asked for work, grouped by the building they manage. Convert a lead once it is ready to quote."
+        actions={
+          <>
+            <Button variant="outline" asChild>
+              <Link href="/lists/new">
+                <Upload className="size-4" />
+                Import list
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href="/leads/new">
+                <UserPlus className="size-4" />
+                New lead
+              </Link>
+            </Button>
+          </>
+        }
+      />
 
       {params.imported && (
-        <div className="mb-4 rounded-xl border border-emerald-600/30 bg-emerald-600/5 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-400">
+        <PageNotice>
           Imported {params.imported} lead{params.imported === "1" ? "" : "s"}.
-        </div>
+        </PageNotice>
       )}
-      {params.error && (
-        <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-2 text-sm text-destructive">
-          {params.error}
-        </div>
-      )}
+      <PageError message={params.error} />
 
-      {/* status rail */}
-      <div className="mb-4 flex flex-wrap gap-2">
+      <FilterChipRow>
         <FilterChip
           href={leadsHref(query, { status: null, page: 1 })}
           active={query.status == null}
           label="All"
+          count={counts.total}
         />
         {LEAD_STATUSES.map((s) => (
           <FilterChip
@@ -288,161 +263,133 @@ export default async function LeadsPage({
             href={leadsHref(query, { status: s, page: 1 })}
             active={query.status === s}
             label={leadStatusLabel(s)}
+            count={counts[s]}
             dot={LEAD_STATUS_DOTS[s]}
           />
         ))}
-      </div>
+      </FilterChipRow>
 
-      {/* search + source + view toolbar */}
-      <div className="mb-3 flex flex-wrap items-center gap-2 px-0.5">
-        <form action="/leads" className="flex flex-wrap items-center gap-2">
-          {query.status && (
-            <input type="hidden" name="status" value={query.status} />
-          )}
-          {query.followUp && (
-            <input type="hidden" name="followUp" value={query.followUp} />
-          )}
-          {query.sort && <input type="hidden" name="sort" value={query.sort} />}
-          {query.limit !== LEADS_PAGE_DEFAULT_LIMIT && (
-            <input type="hidden" name="limit" value={query.limit} />
-          )}
-          {query.view === "contact" && (
-            <input type="hidden" name="view" value="contact" />
-          )}
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/70" />
-            <input
-              type="search"
-              name="q"
-              defaultValue={query.q}
-              placeholder="Search leads, companies…"
-              className="h-9 w-56 rounded-[10px] border bg-card pl-9 pr-3 text-[13.5px] outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-foreground/30"
-            />
-          </div>
-          <select
-            name="source"
-            defaultValue={query.source ?? ""}
-            className="inline-flex h-9 items-center gap-2 rounded-[10px] border bg-card px-3 text-[13.5px] font-medium text-foreground/80 outline-none transition-colors focus:border-foreground/30"
-          >
+      <Toolbar
+        summary={
+          <ResultSummary
+            start={rangeStart}
+            end={rangeEnd}
+            total={total}
+            noun={query.view === "property" ? "properties" : "leads"}
+          />
+        }
+      >
+        <SearchForm
+          action="/leads"
+          q={query.q}
+          placeholder="Search leads, companies…"
+          hidden={{
+            status: query.status,
+            followUp: query.followUp,
+            sort: query.sort,
+            limit:
+              query.limit !== LEADS_PAGE_DEFAULT_LIMIT ? query.limit : null,
+            view: query.view === "contact" ? "contact" : null,
+          }}
+        >
+          <ToolbarSelect name="source" defaultValue={query.source ?? ""}>
             <option value="">All sources</option>
             {sourceOptions.map((opt: LeadSourceOption) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
             ))}
-          </select>
-          <Button type="submit" variant="outline" className="h-9">
-            Apply
-          </Button>
-        </form>
-        <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-          <b className="font-semibold text-foreground/80">
-            {rangeStart}–{rangeEnd}
-          </b>{" "}
-          of <b className="font-semibold text-foreground/80">{total}</b>{" "}
-          {query.view === "property" ? "properties" : "leads"}
-        </span>
-      </div>
+          </ToolbarSelect>
+        </SearchForm>
+        <Segmented label="View">
+          <SegmentedLink
+            href={leadsHref(query, { view: "property", page: 1 })}
+            active={query.view === "property"}
+          >
+            <Building2 className="size-3" />
+            By property
+          </SegmentedLink>
+          <SegmentedLink
+            href={leadsHref(query, { view: "contact", page: 1 })}
+            active={query.view === "contact"}
+          >
+            <UserPlus className="size-3" />
+            By contact
+          </SegmentedLink>
+        </Segmented>
+        <Segmented label="Follow-up">
+          <SegmentedLink
+            href={leadsHref(query, { followUp: null, page: 1 })}
+            active={query.followUp == null}
+          >
+            All
+          </SegmentedLink>
+          {LEADS_FOLLOW_UP_FILTERS.map((f) => (
+            <SegmentedLink
+              key={f}
+              href={leadsHref(query, { followUp: f, page: 1 })}
+              active={query.followUp === f}
+            >
+              {FOLLOW_UP_LABELS[f]}
+            </SegmentedLink>
+          ))}
+        </Segmented>
+      </Toolbar>
 
       {visible === 0 ? (
-        <EmptyState query={query} hasFilters={hasFilters} />
+        hasFilters ? (
+          <EmptyState
+            icon={<UserRoundSearch />}
+            title={query.q ? `No leads match “${query.q}”` : "No leads match"}
+            description="Nothing in this view with the current filters. Clear them to see every open lead again."
+            actions={
+              <Button variant="outline" asChild>
+                <Link
+                  href={
+                    query.view === "contact" ? "/leads?view=contact" : "/leads"
+                  }
+                >
+                  Clear filters
+                </Link>
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState
+            icon={<UserPlus />}
+            title="No leads yet"
+            description="Import a CSV from a trade-show list, or add a single lead the moment a contact asks for work — it lands here and on the pipeline."
+            actions={
+              <>
+                <Button asChild>
+                  <Link href="/leads/new">
+                    <UserPlus className="size-4" />
+                    New lead
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/lists/new">
+                    <Upload className="size-4" />
+                    Import list
+                  </Link>
+                </Button>
+              </>
+            }
+          />
+        )
       ) : propertyGroups ? (
         <PropertyGroupsTable groups={propertyGroups} />
       ) : (
         <ContactLeadsTable leads={rows} />
       )}
 
-      {/* pagination */}
-      {total > limit && (
-        <div className="mt-4 flex items-center gap-3">
-          {query.page > 1 ? (
-            <Link
-              href={leadsHref(query, { page: query.page - 1 })}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border bg-card px-3 text-xs font-medium text-foreground/80 transition-colors hover:border-foreground/25 hover:bg-muted/40"
-            >
-              ‹ Prev
-            </Link>
-          ) : (
-            <span className="inline-flex h-8 items-center rounded-lg border bg-muted/30 px-3 text-xs font-medium text-muted-foreground/50">
-              ‹ Prev
-            </span>
-          )}
-          {rangeEnd < total ? (
-            <Link
-              href={leadsHref(query, { page: query.page + 1 })}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border bg-card px-3 text-xs font-medium text-foreground/80 transition-colors hover:border-foreground/25 hover:bg-muted/40"
-            >
-              Next ›
-            </Link>
-          ) : (
-            <span className="inline-flex h-8 items-center rounded-lg border bg-muted/30 px-3 text-xs font-medium text-muted-foreground/50">
-              Next ›
-            </span>
-          )}
-          <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-            {rangeStart}–{rangeEnd} of {total}
-          </span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function FilterChip({
-  href,
-  active,
-  label,
-  dot,
-}: {
-  href: string;
-  active: boolean;
-  label: string;
-  dot?: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "inline-flex h-[38px] items-center gap-2 whitespace-nowrap rounded-[10px] border px-3.5 text-[13.5px] font-medium transition-colors",
-        active
-          ? "border-foreground bg-foreground text-background"
-          : "bg-card text-foreground/80 hover:border-foreground/25 hover:bg-muted/40",
-      )}
-    >
-      {dot && (
-        <span
-          className={cn(
-            "size-1.5 rounded-full",
-            active ? "bg-background/80" : dot,
-          )}
-        />
-      )}
-      {label}
-    </Link>
-  );
-}
-
-function LensButton({
-  href,
-  active,
-  children,
-}: {
-  href: string;
-  active: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-xs font-medium transition-colors",
-        active
-          ? "bg-background text-foreground shadow-sm"
-          : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {children}
-    </Link>
+      <Pagination
+        page={query.page}
+        limit={limit}
+        total={total}
+        hrefFor={(p) => leadsHref(query, { page: p })}
+      />
+    </PageContainer>
   );
 }
 
@@ -476,8 +423,8 @@ const CONTACT_GRID =
 
 function ContactLeadsTable({ leads }: { leads: Lead[] }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
-      <div className="min-w-[940px]">
+    <TableFrame minWidth="min-w-[940px]">
+      <>
         <div
           className={cn(
             "grid items-center gap-x-2.5 border-b bg-muted/30 py-2.5 pl-4 pr-10",
@@ -488,7 +435,7 @@ function ContactLeadsTable({ leads }: { leads: Lead[] }) {
             (h) => (
               <span
                 key={h}
-                className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-muted-foreground"
+                className={TABLE_HEAD_CELL}
               >
                 {h}
               </span>
@@ -500,8 +447,8 @@ function ContactLeadsTable({ leads }: { leads: Lead[] }) {
             <ContactLeadRow key={lead.id} lead={lead} />
           ))}
         </div>
-      </div>
-    </div>
+      </>
+    </TableFrame>
   );
 }
 
@@ -576,8 +523,8 @@ const PROPERTY_GRID =
 
 function PropertyGroupsTable({ groups }: { groups: LeadPropertyGroup[] }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
-      <div className="min-w-[940px]">
+    <TableFrame minWidth="min-w-[940px]">
+      <>
         <div
           className={cn(
             "grid items-center gap-x-2.5 border-b bg-muted/30 py-2.5 pl-4 pr-10",
@@ -594,7 +541,7 @@ function PropertyGroupsTable({ groups }: { groups: LeadPropertyGroup[] }) {
           ].map((h) => (
             <span
               key={h}
-              className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-muted-foreground"
+              className={TABLE_HEAD_CELL}
             >
               {h}
             </span>
@@ -605,8 +552,8 @@ function PropertyGroupsTable({ groups }: { groups: LeadPropertyGroup[] }) {
             <PropertyGroupRow key={group.key} group={group} />
           ))}
         </div>
-      </div>
-    </div>
+      </>
+    </TableFrame>
   );
 }
 
@@ -738,65 +685,3 @@ function PropertyGroupRow({ group }: { group: LeadPropertyGroup }) {
   );
 }
 
-function EmptyState({
-  query,
-  hasFilters,
-}: {
-  query: LeadsQuery;
-  hasFilters: boolean;
-}) {
-  return (
-    <div className="flex flex-col items-center rounded-2xl border bg-card px-8 py-14 text-center shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
-      <span className="mb-5 flex size-[54px] items-center justify-center rounded-2xl bg-muted text-foreground/60">
-        <UserPlus className="size-6" />
-      </span>
-      {hasFilters ? (
-        <>
-          <h3 className="mb-2 text-xl font-semibold tracking-tight">
-            {query.q ? `No leads match “${query.q}”` : "No leads match"}
-          </h3>
-          <p className="max-w-md text-sm leading-relaxed text-muted-foreground [text-wrap:pretty]">
-            Nothing in this view with the current filters. Clear them to see
-            every open lead again.
-          </p>
-          <div className="mt-6 flex gap-2">
-            <Button variant="outline" asChild>
-              <Link
-                href={
-                  query.view === "contact" ? "/leads?view=contact" : "/leads"
-                }
-              >
-                Clear filters
-              </Link>
-            </Button>
-          </div>
-        </>
-      ) : (
-        <>
-          <h3 className="mb-2 text-xl font-semibold tracking-tight">
-            No leads yet
-          </h3>
-          <p className="max-w-md text-sm leading-relaxed text-muted-foreground [text-wrap:pretty]">
-            Import a CSV from a trade-show list, or add a single lead the
-            moment a contact asks for work — it lands here and on the
-            pipeline.
-          </p>
-          <div className="mt-6 flex gap-2">
-            <Button asChild>
-              <Link href="/leads/new">
-                <UserPlus className="size-4" />
-                New lead
-              </Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/lists/new">
-                <Upload className="size-4" />
-                Import list
-              </Link>
-            </Button>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}

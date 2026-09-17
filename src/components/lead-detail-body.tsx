@@ -321,10 +321,11 @@ export function LeadDetailBody({
               <Button variant="outline" asChild>
                 <Link href={`/opportunities/${linkedBid.id}`}>View linked opportunity</Link>
               </Button>
-            ) : null}
-            <Button variant="amber" asChild>
-              <Link href={`/opportunities/new?leadId=${lead.id}`}>Convert to opportunity</Link>
-            </Button>
+            ) : (
+              <Button variant="amber" asChild>
+                <Link href={`/opportunities/new?leadId=${lead.id}`}>Convert to opportunity</Link>
+              </Button>
+            )}
           </div>
         </>
       )}
@@ -475,7 +476,7 @@ function EditForm({
                 name="estValue"
                 type="number"
                 min="0"
-                step="1000"
+                step="0.01"
                 defaultValue={lead.estValue ?? ""}
               />
             </Field>

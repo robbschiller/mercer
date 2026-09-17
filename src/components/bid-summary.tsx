@@ -47,11 +47,14 @@ export function BidSummary({
   bid,
   quoteTotal = null,
   contactName = null,
+  compact = false,
 }: {
   bid: Bid;
   /** The engine's computed total, shown as an estimate when no quote is typed. */
   quoteTotal?: number | null;
   contactName?: string | null;
+  /** The page header already names the opportunity; show only the tracking strip. */
+  compact?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [editSession, setEditSession] = useState(0);
@@ -292,7 +295,7 @@ export function BidSummary({
                     name="quoteAmount"
                     type="number"
                     min="0"
-                    step="100"
+                    step="0.01"
                     value={quoteAmount}
                     onChange={(e) => setQuoteAmount(e.target.value)}
                     placeholder={quoteTotal ? String(Math.round(quoteTotal)) : "0"}
@@ -376,28 +379,34 @@ export function BidSummary({
               <ClipboardList className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-base">
-                  {bid.label || bid.propertyName}
-                </CardTitle>
-                <Badge variant="secondary" className="shrink-0">
-                  {bidStatusLabel(bid.status)}
-                </Badge>
-              </div>
-              <CardDescription>
-                {[
-                  bid.label ? bid.propertyName : null,
-                  // Skip a client that merely repeats the title (old test rows).
-                  bid.clientName &&
-                  bid.clientName !== bid.label &&
-                  bid.clientName !== bid.propertyName
-                    ? bid.clientName
-                    : null,
-                  bid.address,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </CardDescription>
+              {compact ? (
+                <CardTitle className="text-base">Tracking</CardTitle>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base">
+                      {bid.label || bid.propertyName}
+                    </CardTitle>
+                    <Badge variant="secondary" className="shrink-0">
+                      {bidStatusLabel(bid.status)}
+                    </Badge>
+                  </div>
+                  <CardDescription>
+                    {[
+                      bid.label ? bid.propertyName : null,
+                      // Skip a client that merely repeats the title (old test rows).
+                      bid.clientName &&
+                      bid.clientName !== bid.label &&
+                      bid.clientName !== bid.propertyName
+                        ? bid.clientName
+                        : null,
+                      bid.address,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </CardDescription>
+                </>
+              )}
               <TrackingStrip
                 bid={bid}
                 quoteTotal={quoteTotal}

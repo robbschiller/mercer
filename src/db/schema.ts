@@ -1084,6 +1084,9 @@ export const listRows = pgTable("list_rows", {
   propertyName: text("property_name"),
   address: text("address"),
   rawRow: jsonb("raw_row").$type<Record<string, string>>(),
+  /** Outreach from the list, before conversion. Carried onto the lead. */
+  lastContactedAt: timestamp("last_contacted_at", { withTimezone: true }),
+  contactAttempts: integer("contact_attempts").notNull().default(0),
   /** Set by Convert — the row stays on the list, marked done. */
   convertedLeadId: uuid("converted_lead_id").references(() => leads.id, {
     onDelete: "set null",

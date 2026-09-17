@@ -4,10 +4,24 @@ import {
   ArrowUpRight,
   Calculator,
   FilePlus2,
+  FileSpreadsheet,
   Search,
 } from "lucide-react";
 import { getBidsWithSummary } from "@/lib/store";
 import { Button } from "@/components/ui/button";
+import {
+  EmptyState,
+  FilterChip,
+  FilterChipRow,
+  PageContainer,
+  PageHeader,
+  Pagination,
+  ResultSummary,
+  SearchForm,
+  TABLE_HEAD_CELL,
+  TableFrame,
+  Toolbar,
+} from "@/components/page-chrome";
 import {
   BID_STATUSES,
   bidStatusLabel,
@@ -127,61 +141,46 @@ export default async function BidsPage({
   const countFor = (s: BidStatus) => all.filter((b) => b.status === s).length;
 
   return (
-    <div className="relative mx-auto w-full max-w-[1240px] px-6 pb-24 pt-7">
-      {/* header */}
-      <header className="mb-5 flex items-end gap-5">
-        <div>
-          <h1 className="text-[27px] font-semibold leading-tight tracking-tight">
-            Opportunities
-          </h1>
-          <p className="mt-1 text-[13.5px] text-muted-foreground">
-            Every scoped bid — from first takeoff to signed contract.
-          </p>
-        </div>
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+    <PageContainer>
+      <PageHeader
+        eyebrow={{ icon: <FileSpreadsheet className="size-3.5" />, label: "Quoting" }}
+        title="Opportunities"
+        description="Every scoped bid — from first takeoff to signed contract."
+        actions={
           <Button asChild>
             <Link href="/opportunities/new">
               <FilePlus2 className="size-4" />
               New opportunity
             </Link>
           </Button>
-        </div>
-      </header>
+        }
+      />
 
       {all.length === 0 ? (
-        <div className="flex flex-col items-center rounded-2xl border bg-card px-8 py-14 text-center shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
-          <span className="mb-5 flex size-[54px] items-center justify-center rounded-2xl bg-muted text-foreground/60">
-            <Calculator className="size-6" />
-          </span>
-          <h3 className="mb-2 text-xl font-semibold tracking-tight">
-            No opportunities yet
-          </h3>
-          <p className="max-w-md text-sm leading-relaxed text-muted-foreground [text-wrap:pretty]">
-            An opportunity is a scoped property with a number on it. Create
-            one from a lead after the takeoff, or start one fresh from an
-            address.
-          </p>
-          <div className="mt-6 flex gap-2">
+        <EmptyState
+          icon={<Calculator />}
+          title="No opportunities yet"
+          description="An opportunity is a scoped property with a number on it. Create one from a lead after the takeoff, or start one fresh from an address."
+          actions={
             <Button asChild>
               <Link href="/opportunities/new">
                 <FilePlus2 className="size-4" />
                 New opportunity
               </Link>
             </Button>
-          </div>
-        </div>
+          }
+        />
       ) : (
         <>
-          {/* status rail */}
-          <div className="mb-4 flex flex-wrap gap-2">
-            <StatusChip
+          <FilterChipRow>
+            <FilterChip
               href={bidsHref({ q })}
               active={status == null}
               label="All"
               count={all.length}
             />
             {BID_STATUSES.map((s) => (
-              <StatusChip
+              <FilterChip
                 key={s}
                 href={bidsHref({ q, status: s })}
                 active={status === s}
@@ -190,53 +189,42 @@ export default async function BidsPage({
                 dot={STATUS_DOTS[s]}
               />
             ))}
-          </div>
+          </FilterChipRow>
 
-          {/* search + result meta */}
-          <div className="mb-2 flex flex-wrap items-center gap-3.5 px-0.5">
-            <form action="/opportunities" className="relative">
-              {status && <input type="hidden" name="status" value={status} />}
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/70" />
-              <input
-                type="search"
-                name="q"
-                defaultValue={q}
-                placeholder="Search properties, clients…"
-                className="h-9 w-56 rounded-[10px] border bg-card pl-9 pr-3 text-[13.5px] outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-foreground/30"
+          <Toolbar
+            summary={
+              <ResultSummary
+                start={rangeStart}
+                end={rangeEnd}
+                total={total}
+                noun="opportunities"
               />
-            </form>
-            <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-              <b className="font-semibold text-foreground/80">
-                {rangeStart}–{rangeEnd}
-              </b>{" "}
-              of <b className="font-semibold text-foreground/80">{total}</b>{" "}
-              opportunities
-            </span>
-          </div>
+            }
+          >
+            <SearchForm
+              action="/opportunities"
+              q={q}
+              placeholder="Search properties, clients…"
+              hidden={{ status }}
+            />
+          </Toolbar>
 
           {rows.length === 0 ? (
-            <div className="flex flex-col items-center rounded-2xl border bg-card px-8 py-14 text-center shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
-              <span className="mb-5 flex size-[54px] items-center justify-center rounded-2xl bg-muted text-foreground/60">
-                <Search className="size-6" />
-              </span>
-              <h3 className="mb-2 text-xl font-semibold tracking-tight">
-                {q ? `No opportunities match “${q}”` : "Nothing in this view"}
-              </h3>
-              <p className="max-w-md text-sm leading-relaxed text-muted-foreground [text-wrap:pretty]">
-                No opportunities match the current filters. Clear them to see
-                the full list.
-              </p>
-              {hasFilters && (
-                <div className="mt-6 flex gap-2">
+            <EmptyState
+              icon={<Search />}
+              title={q ? `No opportunities match “${q}”` : "Nothing in this view"}
+              description="No opportunities match the current filters. Clear them to see the full list."
+              actions={
+                hasFilters ? (
                   <Button variant="outline" asChild>
                     <Link href="/opportunities">Clear filters</Link>
                   </Button>
-                </div>
-              )}
-            </div>
+                ) : undefined
+              }
+            />
           ) : (
-            <div className="overflow-x-auto rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
-              <div className="min-w-[940px]">
+            <TableFrame minWidth="min-w-[940px]">
+              <>
                 <div className={cn("grid items-center gap-x-2.5 border-b bg-muted/30 py-2.5 pl-4 pr-10", GRID)}>
                   {[
                     "Opportunity",
@@ -247,10 +235,7 @@ export default async function BidsPage({
                     "Age",
                     "Next",
                   ].map((h) => (
-                    <span
-                      key={h}
-                      className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-muted-foreground"
-                    >
+                    <span key={h} className={TABLE_HEAD_CELL}>
                       {h}
                     </span>
                   ))}
@@ -260,94 +245,24 @@ export default async function BidsPage({
                     <BidRow key={bid.id} bid={bid} />
                   ))}
                 </div>
-              </div>
-            </div>
+              </>
+            </TableFrame>
           )}
 
-          {/* pagination */}
-          {total > PAGE_SIZE && (
-            <div className="mt-4 flex items-center gap-3">
-              {page > 1 ? (
-                <Link
-                  href={bidsHref({ q, status, page: page - 1 })}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border bg-card px-3 text-xs font-medium text-foreground/80 transition-colors hover:border-foreground/25 hover:bg-muted/40"
-                >
-                  ‹ Prev
-                </Link>
-              ) : (
-                <span className="inline-flex h-8 items-center rounded-lg border bg-muted/30 px-3 text-xs font-medium text-muted-foreground/50">
-                  ‹ Prev
-                </span>
-              )}
-              {rangeEnd < total ? (
-                <Link
-                  href={bidsHref({ q, status, page: page + 1 })}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border bg-card px-3 text-xs font-medium text-foreground/80 transition-colors hover:border-foreground/25 hover:bg-muted/40"
-                >
-                  Next ›
-                </Link>
-              ) : (
-                <span className="inline-flex h-8 items-center rounded-lg border bg-muted/30 px-3 text-xs font-medium text-muted-foreground/50">
-                  Next ›
-                </span>
-              )}
-              <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-                {rangeStart}–{rangeEnd} of {total}
-              </span>
-            </div>
-          )}
+          <Pagination
+            page={page}
+            limit={PAGE_SIZE}
+            total={total}
+            hrefFor={(p) => bidsHref({ q, status, page: p })}
+          />
         </>
       )}
-    </div>
+    </PageContainer>
   );
 }
 
 const GRID =
   "grid-cols-[minmax(180px,1.6fr)_minmax(110px,1fr)_100px_150px_80px_48px_minmax(120px,auto)]";
-
-function StatusChip({
-  href,
-  active,
-  label,
-  count,
-  dot,
-}: {
-  href: string;
-  active: boolean;
-  label: string;
-  count: number;
-  dot?: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "inline-flex h-[38px] items-center gap-2 whitespace-nowrap rounded-[10px] border px-3.5 text-[13.5px] font-medium transition-colors",
-        active
-          ? "border-foreground bg-foreground text-background"
-          : "bg-card text-foreground/80 hover:border-foreground/25 hover:bg-muted/40",
-      )}
-    >
-      {dot && (
-        <span
-          className={cn(
-            "size-1.5 rounded-full",
-            active ? "bg-background/80" : dot,
-          )}
-        />
-      )}
-      {label}
-      <span
-        className={cn(
-          "font-semibold tabular-nums",
-          active ? "text-background/90" : "text-muted-foreground",
-        )}
-      >
-        {count}
-      </span>
-    </Link>
-  );
-}
 
 function BidRow({ bid }: { bid: BidSummary }) {
   const href = `/opportunities/${bid.id}`;

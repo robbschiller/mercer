@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SubmitButton } from "@/components/submit-button";
+import { PageContainer, PageHeader } from "@/components/page-chrome";
 
 export default async function NewListPage({
   searchParams,
@@ -20,23 +21,12 @@ export default async function NewListPage({
   const { error } = await searchParams;
 
   return (
-    <div className="container mx-auto max-w-2xl px-4 py-8">
-      <div className="mb-6">
-        <Link
-          href="/lists"
-          className="text-sm text-muted-foreground hover:text-foreground"
-        >
-          ← Lists
-        </Link>
-      </div>
-      <div className="mb-6 rounded-lg border bg-muted/30 p-4">
-        <p className="text-sm font-medium">Import a list</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          A list is raw people — a trade-show export, a purchased roster. It
-          lives on its own. Nothing else is created until you open the list
-          and convert someone into a lead.
-        </p>
-      </div>
+    <PageContainer width="narrow">
+      <PageHeader
+        back={{ href: "/lists", label: "Lists" }}
+        title="Import a list"
+        description="A list is raw people — a trade-show export, a purchased roster. It lives on its own. Nothing else is created until you open the list and convert someone into a lead."
+      />
 
       <Card>
         <CardHeader>
@@ -110,6 +100,6 @@ export default async function NewListPage({
           </form>
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 }

@@ -1,6 +1,5 @@
 import Link from "next/link";
 import {
-  ArrowLeft,
   BellRing,
   Building,
   ChevronsUp,
@@ -41,6 +40,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/submit-button";
 import { projectStatusLabel, type ProjectStatus } from "@/lib/status-meta";
 import { cn } from "@/lib/utils";
+import { BackLink } from "@/components/page-chrome";
 
 /**
  * The building's whole story — aerial, ledger, project timeline, relationship
@@ -257,13 +257,7 @@ export function PropertyProfile({
 
   return (
     <>
-      <Link
-        href={backHref}
-        className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" />
-        {backLabel}
-      </Link>
+      <BackLink href={backHref} label={backLabel} className="mb-2.5" />
 
       {/* ── Hero ── */}
       <div

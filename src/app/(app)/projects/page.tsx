@@ -1,4 +1,3 @@
-import Link from "next/link";
 import {
   AlertTriangle,
   ArrowDownNarrowWide,
@@ -15,6 +14,18 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { getJobsList, type JobsListRow } from "@/lib/store";
+import {
+  EmptyState,
+  FilterChip,
+  FilterChipRow,
+  PageContainer,
+  PageHeader,
+  ResultSummary,
+  SearchForm,
+  Toolbar,
+} from "@/components/page-chrome";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import {
   PROJECT_STATUSES,
   projectStatusLabel,
@@ -75,12 +86,29 @@ function parseStatus(raw: string | undefined): ProjectStatus | undefined {
 export default async function ProjectsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; q?: string }>;
 }) {
-  const { status } = await searchParams;
+  const { status, q: rawQ } = await searchParams;
   const filter = parseStatus(status);
+  const q = (rawQ ?? "").trim();
+  const needle = q.toLowerCase();
   const all = await getJobsList();
-  const jobs = filter ? all.filter((j) => j.status === filter) : all;
+  const jobs = all.filter((j) => {
+    if (filter && j.status !== filter) return false;
+    if (!needle) return true;
+    return [j.propertyName, j.clientName].some((v) =>
+      v?.toLowerCase().includes(needle),
+    );
+  });
+  const jobsHref = (patch: { status?: ProjectStatus | null; q?: string }) => {
+    const sp = new URLSearchParams();
+    const nextQ = patch.q ?? q;
+    const nextStatus = "status" in patch ? patch.status : filter;
+    if (nextQ) sp.set("q", nextQ);
+    if (nextStatus) sp.set("status", nextStatus);
+    const str = sp.toString();
+    return str ? `/projects?${str}` : "/projects";
+  };
   const attn = jobs.filter((j) => j.attn).length;
   const totalVal = jobs.reduce((n, j) => n + (j.contract ?? 0), 0);
   const countByStatus = new Map<ProjectStatus, number>();
@@ -89,70 +117,72 @@ export default async function ProjectsPage({
   }
 
   return (
-    <div className="relative mx-auto w-full max-w-[1240px] px-6 pb-24 pt-7">
-      <header className="mb-5 flex items-end gap-5">
-        <div>
-          <p className="mb-2.5 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">
-            <HardHat className="size-3.5" />
-            Delivery
-          </p>
-          <h1 className="text-[27px] font-semibold leading-tight tracking-tight">
-            Jobs
-          </h1>
-          <p className="mt-1 text-[13.5px] text-muted-foreground">
-            Won work in delivery — schedule, crew, and the money behind every
-            contract.
-          </p>
-        </div>
-      </header>
+    <PageContainer>
+      <PageHeader
+        eyebrow={{ icon: <HardHat className="size-3.5" />, label: "Delivery" }}
+        title="Jobs"
+        description="Won work in delivery — schedule, crew, and the money behind every contract."
+      />
 
       {all.length === 0 ? (
-        <div className="flex flex-col items-center rounded-2xl border bg-card px-8 py-14 text-center shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
-          <span className="mb-5 flex size-[54px] items-center justify-center rounded-2xl bg-muted text-foreground/60">
-            <HardHat className="size-6" />
-          </span>
-          <h3 className="mb-2 text-xl font-semibold tracking-tight">
-            No jobs yet
-          </h3>
-          <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
-            Jobs appear here automatically the moment a property manager
-            accepts a proposal — contract value locked, delivery ready to run.
-          </p>
-        </div>
+        <EmptyState
+          icon={<HardHat />}
+          title="No jobs yet"
+          description="Jobs appear here automatically the moment a property manager accepts a proposal — contract value locked, delivery ready to run."
+        />
       ) : (
         <>
-          {/* status chips */}
-          <div className="mb-4 flex flex-wrap gap-2">
-            <Chip href="/projects" active={!filter}>
-              All jobs
-              <span className="font-semibold tabular-nums text-muted-foreground">
-                {all.length}
-              </span>
-            </Chip>
-            {PROJECT_STATUSES.filter((s) => (countByStatus.get(s) ?? 0) > 0).map(
-              (s) => (
-                <Chip
-                  key={s}
-                  href={`/projects?status=${s}`}
-                  active={filter === s}
-                >
-                  <span
-                    className={cn(
-                      "size-[7px] rounded-full",
-                      STATUS_STYLE[s].dot,
-                    )}
-                  />
-                  {projectStatusLabel(s)}
-                  <span className="font-semibold tabular-nums text-muted-foreground">
-                    {countByStatus.get(s)}
-                  </span>
-                </Chip>
-              ),
-            )}
-          </div>
+          <FilterChipRow>
+            <FilterChip
+              href={jobsHref({ status: null })}
+              active={!filter}
+              label="All"
+              count={all.length}
+            />
+            {PROJECT_STATUSES.map((s) => (
+              <FilterChip
+                key={s}
+                href={jobsHref({ status: s })}
+                active={filter === s}
+                label={projectStatusLabel(s)}
+                count={countByStatus.get(s) ?? 0}
+                dot={STATUS_STYLE[s].dot}
+              />
+            ))}
+          </FilterChipRow>
 
-          {/* toolbar */}
-          <div className="mb-3 flex items-center gap-3 px-0.5">
+          <Toolbar
+            summary={
+              <ResultSummary
+                start={jobs.length === 0 ? 0 : 1}
+                end={jobs.length}
+                total={jobs.length}
+                noun="jobs"
+                extra={
+                  <>
+                    {attn > 0 && (
+                      <>
+                        {" · "}
+                        <b className="font-semibold text-foreground/80">{attn}</b>{" "}
+                        need attention
+                      </>
+                    )}
+                    {" · "}
+                    <b className="font-semibold text-foreground/80">
+                      {moneyK(totalVal)}
+                    </b>{" "}
+                    in contracts
+                  </>
+                }
+              />
+            }
+          >
+            <SearchForm
+              action="/projects"
+              q={q}
+              placeholder="Search properties, clients…"
+              hidden={{ status: filter }}
+            />
             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
               <ArrowDownNarrowWide className="size-3.5" />
               Sorted{" "}
@@ -160,54 +190,29 @@ export default async function ProjectsPage({
                 needs-attention first
               </b>
             </span>
-            <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-              {attn > 0 && (
-                <>
-                  <b className="font-semibold text-foreground/80">{attn}</b>{" "}
-                  need attention ·{" "}
-                </>
-              )}
-              <b className="font-semibold text-foreground/80">{jobs.length}</b>{" "}
-              job{jobs.length === 1 ? "" : "s"} ·{" "}
-              <b className="font-semibold text-foreground/80">
-                {moneyK(totalVal)}
-              </b>{" "}
-              in contracts
-            </span>
-          </div>
+          </Toolbar>
 
-          <div className="flex flex-col gap-3">
-            {jobs.map((j) => (
-              <JobCard key={j.bidId} job={j} />
-            ))}
-          </div>
+          {jobs.length === 0 ? (
+            <EmptyState
+              icon={<HardHat />}
+              title={q ? `No jobs match “${q}”` : "Nothing in this view"}
+              description="No jobs match the current filters. Clear them to see every job."
+              actions={
+                <Button variant="outline" asChild>
+                  <Link href="/projects">Clear filters</Link>
+                </Button>
+              }
+            />
+          ) : (
+            <div className="flex flex-col gap-3">
+              {jobs.map((j) => (
+                <JobCard key={j.bidId} job={j} />
+              ))}
+            </div>
+          )}
         </>
       )}
-    </div>
-  );
-}
-
-function Chip({
-  href,
-  active,
-  children,
-}: {
-  href: string;
-  active: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-[10px] border px-3 text-[13.5px] font-medium transition-colors",
-        active
-          ? "border-foreground bg-foreground text-background [&_span]:!text-background/80"
-          : "bg-card text-foreground/80 hover:border-foreground/25 hover:bg-muted/40",
-      )}
-    >
-      {children}
-    </Link>
+    </PageContainer>
   );
 }
 

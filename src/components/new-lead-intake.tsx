@@ -38,6 +38,7 @@ import {
   type FinderBuilding,
 } from "@/components/property-finder";
 import { cn } from "@/lib/utils";
+import { BackLink } from "@/components/page-chrome";
 import { WorkTypeField } from "@/components/work-type-field";
 
 const AVATAR_TINTS = [
@@ -618,6 +619,7 @@ export function NewLeadIntake({
     return (
       <div className="relative mx-auto w-full max-w-[860px] px-6 pb-28 pt-7">
         <header className="mb-5">
+          <BackLink href="/leads" label="Leads" className="mb-3" />
           <p className="mb-2.5 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">
             New lead
             <span className="size-[5px] rounded-full bg-muted-foreground/40" />
@@ -627,9 +629,9 @@ export function NewLeadIntake({
             Find the building.
           </h1>
           <p className="mt-1.5 max-w-[560px] text-sm text-muted-foreground">
-            Type a name or an address. If we&apos;ve painted it before, Mercer
-            already knows the owner, the contact, and the history — you
-            won&apos;t type any of it twice.
+            Type the address. If we&apos;ve painted it before, Mercer already
+            knows the owner, the contact, and the history — you won&apos;t
+            type any of it twice.
           </p>
         </header>
 
@@ -657,6 +659,7 @@ export function NewLeadIntake({
   return (
     <div className="relative mx-auto w-full max-w-[860px] px-6 pb-28 pt-7">
       <header className="mb-5">
+        <BackLink href="/leads" label="Leads" className="mb-3" />
         <p className="mb-2.5 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">
           New lead
           <span className="size-[5px] rounded-full bg-muted-foreground/40" />

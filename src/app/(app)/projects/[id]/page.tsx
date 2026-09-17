@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowUpRight, Camera, Landmark } from "lucide-react";
+import { ArrowUpRight, Camera, Landmark } from "lucide-react";
+import { PageContainer, PageError, PageHeader } from "@/components/page-chrome";
 import {
   getProject,
   getProjectPreStart,
@@ -196,45 +197,33 @@ export default async function ProjectPage({
       : null;
 
   return (
-    <div className="relative mx-auto w-full max-w-[1240px] px-6 pb-24 pt-7">
+    <PageContainer>
       <BreadcrumbLabel segment={id} label={bid.propertyName} />
+      <PageError message={error} />
 
-      {error && (
-        <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/5 px-4 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          <Link
-            href="/projects"
-            className="mb-2.5 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="size-3.5" />
-            All jobs
-          </Link>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-[27px] font-semibold leading-tight tracking-tight">
-              {bid.propertyName}
-            </h1>
-            <Badge variant={projectStatusVariant(project.status)}>
-              {projectStatusLabel(project.status)}
-            </Badge>
-          </div>
-          <p className="mt-1 text-[13.5px] text-muted-foreground">
+      <PageHeader
+        back={{ href: "/projects", label: "Jobs" }}
+        title={bid.propertyName}
+        badge={
+          <Badge variant={projectStatusVariant(project.status)}>
+            {projectStatusLabel(project.status)}
+          </Badge>
+        }
+        description={
+          <>
             {bid.clientName}
             {bid.address ? ` · ${bid.address}` : ""}
-          </p>
-        </div>
-        <a
-          href="#updates"
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-foreground bg-foreground px-3.5 text-[13px] font-medium text-background transition-opacity hover:opacity-90"
-        >
-          <Camera className="size-3.5" />
-          Post update
-        </a>
-      </header>
+          </>
+        }
+        actions={
+          <Button asChild>
+            <a href="#updates">
+              <Camera className="size-4" />
+              Post update
+            </a>
+          </Button>
+        }
+      />
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_420px]">
         {/* ── Left: delivery ── */}
@@ -367,7 +356,7 @@ export default async function ProjectPage({
           </Card>
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 }
 

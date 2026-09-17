@@ -86,6 +86,7 @@ import {
   createSupplierProduct,
   deleteSupplierProduct,
   addCatalogLineItem,
+  logListRowContact,
 } from "./store";
 import { getOrgContext } from "./org-context";
 import { enrichCompanyFromWebsite } from "./onboarding/enrich-from-website";
@@ -169,6 +170,7 @@ import {
   addCatalogLineItemSchema,
   idSchema,
   idWithBidSchema,
+  logListRowContactSchema,
 } from "./validations";
 import { calculateBidPricing } from "./pricing";
 import { budgetTotals } from "./budget";
@@ -1354,6 +1356,29 @@ export async function importListAction(formData: FormData) {
 
   revalidatePath("/lists");
   redirect(`/lists/${list.id}?imported=${mapped.length}`);
+}
+
+export async function logListRowContactAction(formData: FormData) {
+  const result = logListRowContactSchema.safeParse(formDataToObject(formData));
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "Invalid input";
+    redirect(`/lists?error=${encodeURIComponent(message)}`);
+  }
+  const { id, mode, contactedAt } = result.data;
+  // A bare date lands at local noon so it stays on that day in any US zone.
+  const at = contactedAt ? new Date(`${contactedAt}T12:00:00`) : null;
+  if (mode === "set" && !at) {
+    redirect(`/lists?error=${encodeURIComponent("Pick a date")}`);
+  }
+  let listId: string | null = null;
+  try {
+    listId = (await logListRowContact(id, { mode, at }))?.listId ?? null;
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to log contact";
+    redirect(`/lists?error=${encodeURIComponent(message)}`);
+  }
+  if (listId) revalidatePath(`/lists/${listId}`);
 }
 
 export async function deleteListAction(formData: FormData) {

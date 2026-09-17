@@ -269,7 +269,9 @@ export function PropertyFinder({
           }}
           autoComplete="off"
           spellCheck={false}
-          placeholder="Property name or address…"
+          placeholder={
+            flavor === "lead" ? "Street address…" : "Property name or address…"
+          }
           className="min-w-0 flex-1 border-none bg-transparent text-xl font-medium tracking-tight outline-none placeholder:font-normal placeholder:text-muted-foreground/60"
         />
         {query && (

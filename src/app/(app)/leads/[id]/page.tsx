@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { CalendarClock, Route } from "lucide-react";
 import {
   getLead,
@@ -20,6 +20,7 @@ import { PropertyProfile, Panel } from "@/components/property-profile";
 import { PhotosCard } from "@/components/photos-card";
 import { AttachmentsCard } from "@/components/attachments-card";
 import { BreadcrumbLabel } from "@/components/breadcrumb-label";
+import { PageContainer, PageError, PageHeader } from "@/components/page-chrome";
 import { leadFullName } from "@/lib/leads/name";
 import {
   Card,
@@ -62,8 +63,11 @@ export default async function LeadDetailPage({
   const lead = await getLead(id);
   if (!lead) notFound();
 
+  // A converted lead lives on as its opportunity; the lead page is retired.
+  const linkedBid = await getLatestBidForLead(id);
+  if (linkedBid) redirect(`/opportunities/${linkedBid.id}`);
+
   const [
-    linkedBid,
     photos,
     attachments,
     attempts,
@@ -73,7 +77,6 @@ export default async function LeadDetailPage({
     contact,
   ] =
     await Promise.all([
-      getLatestBidForLead(id),
       getPhotos("lead", id),
       getAttachments("lead", id),
       getLeadContactAttempts(id),
@@ -146,8 +149,14 @@ export default async function LeadDetailPage({
 
   if (!propertyDetail || !history || !propertyPhotos || !deals) {
     return (
-      <div className="container mx-auto flex max-w-2xl flex-col gap-6 px-4 py-6">
+      <PageContainer width="narrow" className="flex flex-col gap-6">
         <BreadcrumbLabel segment={id} label={title} />
+        <PageHeader
+          className="mb-0"
+          back={{ href: "/leads", label: "Leads" }}
+          title={title}
+          description={lead.propertyName ?? lead.resolvedAddress ?? undefined}
+        />
         <LeadDetailBody
           lead={lead}
           contact={contact}
@@ -161,7 +170,7 @@ export default async function LeadDetailPage({
         />
         {lead.status === "takeoff" && <TakeoffCard lead={lead} />}
         {leadFiles}
-      </div>
+      </PageContainer>
     );
   }
 
@@ -172,14 +181,9 @@ export default async function LeadDetailPage({
     null;
 
   return (
-    <div className="relative mx-auto w-full max-w-[1240px] px-6 pb-24 pt-7">
+    <PageContainer>
       <BreadcrumbLabel segment={id} label={title} />
-
-      {error && (
-        <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/5 px-4 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+      <PageError message={error} />
 
       <PropertyProfile
         detail={propertyDetail}
@@ -195,7 +199,7 @@ export default async function LeadDetailPage({
         belowTimelineSlot={leadFiles}
         compact
       />
-    </div>
+    </PageContainer>
   );
 }
 

@@ -860,3 +860,14 @@ export const deleteAccessItemSchema = z.object({
   id: z.string().uuid("Invalid access item ID"),
   bidId: z.string().uuid("Invalid opportunity ID"),
 });
+
+/** Log or correct outreach on a list row, straight from the list table. */
+export const logListRowContactSchema = z.object({
+  id: z.string().uuid("Invalid row ID"),
+  mode: z.enum(["log", "set"]).default("log"),
+  /** YYYY-MM-DD from a date input; empty means "now" for log. */
+  contactedAt: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() ? v.trim() : null),
+    z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"), z.null()]),
+  ),
+});

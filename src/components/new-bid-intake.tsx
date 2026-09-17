@@ -40,6 +40,7 @@ import {
   type FinderBuilding,
 } from "@/components/property-finder";
 import { cn } from "@/lib/utils";
+import { BackLink } from "@/components/page-chrome";
 import { AccountAutocomplete } from "@/components/account-autocomplete";
 
 export type BidLeadPrefill = {
@@ -152,6 +153,7 @@ export function NewBidIntake({
     return (
       <div className="relative mx-auto w-full max-w-[860px] px-6 pb-28 pt-7">
         <header className="mb-5">
+          <BackLink href="/opportunities" label="Opportunities" className="mb-3" />
           <p className="mb-2.5 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">
             New opportunity
             <span className="size-[5px] rounded-full bg-muted-foreground/40" />
@@ -211,6 +213,7 @@ export function NewBidIntake({
   return (
     <div className="relative mx-auto w-full max-w-[860px] px-6 pb-28 pt-7">
       <header className="mb-5">
+        <BackLink href="/opportunities" label="Opportunities" className="mb-3" />
         <p className="mb-2.5 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">
           New opportunity
           <span className="size-[5px] rounded-full bg-muted-foreground/40" />

@@ -1,14 +1,22 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  ArrowRight,
-  ArrowUpRight,
-  Check,
-  ClipboardList,
-  Search,
-} from "lucide-react";
+import { ArrowRight, ArrowUpRight, Check, Users } from "lucide-react";
 import { getList, getListRows } from "@/lib/store";
 import { DeleteListButton } from "@/components/delete-list-button";
+import { ListRowContactCell } from "@/components/list-row-contact-cell";
+import {
+  EmptyState,
+  PageContainer,
+  PageError,
+  PageHeader,
+  PageNotice,
+  Pagination,
+  ResultSummary,
+  SearchForm,
+  TABLE_HEAD_ROW,
+  TableFrame,
+  Toolbar,
+} from "@/components/page-chrome";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 200;
@@ -41,9 +49,14 @@ export default async function ListDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ q?: string; page?: string; imported?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    page?: string;
+    imported?: string;
+    error?: string;
+  }>;
 }) {
-  const [{ id }, { q, page: pageParam, imported }] = await Promise.all([
+  const [{ id }, { q, page: pageParam, imported, error }] = await Promise.all([
     params,
     searchParams,
   ]);
@@ -56,7 +69,6 @@ export default async function ListDetailPage({
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
   });
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const mapped = Object.entries(list.mapping ?? {}).filter(
     ([, header]) => header,
   );
@@ -67,27 +79,16 @@ export default async function ListDetailPage({
       ...(p > 1 ? { page: String(p) } : {}),
     }).toString()}`;
 
-  return (
-    <div className="relative mx-auto w-full max-w-[1240px] px-6 pb-24 pt-7">
-      <div className="mb-4">
-        <Link
-          href="/lists"
-          className="text-sm text-muted-foreground hover:text-foreground"
-        >
-          ← Lists
-        </Link>
-      </div>
+  const rangeStart = rows.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeEnd = (page - 1) * PAGE_SIZE + rows.length;
 
-      <header className="mb-5 flex flex-wrap items-end gap-5">
-        <div className="min-w-0">
-          <p className="mb-2.5 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">
-            <ClipboardList className="size-3.5" />
-            List
-          </p>
-          <h1 className="text-[27px] font-semibold leading-tight tracking-tight">
-            {list.name}
-          </h1>
-          <p className="mt-1 text-[13.5px] text-muted-foreground">
+  return (
+    <PageContainer>
+      <PageHeader
+        back={{ href: "/lists", label: "Lists" }}
+        title={list.name}
+        description={
+          <>
             <b className="font-semibold text-foreground/80">{list.rowCount}</b>{" "}
             people ·{" "}
             <b className="font-semibold text-foreground/80">{convertedCount}</b>{" "}
@@ -95,19 +96,18 @@ export default async function ListDetailPage({
             {list.sourceTag && <> · source “{list.sourceTag}”</>}
             {" · "}uploaded {fmtDate(list.createdAt)}
             {list.fileName && <> from {list.fileName}</>}
-          </p>
-        </div>
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          <DeleteListButton id={list.id} name={list.name} />
-        </div>
-      </header>
+          </>
+        }
+        actions={<DeleteListButton id={list.id} name={list.name} />}
+      />
 
       {imported && (
-        <div className="mb-4 rounded-xl border border-emerald-600/30 bg-emerald-600/5 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-400">
+        <PageNotice>
           Imported {imported} {imported === "1" ? "person" : "people"}. They
           live here until you convert them.
-        </div>
+        </PageNotice>
       )}
+      <PageError message={error} />
 
       {mapped.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
@@ -127,45 +127,43 @@ export default async function ListDetailPage({
         </div>
       )}
 
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <form action={`/lists/${id}`} className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/70" />
-          <input
-            type="search"
-            name="q"
-            defaultValue={q ?? ""}
-            placeholder="Search people, companies, properties…"
-            className="h-9 w-72 rounded-[10px] border bg-card pl-9 pr-3 text-[13.5px] outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-foreground/30"
+      <Toolbar
+        summary={
+          <ResultSummary
+            start={rangeStart}
+            end={rangeEnd}
+            total={total}
+            noun="people"
           />
-        </form>
-        <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-          {q ? (
-            <>
-              <b className="font-semibold text-foreground/80">{total}</b> match
-              {total === 1 ? "" : "es"}
-            </>
-          ) : (
-            <>
-              page <b className="font-semibold text-foreground/80">{page}</b> of{" "}
-              {pages}
-            </>
-          )}
-        </span>
-      </div>
+        }
+      >
+        <SearchForm
+          action={`/lists/${id}`}
+          q={q ?? ""}
+          placeholder="Search people, companies, properties…"
+        />
+      </Toolbar>
 
       {rows.length === 0 ? (
-        <div className="rounded-2xl border bg-card px-8 py-12 text-center text-sm text-muted-foreground">
-          {q ? `Nobody matches “${q}”.` : "This list is empty."}
-        </div>
+        <EmptyState
+          icon={<Users />}
+          title={q ? `Nobody matches “${q}”` : "This list is empty"}
+          description={
+            q
+              ? "Try a different name, company, or property."
+              : "Every row from the upload lands here. Nothing to show yet."
+          }
+        />
       ) : (
-        <div className="overflow-x-auto rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
-          <table className="w-full min-w-[860px] text-left text-sm">
+        <TableFrame minWidth="min-w-[1040px]">
+          <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
-                <th className="px-4 py-3">Person</th>
-                <th className="px-4 py-3">Company</th>
-                <th className="px-4 py-3">Property</th>
-                <th className="px-4 py-3 text-right">Lead</th>
+              <tr className={TABLE_HEAD_ROW}>
+                <th className="px-4 py-2.5 font-semibold">Person</th>
+                <th className="px-4 py-2.5 font-semibold">Company</th>
+                <th className="px-4 py-2.5 font-semibold">Property</th>
+                <th className="px-4 py-2.5 font-semibold">Last contact</th>
+                <th className="px-4 py-2.5 text-right font-semibold">Lead</th>
               </tr>
             </thead>
             <tbody>
@@ -176,7 +174,7 @@ export default async function ListDetailPage({
                     key={r.id}
                     className={cn(
                       "border-b last:border-b-0 transition-colors",
-                      converted ? "bg-muted/20" : "hover:bg-muted/30",
+                      converted ? "bg-muted/20" : "hover:bg-muted/20",
                     )}
                   >
                     <td className="px-4 py-2.5 align-top">
@@ -199,6 +197,13 @@ export default async function ListDetailPage({
                           {r.address}
                         </span>
                       )}
+                    </td>
+                    <td className="px-4 py-2 align-top">
+                      <ListRowContactCell
+                        rowId={r.id}
+                        lastContactedAt={r.lastContactedAt?.toISOString() ?? null}
+                        attempts={r.contactAttempts}
+                      />
                     </td>
                     <td className="px-4 py-2.5 text-right align-top">
                       {converted ? (
@@ -230,32 +235,10 @@ export default async function ListDetailPage({
               })}
             </tbody>
           </table>
-        </div>
+        </TableFrame>
       )}
 
-      {pages > 1 && (
-        <div className="mt-4 flex items-center justify-center gap-2 text-sm">
-          {page > 1 && (
-            <Link
-              href={pageHref(page - 1)}
-              className="rounded-lg border bg-card px-3 py-1.5 hover:bg-muted"
-            >
-              ← Previous
-            </Link>
-          )}
-          <span className="text-muted-foreground">
-            {page} / {pages}
-          </span>
-          {page < pages && (
-            <Link
-              href={pageHref(page + 1)}
-              className="rounded-lg border bg-card px-3 py-1.5 hover:bg-muted"
-            >
-              Next →
-            </Link>
-          )}
-        </div>
-      )}
-    </div>
+      <Pagination page={page} limit={PAGE_SIZE} total={total} hrefFor={pageHref} />
+    </PageContainer>
   );
 }

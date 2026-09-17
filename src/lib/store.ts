@@ -2107,8 +2107,12 @@ export async function getLeadStatusCounts(options?: {
     .from(leads)
     .where(
       tag
-        ? and(eq(leads.userId, user.ownerUserId), eq(leads.sourceTag, tag))
-        : eq(leads.userId, user.ownerUserId)
+        ? and(
+            eq(leads.userId, user.ownerUserId),
+            leadNotConverted,
+            eq(leads.sourceTag, tag),
+          )
+        : and(eq(leads.userId, user.ownerUserId), leadNotConverted),
     )
     .groupBy(leads.status);
 
@@ -2161,7 +2165,7 @@ export async function getDashboardRecents(
         updatedAt: leads.updatedAt,
       })
       .from(leads)
-      .where(eq(leads.userId, user.ownerUserId))
+      .where(and(eq(leads.userId, user.ownerUserId), leadNotConverted))
       .orderBy(desc(leads.updatedAt), desc(leads.id))
       .limit(perTableLimit),
     db
@@ -2242,6 +2246,7 @@ export async function getOverdueFollowUps(
     .where(
       and(
         eq(leads.userId, user.ownerUserId),
+        leadNotConverted,
         sql`${leads.followUpAt} < current_date`,
         sql`${leads.status} not in ('won', 'lost')`,
       ),
@@ -2369,8 +2374,18 @@ function escapeIlike(needle: string): string {
   return needle.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
+/**
+ * A lead that has been converted into an opportunity (a bid row points at it)
+ * leaves the leads world entirely: it is off the leads list, the counts, the
+ * pipeline's lead lane, follow-up nags and recents. The opportunity carries
+ * the deal from here. Deleting the opportunity brings the lead back.
+ */
+const leadNotConverted = sql`NOT EXISTS (
+  SELECT 1 FROM ${bids} WHERE ${bids.leadId} = ${leads.id}
+)`;
+
 function leadListConditions(userId: string, options: GetLeadsOptions): SQL[] {
-  const conditions: SQL[] = [eq(leads.userId, userId)];
+  const conditions: SQL[] = [eq(leads.userId, userId), leadNotConverted];
 
   const status = options.status?.trim() || null;
   if (status) conditions.push(eq(leads.status, status as LeadStatus));
@@ -5203,6 +5218,7 @@ export async function getTakeoffQueue(): Promise<TakeoffQueueRow[]> {
     .where(
       and(
         eq(leads.userId, user.ownerUserId),
+        leadNotConverted,
         inArray(leads.status, [...TAKEOFF_QUEUE_STATUSES]),
       ),
     )
@@ -5324,6 +5340,7 @@ export async function getPipeline(): Promise<PipelineRow[]> {
       .where(
         and(
           eq(leads.userId, user.ownerUserId),
+          leadNotConverted,
           inArray(leads.status, [...OPEN_LEAD_PIPELINE_STATUSES]),
         ),
       ),
@@ -5749,6 +5766,7 @@ export async function getHomeAgenda(): Promise<HomeAgenda> {
         .where(
           and(
             eq(leads.userId, uid),
+            leadNotConverted,
             isNull(leads.closedAt),
             sql`${leads.followUpAt} IS NOT NULL AND ${leads.followUpAt}::date <= now()::date`,
             sql`NOT EXISTS (
@@ -5773,6 +5791,7 @@ export async function getHomeAgenda(): Promise<HomeAgenda> {
         .where(
           and(
             eq(leads.userId, uid),
+            leadNotConverted,
             eq(leads.status, "takeoff"),
             sql`${leads.takeoffScheduledAt} BETWEEN now() - interval '12 hours' AND now() + interval '7 days'`,
           ),
@@ -9028,13 +9047,31 @@ export async function getListRows(
   }
   const where = and(...conds);
   const [rows, counts] = await Promise.all([
+    // A converted row's outreach continues on its lead, so the lead's last
+    // contact is the live value; unconverted rows carry their own.
     db
-      .select()
+      .select({
+        row: listRows,
+        leadLastContactedAt: leads.lastContactedAt,
+        leadContactAttempts: leads.contactAttempts,
+      })
       .from(listRows)
+      .leftJoin(leads, eq(leads.id, listRows.convertedLeadId))
       .where(where)
       .orderBy(listRows.position, listRows.name)
       .limit(opts.limit ?? 200)
-      .offset(opts.offset ?? 0),
+      .offset(opts.offset ?? 0)
+      .then((rs) =>
+        rs.map(({ row, leadLastContactedAt, leadContactAttempts }) => ({
+          ...row,
+          lastContactedAt: row.convertedLeadId
+            ? leadLastContactedAt
+            : row.lastContactedAt,
+          contactAttempts: row.convertedLeadId
+            ? (leadContactAttempts ?? row.contactAttempts)
+            : row.contactAttempts,
+        })),
+      ),
     db
       .select({
         total: sql<number>`count(*)`,
@@ -9142,8 +9179,79 @@ export async function markListRowConverted(
     .update(listRows)
     .set({ convertedLeadId: leadId, convertedAt: new Date() })
     .where(and(eq(listRows.id, rowId), eq(listRows.userId, user.ownerUserId)))
-    .returning({ listId: listRows.listId });
-  return updated[0] ?? null;
+    .returning({
+      listId: listRows.listId,
+      lastContactedAt: listRows.lastContactedAt,
+      contactAttempts: listRows.contactAttempts,
+    });
+  const row = updated[0] ?? null;
+  // Outreach logged from the list is the lead's history too.
+  if (row && (row.lastContactedAt || row.contactAttempts > 0)) {
+    await db
+      .update(leads)
+      .set({
+        lastContactedAt: sql`greatest(${leads.lastContactedAt}, ${row.lastContactedAt?.toISOString() ?? null}::timestamptz)`,
+        contactAttempts: sql`${leads.contactAttempts} + ${row.contactAttempts}`,
+      })
+      .where(and(eq(leads.id, leadId), eq(leads.userId, user.ownerUserId)));
+  }
+  return row ? { listId: row.listId } : null;
+}
+
+/**
+ * Record outreach on a list row. `log` stamps a new attempt (now, or a
+ * chosen date); `set` corrects the last-contact date without counting one.
+ * A converted row forwards to its lead, where the history now lives.
+ */
+export async function logListRowContact(
+  rowId: string,
+  input: { mode: "log" | "set"; at: Date | null },
+): Promise<{ listId: string } | null> {
+  const user = await requireUser();
+  const existing = await db
+    .select({
+      id: listRows.id,
+      listId: listRows.listId,
+      convertedLeadId: listRows.convertedLeadId,
+    })
+    .from(listRows)
+    .where(and(eq(listRows.id, rowId), eq(listRows.userId, user.ownerUserId)))
+    .limit(1);
+  const row = existing[0];
+  if (!row) return null;
+  const at = input.at ?? new Date();
+  if (row.convertedLeadId) {
+    if (input.mode === "log" && !input.at) {
+      await logLeadContact(row.convertedLeadId);
+    } else {
+      await db
+        .update(leads)
+        .set({
+          lastContactedAt: at,
+          ...(input.mode === "log"
+            ? { contactAttempts: sql`${leads.contactAttempts} + 1` }
+            : {}),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(leads.id, row.convertedLeadId),
+            eq(leads.userId, user.ownerUserId),
+          ),
+        );
+    }
+    return { listId: row.listId };
+  }
+  await db
+    .update(listRows)
+    .set({
+      lastContactedAt: at,
+      ...(input.mode === "log"
+        ? { contactAttempts: sql`${listRows.contactAttempts} + 1` }
+        : {}),
+    })
+    .where(eq(listRows.id, row.id));
+  return { listId: row.listId };
 }
 
 export async function deleteList(id: string): Promise<void> {
