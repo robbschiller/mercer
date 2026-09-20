@@ -2,18 +2,17 @@ import Link from "next/link";
 import {
   ArrowRight,
   ArrowUpRight,
-  Bot,
-  Camera,
+  BarChart3,
+  Building2,
+  Calculator,
   Check,
-  FileSearch,
-  Layers,
-  ListChecks,
+  ClipboardList,
+  HardHat,
   MessageSquareText,
-  ScanLine,
   Share2,
-  ShieldCheck,
   Sparkles,
-  Workflow as WorkflowIcon,
+  Target,
+  Users,
 } from "lucide-react";
 import type { ComponentType } from "react";
 
@@ -24,7 +23,6 @@ export default function Home() {
     <div className="relative isolate overflow-hidden bg-[var(--color-ink)] text-white">
       <Hero />
       <Positioning />
-      <WhyNot />
       <Workflow />
       <Product />
       <Principles />
@@ -55,7 +53,7 @@ function Hero() {
         {/* Top meta row */}
         <div className="flex flex-wrap items-center gap-4 text-white/60">
           <span className="kicker text-[var(--color-amber-soft)]">
-            §&nbsp;01 · Phase&nbsp;1 in build with Renobase
+            §&nbsp;01 · Built with a working painting contractor
           </span>
           <span className="hidden h-px flex-1 bg-white/10 sm:block" aria-hidden />
           <span className="kicker hidden sm:inline">
@@ -65,9 +63,9 @@ function Hero() {
 
         {/* Masthead headline */}
         <h1 className="font-display-editorial text-[clamp(2rem,5.2vw,5.5rem)] leading-[0.92] text-white lg:text-[clamp(2.25rem,4.25vw,6rem)]">
-          <span className="block sm:whitespace-nowrap">The AI-native operating system for</span>
+          <span className="block sm:whitespace-nowrap">From trade-show list to signed job,</span>
           <span className="block italic text-white/95 sm:whitespace-nowrap">
-            commercial renovation contractors
+            on one screen
             <span className="not-italic text-[var(--color-amber)]">.</span>
           </span>
         </h1>
@@ -76,10 +74,11 @@ function Hero() {
           {/* Subhead + CTAs */}
           <div className="lg:col-span-7">
             <p className="max-w-xl text-lg leading-relaxed text-white/70 sm:text-xl">
-              Turn a walk-around into a bid. Review the takeoff. Send a live
-              proposal your customer can sign. Agents handle the busywork between
-              leads, scope, and signature so you bid in minutes, win on cleaner
-              scope, and watch your whole pipeline move on one screen.
+              Mercer is the sales and job system for commercial multifamily
+              exterior contractors. Load the attendee list, work the leads by
+              property, quote from your own rates, send a proposal the property
+              manager can accept from a link, and run the job to the final
+              invoice. AI drafts. You decide.
             </p>
 
             <div className="mt-10 flex flex-wrap items-center gap-3">
@@ -87,7 +86,7 @@ function Hero() {
                 href="/signup"
                 className="group inline-flex h-12 items-center gap-2 rounded-full bg-[var(--color-amber)] px-6 text-base font-medium text-white shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_18px_40px_-12px_rgba(232,93,35,0.65)] transition-transform hover:-translate-y-[1px] hover:bg-[var(--color-amber-soft)]"
               >
-                Start a free account
+                Start a free trial
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
               </Link>
               <Link
@@ -99,41 +98,30 @@ function Hero() {
             </div>
 
             <p className="mt-5 text-sm text-white/45">
-              No credit card. Walk a property and run it through the takeoff
-              agent in a single session.
+              14 days free, no credit card. Invite your team from settings.
             </p>
           </div>
 
-          {/* Takeoff draft card */}
+          {/* Opportunity card */}
           <aside className="lg:col-span-5">
-            <FieldCard />
+            <OpportunityCard />
           </aside>
         </div>
 
-        {/* KPI strip */}
+        {/* Flow strip */}
         <div className="mt-4 grid grid-cols-2 border-y border-[var(--color-ink-rule)] md:grid-cols-5">
-          <KpiCell label="Capture to draft" value="47s" hint="Vision agent median" />
-          <KpiCell
-            label="Surfaces drafted"
-            value="187"
-            hint="Multifamily, 3-story walk"
-            accent
-          />
-          <KpiCell label="Scope flags caught" value="3" hint="Spec · capture · request" />
-          <KpiCell label="Confidence" value="92%" hint="Above edit threshold" />
-          <KpiCell
-            label="Pipeline"
-            value="$1.24M"
-            hint="Captured + signed"
-            wide
-          />
+          <FlowCell label="01" value="Lists" hint="CSV in, nothing invented" />
+          <FlowCell label="02" value="Leads" hint="Grouped by property" />
+          <FlowCell label="03" value="Opportunities" hint="Quote, sent, decision" accent />
+          <FlowCell label="04" value="Proposal" hint="Live link, accept online" />
+          <FlowCell label="05" value="Jobs" hint="Schedule to final invoice" wide />
         </div>
       </div>
     </section>
   );
 }
 
-function KpiCell({
+function FlowCell({
   label,
   value,
   hint,
@@ -163,19 +151,19 @@ function KpiCell({
   );
 }
 
-function FieldCard() {
+function OpportunityCard() {
   return (
     <div className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.04] to-white/[0.015] p-6 backdrop-blur-sm">
       <div className="flex items-center justify-between">
-        <span className="kicker text-white/45">Capture · bid #0327</span>
+        <span className="kicker text-white/45">Opportunity · 2027 repaint</span>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-amber)]/15 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-amber-soft)]">
           <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-amber)]" />
-          Drafted by agent
+          Proposal sent
         </span>
       </div>
 
       <div className="mt-6 flex flex-col gap-1">
-        <span className="text-sm text-white/50">8-building, 3-story walk</span>
+        <span className="text-sm text-white/50">Greystar · 8 buildings, 3 stories</span>
         <span className="font-display text-2xl leading-tight text-white">
           Fountains at Pershing
         </span>
@@ -183,62 +171,43 @@ function FieldCard() {
 
       <dl className="mt-6 grid grid-cols-2 gap-x-4 gap-y-3 font-mono text-[12px]">
         <div>
-          <dt className="text-white/40">Buildings detected</dt>
-          <dd className="text-white/85">8 · auto from video</dd>
+          <dt className="text-white/40">Quote</dt>
+          <dd className="text-[var(--color-amber-soft)]">$412,900</dd>
         </div>
         <div>
-          <dt className="text-white/40">Surfaces drafted</dt>
-          <dd className="text-white/85">187 · 4 substrates</dd>
+          <dt className="text-white/40">Sent</dt>
+          <dd className="text-white/85">Sep 12</dd>
         </div>
         <div>
-          <dt className="text-white/40">Est. exterior sqft</dt>
-          <dd className="text-white/85">412,900</dd>
+          <dt className="text-white/40">Decision expected</dt>
+          <dd className="text-white/85">Oct 1 · 11 days</dd>
         </div>
         <div>
-          <dt className="text-white/40">Draft total</dt>
-          <dd className="text-[var(--color-amber-soft)]">
-            $1,102,400
-          </dd>
+          <dt className="text-white/40">Contact</dt>
+          <dd className="text-white/85">M. Alvarez, Regional</dd>
         </div>
       </dl>
 
-      {/* Mini footprint mock */}
-      <div className="relative mt-6 h-32 overflow-hidden rounded-lg border border-white/10 bg-[var(--color-ink-soft)]">
-        <div
-          className="absolute inset-0"
-          style={{
-            backgroundImage:
-              "linear-gradient(to right, rgba(255,255,255,0.06) 1px, transparent 1px),linear-gradient(to bottom, rgba(255,255,255,0.06) 1px, transparent 1px)",
-            backgroundSize: "16px 16px",
-          }}
-          aria-hidden
-        />
-        <svg
-          viewBox="0 0 220 128"
-          className="relative h-full w-full text-[var(--color-amber)]"
-          aria-hidden
-        >
-          <g fill="currentColor" fillOpacity="0.25" stroke="currentColor">
-            <rect x="20" y="24" width="34" height="18" />
-            <rect x="62" y="22" width="30" height="20" />
-            <rect x="100" y="28" width="38" height="16" />
-            <rect x="148" y="24" width="28" height="20" />
-            <rect x="20" y="62" width="40" height="18" />
-            <rect x="70" y="64" width="32" height="18" />
-            <rect x="112" y="60" width="26" height="22" />
-            <rect x="146" y="64" width="36" height="18" />
-          </g>
-        </svg>
-        <span className="absolute bottom-2 left-3 font-mono text-[10px] text-white/40">
-          Buildings detected · 92% confidence
-        </span>
+      {/* Mini timeline mock */}
+      <div className="mt-6 flex flex-col gap-2 rounded-lg border border-white/10 bg-[var(--color-ink-soft)] p-4 font-mono text-[11px]">
+        {[
+          ["Sep 4", "Converted from BAAA attendee list"],
+          ["Sep 9", "Quote drafted from your rate card"],
+          ["Sep 12", "Proposal link sent, opened twice"],
+          ["Sep 18", "Descope requested, revision drafted"],
+        ].map(([when, what]) => (
+          <div key={when} className="flex items-baseline gap-3">
+            <span className="w-12 shrink-0 text-white/40">{when}</span>
+            <span className="text-white/80">{what}</span>
+          </div>
+        ))}
       </div>
 
       <Link
         href="#workflow"
         className="mt-6 inline-flex items-center gap-1.5 text-sm text-white/75 transition-colors hover:text-white"
       >
-        How the takeoff agent works
+        How an opportunity moves
         <ArrowUpRight className="h-3.5 w-3.5" />
       </Link>
     </div>
@@ -249,62 +218,30 @@ function FieldCard() {
 /*                                POSITIONING                                 */
 /* -------------------------------------------------------------------------- */
 
-type Competitor = {
-  name: string;
-  owns: string;
-  owns_short: string;
-  blurb: string;
-  tone: "muted" | "highlight";
+type Objection = {
+  target: string;
+  question: string;
+  answer: string;
 };
 
-const competitors: Competitor[] = [
+const objections: Objection[] = [
   {
-    name: "EagleView · Hover",
-    owns: "Aerial measurement",
-    owns_short: "measurement",
-    blurb:
-      "Accurate 3D property reports, mostly residential. One step of the job. System of record with export buttons. Useful upstream input, not a workflow.",
-    tone: "muted",
+    target: "JobNimbus · AccuLynx",
+    question: "Why not the roofing CRMs?",
+    answer:
+      "The closest fit, and they serve commercial roofing well. But bids, measurements, and pricing are shaped around shingles and slopes. Mercer is shaped around buildings, surfaces, and the multifamily property managers who buy exterior work.",
   },
   {
-    name: "Salesforce · HubSpot",
-    owns: "Generic pipeline + AI add-ons",
-    owns_short: "CRM + chatbot",
-    blurb:
-      "Infinitely configurable, speaks nothing. 2026 AI releases are chatbots and email drafts, not agents that read a building, reconcile a scope, or draft a takeoff.",
-    tone: "muted",
+    target: "Salesforce · HubSpot",
+    question: "Why not a generic CRM?",
+    answer:
+      "No idea what a property, an account, or a repaint cycle is. You would spend months configuring fields to end up with a slower Mercer. Mercer ships with the multifamily data model already in it.",
   },
   {
-    name: "JobNimbus · AccuLynx",
-    owns: "Roofing CRM + AI add-ons",
-    owns_short: "roofing",
-    blurb:
-      "Purpose-built lead-to-close for roofing, commercial and residential. The pattern proof. Still a system of record. The forms assume a human types the numbers.",
-    tone: "muted",
-  },
-  {
-    name: "Procore · BuilderTrend",
-    owns: "Post-sale ops",
-    owns_short: "project ops",
-    blurb:
-      "Schedules, subs, RFIs, punch lists. Start after the contract is signed, built for ground-up. No opinion about pre-sale capture or scope reconciliation.",
-    tone: "muted",
-  },
-  {
-    name: "STACK · PlanSwift",
-    owns: "Blueprint takeoff",
-    owns_short: "takeoffs",
-    blurb:
-      "Digital takeoffs from PDFs and elevations. Only useful when you have plans, which you mostly don't on an occupied asset. Single-step, human-driven.",
-    tone: "muted",
-  },
-  {
-    name: "Mercer",
-    owns: "AI-native workflow engine",
-    owns_short: "the whole job",
-    blurb:
-      "Capture-first takeoff, scope reconciliation, negotiation agent, live proposal URL. Painting first, siding and envelope next. AI does the work; humans supervise and edit.",
-    tone: "highlight",
+    target: "Procore · BuilderTrend",
+    question: "Why not a construction ops suite?",
+    answer:
+      "Built for ground-up and residential remodel, and they start after the contract is signed. Mercer covers the sale, then runs the job, in one record from first contact to final invoice.",
   },
 ];
 
@@ -319,140 +256,18 @@ function Positioning() {
         <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <span className="kicker text-[var(--color-amber)]">
-              §&nbsp;02 · The map of the category
+              §&nbsp;02 · Why not the obvious one
             </span>
             <h2 className="mt-6 font-display-editorial text-[clamp(2.5rem,6vw,5.25rem)] leading-[0.95]">
-              System of record.
+              Built for the trade.
               <br />
-              <span className="italic">Or system that does the work?</span>
+              <span className="italic">Not configured for it.</span>
             </h2>
           </div>
           <p className="max-w-sm text-base leading-relaxed text-[var(--color-ink)]/70">
-            Every incumbent is a database with human data entry and a 2026 AI
-            chatbot bolted on. Mercer inverts that. The agents are the work.
-            The records are the substrate.
-          </p>
-        </div>
-
-        <div className="mt-14 grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {competitors.map((c) => (
-            <CompetitorCard key={c.name} competitor={c} />
-          ))}
-        </div>
-
-        <div className="mt-14 flex flex-col items-start gap-3 border-t border-[var(--color-parchment-border)] pt-8 md:flex-row md:items-center md:justify-between">
-          <p className="max-w-2xl font-display text-xl italic leading-snug text-[var(--color-ink)]/80">
-            &ldquo;Bolting AI-powered onto JobNimbus doesn&rsquo;t close the
-            gap. The forms assume a human types the numbers. The premise of
-            the product is wrong for the AI era.&rdquo;
-          </p>
-          <span className="kicker text-[var(--color-ink)]/50">
-            / Mercer positioning note
-          </span>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function CompetitorCard({ competitor }: { competitor: Competitor }) {
-  const highlight = competitor.tone === "highlight";
-  return (
-    <div
-      className={`relative flex flex-col justify-between rounded-2xl border p-6 transition-colors ${
-        highlight
-          ? "border-[var(--color-amber)] bg-[var(--color-ink)] text-white shadow-[0_30px_60px_-20px_rgba(232,93,35,0.45)]"
-          : "border-[var(--color-parchment-border)] bg-[var(--color-parchment-soft)] text-[var(--color-ink)]"
-      }`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <span
-          className={`kicker ${highlight ? "text-[var(--color-amber-soft)]" : "text-[var(--color-ink)]/45"}`}
-        >
-          Owns · {competitor.owns_short}
-        </span>
-        {highlight ? (
-          <span className="inline-flex items-center gap-1 rounded-full border border-[var(--color-amber)]/60 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-amber-soft)]">
-            Us
-          </span>
-        ) : null}
-      </div>
-
-      <div className="mt-10 flex flex-col gap-2">
-        <span
-          className={`font-display text-2xl leading-tight ${highlight ? "text-white" : ""}`}
-        >
-          {competitor.name}
-        </span>
-        <span
-          className={`text-sm ${highlight ? "text-white/70" : "text-[var(--color-ink)]/60"}`}
-        >
-          {competitor.owns}
-        </span>
-      </div>
-
-      <p
-        className={`mt-6 text-sm leading-relaxed ${highlight ? "text-white/80" : "text-[var(--color-ink)]/70"}`}
-      >
-        {competitor.blurb}
-      </p>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*                                  WHY NOT                                   */
-/* -------------------------------------------------------------------------- */
-
-type Objection = {
-  target: string;
-  question: string;
-  answer: string;
-};
-
-const objections: Objection[] = [
-  {
-    target: "Salesforce · HubSpot + AI",
-    question: "Why not a generic CRM with the new AI add-ons?",
-    answer:
-      "No domain model for buildings, surfaces, substrates, coverage, or takeoffs. The AI add-ons are chatbots and generative email drafts. No vision capture. No scope reconciliation. Configure the fields yourself and you've built a bad Mercer at ten times the maintenance cost.",
-  },
-  {
-    target: "JobNimbus · AccuLynx",
-    question: "Why not the roofing CRMs?",
-    answer:
-      "Closest workflow analogue, and they serve commercial roofing well. Two problems. Roofing-only: bid, measurement, and pricing are built around shingles and slopes. System of record: their 2025-2026 AI features are generative proposal copy and pipeline summaries, not capture-driven takeoffs. The premise is the wrong shape.",
-  },
-  {
-    target: "Procore · BuilderTrend",
-    question: "Why not a construction ops suite?",
-    answer:
-      "Built for ground-up or residential remodel. Post-sale only. No opinion about lead qualification or pre-sale capture, which is where the AI leverage lives on renovation work. They're downstream of Mercer, not a substitute.",
-  },
-];
-
-function WhyNot() {
-  return (
-    <section
-      id="why-not"
-      className="relative isolate overflow-hidden bg-[var(--color-parchment-soft)] text-[var(--color-ink)]"
-    >
-      <div className="relative mx-auto w-full max-w-[1400px] px-6 py-24 lg:px-10 lg:py-28">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <span className="kicker text-[var(--color-amber)]">
-              §&nbsp;03 · The objections, addressed
-            </span>
-            <h2 className="mt-6 font-display-editorial text-[clamp(2.25rem,5.5vw,4.75rem)] leading-[0.95]">
-              Why not just use
-              <br />
-              <span className="italic">the obvious one?</span>
-            </h2>
-          </div>
-          <p className="max-w-sm text-base leading-relaxed text-[var(--color-ink)]/70">
-            Every buyer asks this. The short version of why each usual suspect
-            falls short for an AI-native take on commercial multifamily
-            exterior renovation.
+            Every tool you could use today was built for someone else and bent
+            to fit. Mercer starts from how commercial exterior work is actually
+            sold and run.
           </p>
         </div>
 
@@ -473,6 +288,17 @@ function WhyNot() {
               </p>
             </div>
           ))}
+        </div>
+
+        <div className="mt-14 flex flex-col items-start gap-3 border-t border-[var(--color-parchment-border)] pt-8 md:flex-row md:items-center md:justify-between">
+          <p className="max-w-2xl font-display text-xl italic leading-snug text-[var(--color-ink)]/80">
+            &ldquo;The rep follows the firm. A property manager moves companies
+            and takes twelve buildings with them. Your CRM should know
+            that.&rdquo;
+          </p>
+          <span className="kicker text-[var(--color-ink)]/50">
+            / Design partner, commercial painting
+          </span>
         </div>
       </div>
     </section>
@@ -495,54 +321,67 @@ type Stage = {
 const stages: Stage[] = [
   {
     number: "01",
-    title: "Qualify",
-    tagline: "Ranked pipeline, not a list to triage",
+    title: "Lists",
+    tagline: "The trade-show CSV, held as a list",
     description:
-      "Drop in the trade-show CSV. The qualification agent resolves each company to its property portfolio, pulls public data on year built and unit count, estimates recoat timing from typical cycles and visible satellite condition, and writes a brief per lead. Your queue is ranked, with reasons.",
-    icon: WorkflowIcon,
+      "Drop in the attendee export. Rows stay inert until you convert one. Nothing becomes a lead, contact, or account until you say so, so the pipeline only holds people you actually mean to call.",
+    icon: ClipboardList,
     bullets: [
-      "Company to portfolio resolution",
-      "Paint-timing from public + satellite signal",
-      "Confidence-scored ranking with brief",
+      "CSV import with no side effects",
+      "Convert a row into a lead in one click",
+      "Converted rows stay stamped",
     ],
   },
   {
     number: "02",
-    title: "Capture",
-    tagline: "Walk the property. Get a takeoff draft.",
+    title: "Leads",
+    tagline: "Grouped by property, not by person",
     description:
-      "Open Mercer in the parking lot. Capture photo and video as you walk the buildings. The vision takeoff agent identifies building types, enumerates surfaces per type, and estimates dimensions with a confidence score on every field. The form exists as the edit surface, not the origination point.",
-    icon: Camera,
+      "Every lead sits on a property, under an account, with its contacts. See who manages twelve buildings and who manages one. Log the call, set the follow-up, and let the morning brief tell you who is due.",
+    icon: Target,
     bullets: [
-      "Photo + video, async upload on spotty cell",
-      "Building types, surfaces, dim estimates",
-      "Manual fallback always available",
+      "Property, account, and contact spine",
+      "Work type and rough size on every lead",
+      "Follow-up dates and a daily agenda",
     ],
   },
   {
     number: "03",
-    title: "Reconcile",
-    tagline: "Scope gaps stop being a guessing game",
+    title: "Opportunities",
+    tagline: "Quote amount, sent date, decision date",
     description:
-      "Scope is a structured object. Every line item traces to a measurement, a spec PDF, an image from the capture, or a customer request. The reconciliation agent flags what's missing: metal primer per the spec, porch floors visible in the walk, the stairwell the customer mentioned. You accept, modify, or dismiss with a reason.",
-    icon: ListChecks,
+      "An opportunity is a tracking record first. Type the quote or let the engine draft one from your saved rates. Record when it went out and when they said they would decide. Overdue decisions surface on their own.",
+    icon: Calculator,
     bullets: [
-      "Spec PDF parsing to structured products + areas",
-      "Customer request ingestion (email, voice)",
-      "Flag review with traceable source refs",
+      "Quote engine on your own rate card",
+      "Sent and decision dates with overdue flags",
+      "Takeoff and pricing folded away until needed",
     ],
   },
   {
     number: "04",
-    title: "Negotiate",
-    tagline: "A URL that responds. A handoff that's automatic.",
+    title: "Proposal",
+    tagline: "A link they can accept, not a PDF they lose",
     description:
-      "The proposal is a live page, not a PDF. The property manager hovers to see why metal primer is in the scope. They request a descope; the negotiation agent drafts a revised bid for your approval. Accept flips the bid to won, the lead to won, and the same URL becomes the project status page.",
-    icon: MessageSquareText,
+      "Compose the proposal, send a link. The property manager reads it in the browser and accepts or declines there. Ask for a revision in plain English and Mercer redrafts the numbers against your rates.",
+    icon: Share2,
     bullets: [
-      "Hover-to-source on every line item",
-      "Scope-change requests via negotiation agent",
-      "Post-accept URL = project status page",
+      "Branded page, no login for the customer",
+      "Accept or decline recorded with a name",
+      "Conversational revisions, deterministic math",
+    ],
+  },
+  {
+    number: "05",
+    title: "Jobs",
+    tagline: "The same record runs the work",
+    description:
+      "Accepting flips the opportunity into a job. Schedule, pre-start checklist, expense ledger, budget versus actual, change orders, and invoices and draws all live on the job. Margin is delivered, not guessed.",
+    icon: HardHat,
+    bullets: [
+      "Schedule and pre-start checklist",
+      "Expenses, budget, and change orders",
+      "Invoices and draws to close-out",
     ],
   },
 ];
@@ -562,18 +401,18 @@ function Workflow() {
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <span className="kicker text-[var(--color-amber-soft)]">
-              §&nbsp;04 · The four-stage arc
+              §&nbsp;03 · The workflow
             </span>
             <h2 className="mt-6 font-display-editorial text-[clamp(2.5rem,6vw,5.25rem)] leading-[0.95] text-white">
-              Qualify. Capture.
+              List. Lead. Quote.
               <br />
-              <span className="italic">Reconcile. Negotiate.</span>
+              <span className="italic">Proposal. Job.</span>
             </h2>
           </div>
           <p className="max-w-sm text-base leading-relaxed text-white/65">
-            Mercer doesn&rsquo;t add a new step to your day. It removes the
-            ones you were doing by hand, and it puts an agent in the seat for
-            each of the rest.
+            Five stages, one record. Mercer does not add steps to your day. It
+            keeps the ones you already do in a single place, and drafts the
+            parts that used to be retyping.
           </p>
         </div>
 
@@ -583,7 +422,7 @@ function Workflow() {
             className="absolute left-0 right-0 top-10 hidden h-px bg-white/10 md:block"
             aria-hidden
           />
-          <ol className="grid grid-cols-1 gap-10 md:grid-cols-2 lg:grid-cols-4 lg:gap-8">
+          <ol className="grid grid-cols-1 gap-10 md:grid-cols-2 lg:grid-cols-5 lg:gap-6">
             {stages.map((stage, i) => (
               <li key={stage.number} className="relative flex flex-col">
                 {/* Dot */}
@@ -642,77 +481,76 @@ function Product() {
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <span className="kicker text-[var(--color-amber)]">
-              §&nbsp;05 · What&rsquo;s in the tin
+              §&nbsp;04 · What&rsquo;s in the tin
             </span>
             <h2 className="mt-6 font-display-editorial text-[clamp(2.25rem,5.5vw,4.75rem)] leading-[0.95]">
-              Agents that do the work.
+              Records that run the business.
               <br />
-              <span className="italic">Records that run the business.</span>
+              <span className="italic">AI that drafts, never decides.</span>
             </h2>
           </div>
           <p className="max-w-sm text-base leading-relaxed text-[var(--color-ink)]/70">
-            Every capability below is in the Phase 1 build against the Reno
-            Base design partnership. Expense reconciliation, voice-first
-            quoting, and the ops-agent layer follow as the foundation holds.
+            Everything below is live today and included in one flat monthly
+            price. No per-seat math, no AI credits to watch.
           </p>
         </div>
 
         <div className="mt-16 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           <FeatureCard
-            icon={Bot}
-            title="Lead qualification agent"
-            body="Company to portfolio, public data pull, paint-timing score, generated brief per lead. Your queue is ranked with reasons, not a spreadsheet to triage."
-            tag="Qualify"
+            icon={ClipboardList}
+            title="Lists and convert"
+            body="Import the attendee CSV as a list. Convert a row when you mean it. Leads, contacts, and accounts only get created on purpose."
+            tag="Lists"
           />
           <FeatureCard
-            icon={Camera}
-            title="Mobile capture"
-            body="Photo and video from the parking lot. Async upload, offline queue, optional scale references. Works with spotty cell."
-            tag="Capture"
-          />
-          <FeatureCard
-            icon={ScanLine}
-            title="Vision takeoff agent"
-            body="Buildings identified and counted, surfaces enumerated per type, dimensions estimated with a confidence score on every field."
-            tag="Capture"
+            icon={Building2}
+            title="Property, account, contact spine"
+            body="Every lead sits on a property under a management account with its people. Contacts move firms and the history follows them. Portfolio counts show who is worth the call."
+            tag="Leads"
             featured
           />
           <FeatureCard
-            icon={Layers}
-            title="Structured scope object"
-            body="Every line item traces to a measurement, spec, capture image, or customer request. Source-ref is first-class, not a comment field."
-            tag="Reconcile"
+            icon={Sparkles}
+            title="Spec-to-lead intake"
+            body="Upload the paint spec, the RFP, or a forwarded email. Mercer pulls the property, contact, work type, and rough size into the lead form for you to check before it saves."
+            tag="Leads"
           />
           <FeatureCard
-            icon={FileSearch}
-            title="Spec + request ingestion"
-            body="Upload a Sherwin-Williams spec PDF; paste a customer RFQ; forward an email. The parser turns each into structured inputs the agents can reconcile."
-            tag="Reconcile"
-          />
-          <FeatureCard
-            icon={ListChecks}
-            title="Reconciliation agent"
-            body="Flags the gap before it becomes a change order. Metal primer missing from the takeoff. Porch floors visible in the capture. Stairwells the customer asked about."
-            tag="Reconcile"
+            icon={Calculator}
+            title="Quote engine on your rates"
+            body="Describe the job in a sentence. The engine multiplies paintable area, access, and margin target against your saved rate card. The model reads the sentence. Code does the math."
+            tag="Opportunities"
           />
           <FeatureCard
             icon={Share2}
-            title="Live proposal URL"
-            body="Per-building breakdown, hover-to-source on every line, structured comments. No login, no PDF attached. The same URL becomes the project status page on accept."
-            tag="Negotiate"
+            title="Live proposal link"
+            body="Branded proposal page, no login, no attachment. The property manager accepts or declines in the browser and the opportunity updates itself."
+            tag="Proposal"
             featured
           />
           <FeatureCard
             icon={MessageSquareText}
-            title="Negotiation agent"
-            body="Property manager requests a descope or a timeline shift. The negotiation agent drafts a revised bid against your margin targets. You review and send."
-            tag="Negotiate"
+            title="Revise in plain English"
+            body="Drop the second coat on building four, add the stairwells. Mercer drafts the next version against your rates and you review every line item before it goes out."
+            tag="Proposal"
           />
           <FeatureCard
-            icon={ShieldCheck}
-            title="Audit-ready agent runs"
-            body="Every agent operation logs inputs, outputs, model, prompt version, confidence, and cost. Replayable, comparable, tuneable. The bar for trusting agents with money."
-            tag="Architecture"
+            icon={HardHat}
+            title="Jobs to final invoice"
+            body="Schedule, pre-start checklist, expense ledger, budget versus actual, change orders, invoices and draws. The job is the same record you sold."
+            tag="Jobs"
+          />
+          <FeatureCard
+            icon={BarChart3}
+            title="Reports that answer the owner"
+            body="Funnel by source, work by type, delivered margin, why quotes declined, and the six-month rhythm. Plus an Ask tab for the question the report did not anticipate."
+            tag="Reports"
+          />
+          <FeatureCard
+            icon={Users}
+            title="Your whole team"
+            body="Invite reps and office staff by email. Every account has an internal rep so the relationship survives turnover. The morning brief tells each person what is due today."
+            tag="Team"
           />
         </div>
       </div>
@@ -777,32 +615,20 @@ function FeatureCard({
 
 const principles: { title: string; body: string }[] = [
   {
-    title: "AI does the work.",
-    body: "Humans supervise and edit. If a feature looks like human data entry is the origination point, we&rsquo;ve built the wrong shape.",
-  },
-  {
     title: "Deterministic math, never generative.",
-    body: "Square footage, quantities, labor hours, totals, margins. All computed in code from structured inputs. Models orchestrate, read, explain. They don&rsquo;t emit the numbers the business runs on.",
+    body: "Square footage, labor hours, totals, and margins are computed in code from your saved rates. The model reads and explains. It does not invent the number the business runs on.",
   },
   {
-    title: "Every output has a source and a confidence score.",
-    body: "Every line item traces back to a measurement, spec, capture, or customer request. Every agent-produced field ships with a confidence score. Trust is built on the paper trail.",
+    title: "AI drafts. You decide.",
+    body: "Every draft, whether a lead, a quote, or a revised proposal, lands in a form for you to check before it saves or sends. Nothing goes to a customer without a human clicking send.",
   },
   {
-    title: "Capture-first. Form-second.",
-    body: "The phone walks the building. The agent drafts. The form is where you edit, not where the record begins.",
+    title: "One record, first call to final invoice.",
+    body: "The list row becomes the lead, becomes the opportunity, becomes the job. Nothing is retyped between stages and nothing is lost when the deal changes hands.",
   },
   {
-    title: "Graceful degradation.",
-    body: "When the AI is uncertain, surface it. Low-confidence output is flagged for review, not fabricated into confident numbers.",
-  },
-  {
-    title: "Human override is first-class.",
-    body: "Corrections are logged, attributed, and fed back into the eval set. Every edit makes the model better on the next bid.",
-  },
-  {
-    title: "Output that wins work.",
-    body: "The property manager&rsquo;s experience is what wins the next bid. The live URL is the differentiator that makes the contractor look good in front of the ownership group.",
+    title: "The rep follows the firm.",
+    body: "Accounts carry an internal owner. Contacts carry employment history. When a property manager changes companies, you still know who to call and who owns the relationship.",
   },
 ];
 
@@ -814,25 +640,25 @@ function Principles() {
         <div className="grid grid-cols-1 gap-16 lg:grid-cols-12">
           <div className="lg:col-span-5">
             <span className="kicker text-[var(--color-amber-soft)]">
-              §&nbsp;06 · Build principles
+              §&nbsp;05 · How we build
             </span>
             <h2 className="mt-6 font-display-editorial text-[clamp(2.25rem,5vw,4.5rem)] leading-[0.95]">
               Built by a contractor&rsquo;s kid.
               <br />
               <span className="italic text-white/90">
-                Not a dashboard designer.
+                Shaped by a working crew.
               </span>
             </h2>
             <p className="mt-8 max-w-md text-base leading-relaxed text-white/65">
               Mercer&rsquo;s roots are in the family exterior-renovation
-              business. Every decision in the product gets measured against a
-              single question: <em>does this help the person in the parking
-              lot win the job, and does the agent do what the contractor
-              used to do?</em>
+              business, and every release is built against a real commercial
+              painting contractor&rsquo;s pipeline. One question decides what
+              ships: <em>does this help the person in the parking lot win the
+              job and get paid for it?</em>
             </p>
             <div className="mt-10 flex items-center gap-3 text-[var(--color-amber-soft)]">
               <Sparkles className="h-4 w-4" aria-hidden />
-              <span className="kicker">AI-native, not AI-added</span>
+              <span className="kicker">AI included, not added on</span>
             </div>
           </div>
 
@@ -846,10 +672,9 @@ function Principles() {
                   <h3 className="font-display text-xl leading-tight text-white">
                     {p.title}
                   </h3>
-                  <p
-                    className="text-sm leading-relaxed text-white/70"
-                    dangerouslySetInnerHTML={{ __html: p.body }}
-                  />
+                  <p className="text-sm leading-relaxed text-white/70">
+                    {p.body}
+                  </p>
                 </li>
               ))}
             </ul>
@@ -880,16 +705,17 @@ function FinalCta() {
         <div className="flex flex-col gap-10 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <span className="kicker text-[var(--color-ink)]/60">
-              §&nbsp;07 · Your move
+              §&nbsp;06 · Your move
             </span>
             <h2 className="mt-6 font-display-editorial text-[clamp(2.5rem,6vw,5.75rem)] leading-[0.92]">
-              Stop transcribing.
+              Stop retyping.
               <br />
-              <span className="italic">Start capturing.</span>
+              <span className="italic">Start closing.</span>
             </h2>
             <p className="mt-8 max-w-xl text-lg leading-relaxed text-[var(--color-ink)]/80">
-              Free account, no credit card. Walk a property, run the takeoff
-              agent, ship a live proposal URL. One session, start to finish.
+              14 days free, no credit card. Load your last trade-show list,
+              convert one lead, send one proposal link. You will know by the
+              end of the afternoon.
             </p>
           </div>
 
@@ -898,7 +724,7 @@ function FinalCta() {
               href="/signup"
               className="group inline-flex h-14 items-center justify-center gap-2 rounded-full bg-[var(--color-ink)] px-8 text-base font-medium text-white shadow-[0_18px_40px_-12px_rgba(11,12,14,0.5)] transition-transform hover:-translate-y-[1px]"
             >
-              Create free account
+              Start free trial
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </Link>
             <Link
@@ -927,13 +753,13 @@ function Footer() {
             <Link href="/" className="flex items-baseline gap-2 text-white">
               <span className="font-display text-2xl">Mercer</span>
               <span className="kicker text-white/40">
-                AI-native · Commercial multifamily · Painting first
+                Commercial multifamily · Painting first
               </span>
             </Link>
             <p className="mt-5 max-w-sm text-sm leading-relaxed">
-              The AI-native operating system for commercial multifamily
-              exterior renovation. Painting first, siding and envelope next.
-              Point a phone at a building, get a bid.
+              The sales and job system for commercial multifamily exterior
+              contractors. Painting first, siding and envelope next. From the
+              trade-show list to the final invoice.
             </p>
           </div>
 
@@ -942,23 +768,19 @@ function Footer() {
             items={[
               ["Workflow", "#workflow"],
               ["Why Mercer", "#positioning"],
-              ["Why not the obvious?", "#why-not"],
               ["Capabilities", "#product"],
             ]}
           />
           <FooterCol
             title="Get started"
             items={[
-              ["Create account", "/signup"],
+              ["Start free trial", "/signup"],
               ["Sign in", "/login"],
             ]}
           />
           <FooterCol
             title="Company"
-            items={[
-              ["Roadmap", "/#product"],
-              ["Contact", "mailto:hello@mercer.build"],
-            ]}
+            items={[["Contact", "mailto:hello@mercer.build"]]}
           />
         </div>
 
@@ -967,9 +789,7 @@ function Footer() {
             © {new Date().getFullYear()} Mercer · Built with family in the
             trade
           </p>
-          <p className="font-mono text-white/30">
-            v0.3 · AI-native preview
-          </p>
+          <p className="font-mono text-white/30">Early access</p>
         </div>
       </div>
     </footer>
