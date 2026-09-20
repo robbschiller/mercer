@@ -774,7 +774,7 @@ export default async function ContactDetailPage({
                     <Input
                       name="accountName"
                       required
-                      placeholder="Company"
+                      placeholder="Account"
                       className="h-7 flex-1 text-xs"
                     />
                     <Input

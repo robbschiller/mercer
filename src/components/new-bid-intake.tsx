@@ -441,7 +441,7 @@ export function NewBidIntake({
             </span>
           }
         >
-          <FieldLabel>Client</FieldLabel>
+          <FieldLabel>Account</FieldLabel>
           <div className="flex h-[46px] items-center gap-2.5 rounded-[11px] border bg-card px-3.5 transition-[border-color,box-shadow] focus-within:border-foreground/35 focus-within:shadow-[0_0_0_3px_rgb(0_0_0/0.06)]">
             <Briefcase className="size-4 shrink-0 text-muted-foreground" />
             {/* Same register the lead form uses: picking a match links the

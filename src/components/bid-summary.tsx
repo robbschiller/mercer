@@ -257,7 +257,7 @@ export function BidSummary({
             </div>
 
             <div className="flex flex-col gap-2">
-              <Label htmlFor="clientName">Client / property manager</Label>
+              <Label htmlFor="clientName">Account</Label>
               <Input
                 id="clientName"
                 name="clientName"

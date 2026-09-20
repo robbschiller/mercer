@@ -282,7 +282,7 @@ export default async function LeadsPage({
         <SearchForm
           action="/leads"
           q={query.q}
-          placeholder="Search leads, companies…"
+          placeholder="Search leads, accounts…"
           hidden={{
             status: query.status,
             followUp: query.followUp,

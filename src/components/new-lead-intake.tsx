@@ -535,7 +535,7 @@ export function NewLeadIntake({
               )}
             </div>
             <div>
-              <FieldLabel>Company</FieldLabel>
+              <FieldLabel>Account</FieldLabel>
               <CompanyField
                 value={company}
                 accountId={accountId}
@@ -1209,7 +1209,7 @@ function CompanyField({
         <input
           value={value}
           onChange={(e) => handleChange(e.target.value)}
-          placeholder="Management company…"
+          placeholder="Management company or owner…"
           autoComplete="off"
           className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
         />

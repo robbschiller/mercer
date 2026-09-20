@@ -180,7 +180,7 @@ export default async function ProjectsPage({
             <SearchForm
               action="/projects"
               q={q}
-              placeholder="Search properties, clients…"
+              placeholder="Search properties, accounts…"
               hidden={{ status: filter }}
             />
             <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">

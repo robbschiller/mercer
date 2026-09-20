@@ -372,7 +372,7 @@ export function PropertyProfile({
         {!compact && (
         <div className="flex flex-col justify-center gap-2.5 border-t pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
           <div className="flex items-baseline justify-between gap-2.5">
-            <span className="text-xs text-muted-foreground">Client since</span>
+            <span className="text-xs text-muted-foreground">Account since</span>
             <span className="text-[13.5px] font-semibold">{clientSince}</span>
           </div>
           <div className="flex items-baseline justify-between gap-2.5">

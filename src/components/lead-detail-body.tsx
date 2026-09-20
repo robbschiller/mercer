@@ -437,13 +437,13 @@ function EditForm({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Company / Account</CardTitle>
+          <CardTitle className="text-base">Account</CardTitle>
           <CardDescription className="text-xs">
             The management company associated with this lead.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm">
-          <Field label="Company" htmlFor="lead-company">
+          <Field label="Account" htmlFor="lead-company">
             {/* Type-ahead against the account register: picking a match saves
                 the exact existing name, so findOrCreateAccount links that
                 account instead of minting a near-miss duplicate. */}

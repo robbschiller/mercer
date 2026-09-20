@@ -204,7 +204,7 @@ export default async function BidsPage({
             <SearchForm
               action="/opportunities"
               q={q}
-              placeholder="Search properties, clients…"
+              placeholder="Search properties, accounts…"
               hidden={{ status }}
             />
           </Toolbar>

@@ -124,7 +124,7 @@ export default async function ContactsPage({
   const companies = new Map<string, ContactRegisterRow[]>();
   if (grouped) {
     for (const c of all) {
-      const key = c.company ?? "No company on file";
+      const key = c.company ?? "No account on file";
       companies.set(key, [...(companies.get(key) ?? []), c]);
     }
   }
@@ -189,7 +189,7 @@ export default async function ContactsPage({
             type="search"
             name="q"
             defaultValue={q}
-            placeholder="Search people, companies…"
+            placeholder="Search people, accounts…"
             className="h-9 w-56 rounded-[10px] border bg-card pl-9 pr-3 text-[13.5px] outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-foreground/30"
           />
         </form>
@@ -213,7 +213,7 @@ export default async function ContactsPage({
         </Chip>
         <Chip href={qs({ group: "co" })} active={grouped} className="ml-auto">
           <FolderTree className="size-3.5 text-muted-foreground" />
-          By company
+          By account
         </Chip>
       </div>
 
@@ -224,7 +224,7 @@ export default async function ContactsPage({
             <>
               <FolderTree className="size-3.5" />
               Grouped{" "}
-              <b className="font-semibold text-foreground/80">by company</b>
+              <b className="font-semibold text-foreground/80">by account</b>
             </>
           ) : (
             <>
@@ -272,7 +272,7 @@ export default async function ContactsPage({
           </h3>
           <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
             {q
-              ? "Try a different name or company."
+              ? "Try a different name or account."
               : "People show up here when a list row is converted or a lead is added — every yes starts with a name."}
           </p>
           <Link

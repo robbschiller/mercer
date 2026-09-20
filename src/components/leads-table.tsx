@@ -269,7 +269,7 @@ export function LeadsTable({
         size: 180,
         enableSorting: false,
         enableColumnFilter: false,
-        header: () => <HeaderLabel>Company</HeaderLabel>,
+        header: () => <HeaderLabel>Account</HeaderLabel>,
         cell: ({ row }) => <MutedCell>{row.original.company || "-"}</MutedCell>,
       },
       {

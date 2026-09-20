@@ -140,7 +140,7 @@ export default async function ListDetailPage({
         <SearchForm
           action={`/lists/${id}`}
           q={q ?? ""}
-          placeholder="Search people, companies, properties…"
+          placeholder="Search people, accounts, properties…"
         />
       </Toolbar>
 
@@ -150,7 +150,7 @@ export default async function ListDetailPage({
           title={q ? `Nobody matches “${q}”` : "This list is empty"}
           description={
             q
-              ? "Try a different name, company, or property."
+              ? "Try a different name, account, or property."
               : "Every row from the upload lands here. Nothing to show yet."
           }
         />
@@ -160,7 +160,7 @@ export default async function ListDetailPage({
             <thead>
               <tr className={TABLE_HEAD_ROW}>
                 <th className="px-4 py-2.5 font-semibold">Person</th>
-                <th className="px-4 py-2.5 font-semibold">Company</th>
+                <th className="px-4 py-2.5 font-semibold">Account</th>
                 <th className="px-4 py-2.5 font-semibold">Property</th>
                 <th className="px-4 py-2.5 font-semibold">Last contact</th>
                 <th className="px-4 py-2.5 text-right font-semibold">Lead</th>

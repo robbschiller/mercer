@@ -50,7 +50,7 @@ const TYPE_META: Record<
     icon: <ContactRound className="size-4" />,
   },
   account: {
-    label: "Companies",
+    label: "Accounts",
     href: (id) => `/leads/accounts/${id}`,
     icon: <Building className="size-4" />,
   },
@@ -142,7 +142,7 @@ export function GlobalSearch() {
       onValueChange={setSelected}
     >
       <CommandInput
-        placeholder="Search properties, projects, people…"
+        placeholder="Search properties, accounts, people…"
         value={query}
         onValueChange={setQuery}
       />
