@@ -136,7 +136,7 @@ export function WinRateByCompany({ rows }: { rows: WinLossByCompany[] }) {
                   <span
                     className={cn(
                       r.lost >= 3 &&
-                        "font-medium text-amber-700 dark:text-amber-400",
+                        "font-medium text-warning-foreground",
                     )}
                   >
                     {r.lost} lost
@@ -144,7 +144,7 @@ export function WinRateByCompany({ rows }: { rows: WinLossByCompany[] }) {
                   {r.open > 0 && (
                     <>
                       <span className="text-border">·</span>
-                      <span className="text-blue-700 dark:text-blue-400">
+                      <span className="text-info-foreground">
                         {r.open} open
                       </span>
                     </>

@@ -40,7 +40,7 @@ import {
   type FinderBuilding,
 } from "@/components/property-finder";
 import { cn } from "@/lib/utils";
-import { BackLink } from "@/components/page-chrome";
+import { BackLink } from "@/components/chrome";
 import { AccountAutocomplete } from "@/components/account-autocomplete";
 
 export type BidLeadPrefill = {
@@ -290,30 +290,30 @@ export function NewBidIntake({
           onBack={backToFinder}
           banner={
             initialLead ? (
-              <div className="flex items-center gap-3 border-t border-amber-500/25 bg-amber-500/10 px-5 py-3">
-                <span className="grid size-[30px] shrink-0 place-items-center rounded-[9px] bg-amber-500 text-white">
+              <div className="flex items-center gap-3 border-t border-warning/25 bg-warning-soft px-5 py-3">
+                <span className="grid size-[30px] shrink-0 place-items-center rounded-[9px] bg-warning text-white">
                   <GitBranch className="size-4" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[13.5px] font-semibold text-amber-900 dark:text-amber-200">
+                  <span className="block text-[13.5px] font-semibold text-warning-foreground">
                     Started from a lead
                   </span>
-                  <span className="mt-0.5 block truncate text-[12.5px] text-amber-800/80 dark:text-amber-300/80">
+                  <span className="mt-0.5 block truncate text-[12.5px] text-warning-foreground">
                     Creating this opportunity moves the lead to quoted — the pipeline
                     stays honest.
                   </span>
                 </span>
               </div>
             ) : known && known.liveBidId ? (
-              <div className="flex items-center gap-3 border-t border-blue-600/25 bg-blue-600/10 px-5 py-3">
-                <span className="grid size-[30px] shrink-0 place-items-center rounded-[9px] bg-blue-600 text-white">
+              <div className="flex items-center gap-3 border-t border-info/25 bg-info-soft px-5 py-3">
+                <span className="grid size-[30px] shrink-0 place-items-center rounded-[9px] bg-info text-white">
                   <Send className="size-4" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[13.5px] font-semibold text-blue-900 dark:text-blue-200">
+                  <span className="block text-[13.5px] font-semibold text-info-foreground">
                     A quote is already out
                   </span>
-                  <span className="mt-0.5 block truncate text-[12.5px] text-blue-800/80 dark:text-blue-300/80">
+                  <span className="mt-0.5 block truncate text-[12.5px] text-info-foreground/80">
                     {known.liveBidLabel} — a new opportunity is a separate scope, not a                    revision.
                   </span>
                 </span>
@@ -321,21 +321,21 @@ export function NewBidIntake({
                   href={`/opportunities/${known.liveBidId}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="shrink-0 text-[12.5px] font-semibold text-blue-700 hover:underline dark:text-blue-400"
+                  className="shrink-0 text-[12.5px] font-semibold text-info-foreground hover:underline"
                 >
                   Open that quote
                 </a>
               </div>
             ) : known && known.jobs > 0 ? (
-              <div className="flex items-center gap-3 border-t border-emerald-600/25 bg-emerald-600/10 px-5 py-3">
-                <span className="grid size-[30px] shrink-0 place-items-center rounded-[9px] bg-emerald-600 text-white">
+              <div className="flex items-center gap-3 border-t border-success/25 bg-success-soft px-5 py-3">
+                <span className="grid size-[30px] shrink-0 place-items-center rounded-[9px] bg-success text-white">
                   <BadgeCheck className="size-4" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[13.5px] font-semibold text-emerald-800 dark:text-emerald-300">
+                  <span className="block text-[13.5px] font-semibold text-success-foreground">
                     You&apos;ve won work here
                   </span>
-                  <span className="mt-0.5 block truncate text-[12.5px] text-emerald-700/90 dark:text-emerald-400/90">
+                  <span className="mt-0.5 block truncate text-[12.5px] text-success-foreground/90">
                     {known.lastWonAt
                       ? `Last won ${monthYear(known.lastWonAt)} · `
                       : ""}
@@ -353,7 +353,7 @@ export function NewBidIntake({
                   href={`/properties/${known.id}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="shrink-0 text-[12.5px] font-semibold text-blue-700 hover:underline dark:text-blue-400"
+                  className="shrink-0 text-[12.5px] font-semibold text-info-foreground hover:underline"
                 >
                   View history
                 </a>
@@ -460,7 +460,7 @@ export function NewBidIntake({
           </div>
           {known && client ? (
             <p className="mt-2 flex items-start gap-1.5 text-xs text-foreground/80">
-              <Sparkles className="mt-px size-[13px] shrink-0 text-emerald-600" />
+              <Sparkles className="mt-px size-[13px] shrink-0 text-success-foreground" />
               <span>
                 Pulled{" "}
                 <b className="font-semibold">from the property record</b>
@@ -553,7 +553,7 @@ export function NewBidIntake({
             num="2"
             title="What we already know"
             note={
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-success-foreground">
                 <Check className="size-[13px]" />
                 Reuses your takeoff
               </span>
@@ -800,7 +800,7 @@ function Spec({
             {unit}
           </span>
         </span>
-        <span className="inline-flex items-center gap-1 self-start rounded-full border border-emerald-600/25 bg-emerald-600/10 px-1.5 py-px text-[9.5px] font-semibold text-emerald-700 dark:text-emerald-400">
+        <span className="inline-flex items-center gap-1 self-start rounded-full border border-success/25 bg-success-soft px-1.5 py-px text-[9.5px] font-semibold text-success-foreground">
           <RotateCcw className="size-2.5" />
           reuses takeoff
         </span>

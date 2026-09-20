@@ -459,7 +459,7 @@ function Generating({
                   className={cn(
                     "flex size-5 items-center justify-center rounded-full border",
                     done &&
-                      "border-emerald-500/50 bg-emerald-500/10 text-emerald-600",
+                      "border-success/50 bg-success-soft text-success-foreground",
                     active && "border-primary text-primary",
                   )}
                 >
@@ -630,7 +630,7 @@ function RevisionComposer({
       }}
       className={cn(
         "rounded-xl border bg-card px-3 py-2.5 transition-[border-color,box-shadow] focus-within:border-foreground/25",
-        dragOver && "border-blue-600/60 shadow-[0_0_0_3px] shadow-blue-600/10",
+        dragOver && "border-info/60 shadow-[0_0_0_3px] shadow-blue-600/10",
       )}
     >
       <div className="flex items-end gap-2">
@@ -805,7 +805,7 @@ function DoneCard({
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0 border-b py-4">
         <div className="flex items-center gap-2.5">
-          <span className="flex size-8 items-center justify-center rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-emerald-600">
+          <span className="flex size-8 items-center justify-center rounded-lg border border-success/40 bg-success-soft text-success-foreground">
             <CheckCircle2 className="size-4" />
           </span>
           <div>
@@ -1130,10 +1130,10 @@ export function QuoteEngine({
                 documentCount={attachments.length}
               />
               {marginWarning && (
-                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-red-600/40 bg-red-600/5 px-4 py-3">
-                  <TriangleAlert className="size-5 shrink-0 text-red-600" />
+                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-destructive/40 bg-destructive/5 px-4 py-3">
+                  <TriangleAlert className="size-5 shrink-0 text-destructive" />
                   <div className="min-w-0 flex-1 text-sm">
-                    <p className="font-semibold text-red-700 dark:text-red-400">
+                    <p className="font-semibold text-destructive">
                       This quote is{" "}
                       <span className="font-mono tabular-nums">
                         {formatCurrency(Math.abs(marginWarning.delta))}

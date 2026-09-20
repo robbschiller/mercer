@@ -40,7 +40,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { SubmitButton } from "@/components/submit-button";
 import { projectStatusLabel, type ProjectStatus } from "@/lib/status-meta";
 import { cn } from "@/lib/utils";
-import { BackLink } from "@/components/page-chrome";
+import { BackLink } from "@/components/chrome";
 
 /**
  * The building's whole story — aerial, ledger, project timeline, relationship
@@ -77,13 +77,13 @@ function dealOutcome(d: PropertyDeal): Outcome {
       return { label: "Completed", cls: "border bg-muted/60 text-foreground/70" };
     return {
       label: projectStatusLabel(d.status as ProjectStatus),
-      cls: "border border-blue-600/25 bg-blue-600/10 text-blue-700 dark:text-blue-400",
+      cls: "border border-info/25 bg-info-soft text-info-foreground",
     };
   }
   if (d.status === "won")
     return {
       label: "Won",
-      cls: "border border-emerald-600/25 bg-emerald-600/10 text-emerald-700 dark:text-emerald-400",
+      cls: "border border-success/25 bg-success-soft text-success-foreground",
     };
   if (d.status === "lost")
     return {
@@ -92,7 +92,7 @@ function dealOutcome(d: PropertyDeal): Outcome {
     };
   return {
     label: "Open",
-    cls: "border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+    cls: "border border-warning/30 bg-warning-soft text-warning-foreground",
   };
 }
 
@@ -111,9 +111,9 @@ function DealIcon({ kind }: { kind: PropertyDeal["kind"] | "due" }) {
 }
 
 const AVATAR_TINTS = [
-  "bg-blue-600",
+  "bg-info",
   "bg-rose-600",
-  "bg-emerald-600",
+  "bg-success",
   "bg-violet-600",
   "bg-amber-600",
 ];
@@ -294,13 +294,13 @@ export function PropertyProfile({
               {title}
             </h1>
             {repaintDue ? (
-              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-[3px] text-xs font-semibold text-amber-700 dark:text-amber-400">
-                <span className="size-1.5 rounded-full bg-amber-500" />
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-warning/30 bg-warning-soft px-2.5 py-[3px] text-xs font-semibold text-warning-foreground">
+                <span className="size-1.5 rounded-full bg-warning" />
                 Repaint due
               </span>
             ) : hasOpenDeal ? (
-              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-blue-600/20 bg-blue-600/10 px-2.5 py-[3px] text-xs font-semibold text-blue-700 dark:text-blue-400">
-                <span className="size-1.5 rounded-full bg-blue-600" />
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-info/20 bg-info-soft px-2.5 py-[3px] text-xs font-semibold text-info-foreground">
+                <span className="size-1.5 rounded-full bg-info" />
                 Active project
               </span>
             ) : null}
@@ -403,16 +403,16 @@ export function PropertyProfile({
 
       {/* ── Repaint next-action banner ── */}
       {repaintDue && lastWon?.acceptedAt && (
-        <div className="mb-5 flex flex-wrap items-center gap-4 rounded-2xl border border-amber-500/30 bg-gradient-to-b from-amber-500/10 to-amber-500/15 p-4">
-          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-amber-500 text-white shadow-[0_4px_12px_-3px] shadow-amber-500/50">
+        <div className="mb-5 flex flex-wrap items-center gap-4 rounded-2xl border border-warning/30 bg-gradient-to-b from-amber-500/10 to-amber-500/15 p-4">
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-warning text-white shadow-[0_4px_12px_-3px] shadow-amber-500/50">
             <PaintRoller className="size-5" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[14.5px] font-semibold text-amber-900 dark:text-amber-200">
+            <p className="text-[14.5px] font-semibold text-warning-foreground">
               Repaint due — last painted {monthYear(lastWon.acceptedAt)}
               {lastWon.value != null && <> for {money.format(lastWon.value)}</>}
             </p>
-            <p className="mt-0.5 text-[12.5px] text-amber-800/80 dark:text-amber-300/80">
+            <p className="mt-0.5 text-[12.5px] text-warning-foreground">
               {repaintYears} years on, past the exterior repaint cycle. No open
               project on this building yet.
             </p>
@@ -464,7 +464,7 @@ export function PropertyProfile({
                   date={monthYear(new Date())}
                   outcome={{
                     label: "Open",
-                    cls: "border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+                    cls: "border border-warning/30 bg-warning-soft text-warning-foreground",
                   }}
                   title="Repaint due"
                   detail={`${repaintYears} years since the last exterior. No open project yet.`}
@@ -676,8 +676,8 @@ export function PropertyProfile({
               )}
 
               {property.maintenanceNotes.trim() && (
-                <div className="mt-3.5 flex gap-2.5 rounded-xl border bg-amber-500/5 p-3">
-                  <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-400">
+                <div className="mt-3.5 flex gap-2.5 rounded-xl border bg-warning-soft p-3">
+                  <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-warning-soft text-warning-foreground">
                     <Wrench className="size-3.5" />
                   </span>
                   <div className="min-w-0 text-[12.5px] leading-relaxed text-muted-foreground">
@@ -997,11 +997,11 @@ function TimelineItem({
 }) {
   const nodeCls =
     kind === "due"
-      ? "border-amber-500 bg-amber-500 text-white"
+      ? "border-warning bg-warning text-white"
       : kind === "job"
         ? "border-foreground bg-foreground text-background"
         : kind === "lead"
-          ? "border-blue-600/25 bg-blue-600/10 text-blue-700 dark:text-blue-400"
+          ? "border-info/25 bg-info-soft text-info-foreground"
           : "border-border bg-muted/60 text-foreground/70";
   const body = (
     <div
@@ -1009,7 +1009,7 @@ function TimelineItem({
         "min-w-0 pt-0.5",
         (big || highlight) && "-mt-0.5 rounded-xl border p-3",
         big && !highlight && "border-border/70 bg-muted/20",
-        highlight && "border-amber-500/30 bg-amber-500/10",
+        highlight && "border-warning/30 bg-warning-soft",
       )}
     >
       <div className="mb-1 flex items-center gap-2.5">
@@ -1037,7 +1037,7 @@ function TimelineItem({
       <p
         className={cn(
           "text-sm font-semibold tracking-tight",
-          highlight && "text-amber-900 dark:text-amber-200",
+          highlight && "text-warning-foreground",
         )}
       >
         {title}

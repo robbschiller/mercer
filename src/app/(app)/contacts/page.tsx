@@ -37,9 +37,9 @@ function moneyK(n: number): string {
 }
 
 const AVATAR_TINTS = [
-  "bg-blue-600",
+  "bg-info",
   "bg-rose-600",
-  "bg-emerald-600",
+  "bg-success",
   "bg-violet-600",
   "bg-amber-600",
   "bg-cyan-600",
@@ -173,7 +173,7 @@ export default async function ContactsPage({
       </header>
 
       {params.imported && (
-        <div className="mb-4 rounded-xl border border-emerald-600/30 bg-emerald-600/5 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-400">
+        <div className="mb-4 rounded-xl border border-success/30 bg-success-soft px-4 py-2 text-sm text-success-foreground">
           Imported {params.imported} contact
           {params.imported === "1" ? "" : "s"}.
         </div>
@@ -205,7 +205,7 @@ export default async function ContactsPage({
         <Chip
           href={qs({ show: "cold" })}
           active={filter === "cold" && !grouped}
-          activeClass="border-amber-500 bg-amber-500 text-white [&_span]:!text-white/85 [&_svg]:!text-white/85"
+          activeClass="border-warning bg-warning text-white [&_span]:!text-white/85 [&_svg]:!text-white/85"
         >
           <AlarmClock className="size-3.5 text-muted-foreground" />
           Going cold
@@ -300,7 +300,7 @@ export default async function ContactsPage({
                 {moneyK(list.reduce((n, c) => n + c.lifetime, 0))} lifetime
               </span>
               {list.filter(isCold).length > 0 && (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-px text-[11.5px] font-semibold text-amber-700 dark:text-amber-400">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/30 bg-warning-soft px-2.5 py-px text-[11.5px] font-semibold text-warning-foreground">
                   <AlarmClock className="size-3" />
                   {list.filter(isCold).length} going cold
                 </span>
@@ -366,7 +366,7 @@ function ContactCard({ c }: { c: ContactRegisterRow }) {
             </Tag>
           )}
           {rel === "champ" && (
-            <Tag className="border-emerald-600/25 bg-emerald-600/10 text-emerald-700 dark:text-emerald-400">
+            <Tag className="border-success/25 bg-success-soft text-success-foreground">
               <Award className="size-3" />
               Champion
             </Tag>
@@ -384,7 +384,7 @@ function ContactCard({ c }: { c: ContactRegisterRow }) {
             >
               <method.Icon className="size-3 text-muted-foreground" />
               {method.label}
-              <span className="size-[5px] rounded-full bg-blue-600" />
+              <span className="size-[5px] rounded-full bg-info" />
             </Tag>
           )}
         </div>
@@ -422,7 +422,7 @@ function ContactCard({ c }: { c: ContactRegisterRow }) {
           <Spark n={c.dealsCount} label={c.dealsCount === 1 ? "project" : "projects"} />
           {c.decidedCount >= 2 && (
             <span className="inline-flex items-center gap-1.5 rounded-lg border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground">
-              <b className="font-mono font-medium tabular-nums text-emerald-600">
+              <b className="font-mono font-medium tabular-nums text-success-foreground">
                 {Math.round((c.wonCount / c.decidedCount) * 100)}%
               </b>
               win rate
@@ -445,7 +445,7 @@ function ContactCard({ c }: { c: ContactRegisterRow }) {
           className={cn(
             "flex items-start gap-1.5 text-xs",
             cold
-              ? "font-medium text-amber-700 dark:text-amber-400"
+              ? "font-medium text-warning-foreground"
               : "text-muted-foreground",
           )}
         >
@@ -470,7 +470,7 @@ function ContactCard({ c }: { c: ContactRegisterRow }) {
             className={cn(
               "inline-flex h-[34px] w-full items-center justify-center gap-1.5 rounded-lg border text-[13px] font-medium transition-colors",
               cold
-                ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300"
+                ? "border-warning/40 bg-warning-soft text-warning-foreground"
                 : hasOpenWork(c)
                   ? "border-foreground bg-foreground text-background"
                   : "bg-card text-foreground/80",

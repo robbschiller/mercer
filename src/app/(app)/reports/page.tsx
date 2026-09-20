@@ -138,7 +138,7 @@ export default async function ReportsPage() {
       <header className="mb-6 flex flex-wrap items-end gap-5">
         <div>
           <p className="mb-2.5 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">
-            <span className="size-[7px] animate-pulse rounded-full bg-emerald-500 shadow-[0_0_0_3px] shadow-emerald-500/15" />
+            <span className="size-[7px] animate-pulse rounded-full bg-success shadow-[0_0_0_3px] shadow-emerald-500/15" />
             Business · derived live
           </p>
           <h1 className="text-[27px] font-semibold leading-tight tracking-tight">
@@ -326,7 +326,7 @@ export default async function ReportsPage() {
                             className={cn(
                               "absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-card",
                               isPeak
-                                ? "size-2.5 bg-blue-600"
+                                ? "size-2.5 bg-info"
                                 : "size-2 bg-foreground",
                             )}
                             style={{ left: `${cx(i)}%`, top }}
@@ -336,7 +336,7 @@ export default async function ReportsPage() {
                               className={cn(
                                 "absolute -translate-x-1/2 font-mono text-[10px] font-medium tabular-nums",
                                 isPeak
-                                  ? "font-semibold text-blue-700 dark:text-blue-400"
+                                  ? "font-semibold text-info-foreground"
                                   : "text-foreground/80",
                               )}
                               style={{
@@ -372,7 +372,7 @@ export default async function ReportsPage() {
                     ))}
                   </div>
                   <p className="mt-3.5 flex items-center gap-2 border-t pt-3 text-xs text-muted-foreground">
-                    <Info className="size-3.5 shrink-0 text-blue-600" />
+                    <Info className="size-3.5 shrink-0 text-info-foreground" />
                     {peak.value > 0 ? (
                       <>
                         {peak.label} leads the stretch — {moneyK(peak.value)}{" "}
@@ -395,7 +395,7 @@ export default async function ReportsPage() {
             note={`${delivered.length} job${delivered.length === 1 ? "" : "s"} closed`}
             right={
               <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/80">
-                <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
+                <span className="size-1.5 animate-pulse rounded-full bg-success" />
                 derived live
               </span>
             }
@@ -459,7 +459,7 @@ export default async function ReportsPage() {
                             <span
                               className={cn(
                                 "block h-full rounded-full",
-                                under ? "bg-amber-500" : "bg-emerald-600",
+                                under ? "bg-warning" : "bg-success",
                               )}
                               style={{
                                 width: `${Math.min((margin / 28) * 100, 100)}%`,
@@ -469,7 +469,7 @@ export default async function ReportsPage() {
                           <span
                             className={cn(
                               "w-[42px] text-right font-mono text-[13px] font-semibold tabular-nums",
-                              under && "text-amber-600 dark:text-amber-400",
+                              under && "text-warning-foreground",
                             )}
                           >
                             {margin.toFixed(1)}%
@@ -627,7 +627,7 @@ export default async function ReportsPage() {
                             className={cn(
                               "block h-full rounded-md",
                               si === f.stages.length - 1
-                                ? "bg-blue-600"
+                                ? "bg-info"
                                 : "bg-foreground",
                             )}
                             style={{ width: `${pct(s.count, top)}%` }}
@@ -787,7 +787,7 @@ function StatCard({
         {chip && <span className="ml-auto">{chip}</span>}
       </div>
       {children}
-      <div className="mt-auto flex items-center gap-1.5 border-t border-border/60 pt-2.5 text-xs font-medium text-muted-foreground transition-colors group-hover:text-blue-700 dark:group-hover:text-blue-400 [&:not(:first-child)]:mt-3">
+      <div className="mt-auto flex items-center gap-1.5 border-t border-border/60 pt-2.5 text-xs font-medium text-muted-foreground transition-colors group-hover:text-info-foreground [&:not(:first-child)]:mt-3">
         {hint}
         <ArrowRight className="size-[13px] transition-transform group-hover:translate-x-0.5" />
       </div>
@@ -828,7 +828,7 @@ function Chip({
       className={cn(
         "inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-px text-[11.5px] font-semibold tabular-nums",
         tone === "amber"
-          ? "border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+          ? "border border-warning/30 bg-warning-soft text-warning-foreground"
           : "border bg-muted/60 text-muted-foreground",
       )}
     >

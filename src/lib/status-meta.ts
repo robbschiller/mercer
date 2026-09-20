@@ -493,7 +493,18 @@ export function photoKindLabel(value: string): string {
   return PHOTO_KIND_LABELS[value as PhotoKind] ?? value;
 }
 
-type BadgeVariant = "default" | "secondary" | "outline";
+/**
+ * Subset of Badge variants a status may map to. Keep status pills quiet by
+ * default (neutral variants); reach for `success` / `warning` / `info` only
+ * when the state is an outcome (won, overdue, live) rather than a stage.
+ */
+type BadgeVariant =
+  | "default"
+  | "secondary"
+  | "outline"
+  | "success"
+  | "warning"
+  | "info";
 
 export const BID_STATUS_LABELS: Record<BidStatus, string> = {
   draft: "Draft",

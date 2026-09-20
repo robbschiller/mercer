@@ -260,7 +260,7 @@ export function AppSidebar({
                 >
                   <Icon className="size-4" />
                   {count > 0 && (
-                    <span className="absolute -right-px -top-px hidden size-[7px] rounded-full bg-blue-600 ring-2 ring-sidebar group-data-[collapsible=icon]:block" />
+                    <span className="absolute -right-px -top-px hidden size-[7px] rounded-full bg-info ring-2 ring-sidebar group-data-[collapsible=icon]:block" />
                   )}
                 </span>
                 <span className="flex-1 truncate group-data-[collapsible=icon]:hidden">
@@ -382,7 +382,7 @@ function AccountCard({
           <DropdownMenuSeparator className="my-0" />
           <div className="flex items-center justify-between px-3 py-2.5">
             <span className="flex items-center gap-1.5 text-[12.5px] font-semibold">
-              <span className="rounded-[5px] border border-blue-600/25 bg-blue-600/10 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-blue-700 dark:text-blue-400">
+              <span className="rounded-[5px] border border-info/25 bg-info-soft px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-info-foreground">
                 {ROLE_LABELS[role] ?? role}
               </span>
               {companyName || "Mercer"}
@@ -390,7 +390,7 @@ function AccountCard({
             <Link
               href="/settings"
               onClick={dismissOnMobile}
-              className="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400"
+              className="text-xs font-semibold text-info-foreground hover:underline"
             >
               Manage
             </Link>

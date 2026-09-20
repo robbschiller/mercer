@@ -20,7 +20,7 @@ import { PropertyProfile, Panel } from "@/components/property-profile";
 import { PhotosCard } from "@/components/photos-card";
 import { AttachmentsCard } from "@/components/attachments-card";
 import { BreadcrumbLabel } from "@/components/breadcrumb-label";
-import { PageContainer, PageError, PageHeader } from "@/components/page-chrome";
+import { PageContainer, PageError, PageHeader } from "@/components/chrome";
 import { leadFullName } from "@/lib/leads/name";
 import {
   Card,

@@ -23,7 +23,7 @@ import {
   ResultSummary,
   SearchForm,
   Toolbar,
-} from "@/components/page-chrome";
+} from "@/components/chrome";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import {
@@ -55,24 +55,24 @@ const STATUS_STYLE: Record<
     dot: "bg-muted-foreground/60",
   },
   in_progress: {
-    pill: "bg-blue-600/10 text-blue-700 dark:text-blue-400 border-blue-600/20",
-    dot: "bg-blue-600",
+    pill: "bg-info-soft text-info-foreground border-info/20",
+    dot: "bg-info",
   },
   punch_out: {
     pill: "bg-violet-600/10 text-violet-700 dark:text-violet-400 border-violet-600/20",
     dot: "bg-violet-600",
   },
   complete: {
-    pill: "bg-emerald-600/10 text-emerald-700 dark:text-emerald-400 border-emerald-600/25",
-    dot: "bg-emerald-600",
+    pill: "bg-success-soft text-success-foreground border-success/25",
+    dot: "bg-success",
   },
   warranty_watch: {
-    pill: "bg-emerald-600/10 text-emerald-700 dark:text-emerald-400 border-emerald-600/25",
-    dot: "bg-emerald-600",
+    pill: "bg-success-soft text-success-foreground border-success/25",
+    dot: "bg-success",
   },
   on_hold: {
-    pill: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30",
-    dot: "bg-amber-500",
+    pill: "bg-warning-soft text-warning-foreground border-warning/30",
+    dot: "bg-warning",
   },
 };
 
@@ -311,9 +311,9 @@ function JobCard({ job }: { job: JobsListRow }) {
                 className={cn(
                   "absolute inset-y-0 left-0 rounded-full",
                   closed
-                    ? "bg-emerald-600"
+                    ? "bg-success"
                     : burnAhead
-                      ? "bg-amber-500"
+                      ? "bg-warning"
                       : job.status === "on_hold"
                         ? "bg-muted-foreground/50"
                         : "bg-foreground",
@@ -333,12 +333,12 @@ function JobCard({ job }: { job: JobsListRow }) {
             className={cn(
               "mt-1.5 inline-flex items-center gap-1.5 text-[11.5px] font-medium",
               closed
-                ? "text-emerald-600"
+                ? "text-success-foreground"
                 : burnAhead
-                  ? "text-amber-600"
+                  ? "text-warning-foreground"
                   : job.status === "not_started" || job.status === "on_hold"
                     ? "text-muted-foreground"
-                    : "text-emerald-600",
+                    : "text-success-foreground",
             )}
           >
             {closed ? (
@@ -386,7 +386,7 @@ function JobCard({ job }: { job: JobsListRow }) {
           className={cn(
             "mt-2.5 inline-flex items-center gap-1.5 text-xs",
             staleUpdate
-              ? "font-medium text-amber-600"
+              ? "font-medium text-warning-foreground"
               : "text-muted-foreground",
           )}
         >

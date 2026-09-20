@@ -424,12 +424,12 @@ function KnownSuggestion({
           Specs on file
         </Chip>
       ) : b.liveBidId ? (
-        <Chip className="border-blue-600/25 bg-blue-600/10 text-blue-700 dark:text-blue-400">
+        <Chip className="border-info/25 bg-info-soft text-info-foreground">
           <Send className="size-[11px]" />
           Quote out
         </Chip>
       ) : b.jobs > 0 ? (
-        <Chip className="border-emerald-600/25 bg-emerald-600/10 text-emerald-700 dark:text-emerald-400">
+        <Chip className="border-success/25 bg-success-soft text-success-foreground">
           <CircleCheck className="size-[11px]" />
           Won here
         </Chip>
@@ -475,11 +475,11 @@ function KnownSuggestion({
           {b.jobs} job{b.jobs === 1 ? "" : "s"}
         </span>
         {flavor === "bid" && b.liveBidId && hasSpecs ? (
-          <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-blue-600/25 bg-blue-600/10 px-2.5 py-[3px] text-[10.5px] font-semibold text-blue-700 dark:text-blue-400">
+          <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-info/25 bg-info-soft px-2.5 py-[3px] text-[10.5px] font-semibold text-info-foreground">
             Quote out
           </span>
         ) : due ? (
-          <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-[3px] text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+          <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-warning/30 bg-warning-soft px-2.5 py-[3px] text-[11px] font-semibold text-warning-foreground">
             <RotateCcw className="size-3" />
             Repaint due
           </span>

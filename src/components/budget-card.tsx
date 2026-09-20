@@ -43,8 +43,8 @@ export function TakeoffBudgetCard({
             className={cn(
               "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold tabular-nums",
               under
-                ? "border-red-600/40 bg-red-600/10 text-red-700 dark:text-red-400"
-                : "border-emerald-600/30 bg-emerald-600/10 text-emerald-700 dark:text-emerald-400",
+                ? "border-destructive/40 bg-destructive/10 text-destructive"
+                : "border-success/30 bg-success-soft text-success-foreground",
             )}
           >
             {under && <TriangleAlert className="size-3" />}
@@ -60,7 +60,7 @@ export function TakeoffBudgetCard({
         <div className="mb-3 flex flex-wrap items-baseline gap-x-5 gap-y-1 text-xs text-muted-foreground">
           <a
             href={`/api/budget/${bidId}`}
-            className="order-last ml-auto font-medium text-blue-700 hover:underline dark:text-blue-400"
+            className="order-last ml-auto font-medium text-info-foreground hover:underline"
           >
             Download .xlsx
           </a>

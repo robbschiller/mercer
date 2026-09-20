@@ -60,7 +60,7 @@ export function HomeAgendaSection({ agenda }: { agenda: HomeAgenda }) {
 
       {total === 0 ? (
         <div className="flex flex-col items-center rounded-2xl border bg-card px-8 py-10 text-center shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
-          <span className="mb-4 flex size-12 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600">
+          <span className="mb-4 flex size-12 items-center justify-center rounded-xl bg-success-soft text-success-foreground">
             <Sun className="size-6" />
           </span>
           <h3 className="mb-1.5 text-lg font-semibold tracking-tight">
@@ -90,7 +90,7 @@ export function HomeAgendaSection({ agenda }: { agenda: HomeAgenda }) {
                 key={t}
                 className="inline-flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1 text-xs font-medium text-muted-foreground"
               >
-                <Check className="size-3 text-emerald-600" />
+                <Check className="size-3 text-success-foreground" />
                 {t}
               </span>
             ))}
@@ -157,14 +157,14 @@ export function HomeAgendaSection({ agenda }: { agenda: HomeAgenda }) {
                 return (
                   <Row key={f.leadId}>
                     {f.overdueDays > 0 && (
-                      <span className="size-[7px] shrink-0 rounded-full bg-amber-500 shadow-[0_0_0_3px] shadow-amber-500/15" />
+                      <span className="size-[7px] shrink-0 rounded-full bg-warning shadow-[0_0_0_3px] shadow-amber-500/15" />
                     )}
                     <RowMain
                       title={f.name}
                       sub={f.propertyName}
                       meta={
                         f.overdueDays > 0 ? (
-                          <span className="font-medium text-amber-700 dark:text-amber-400">
+                          <span className="font-medium text-warning-foreground">
                             Follow-up due {f.overdueDays} day
                             {f.overdueDays === 1 ? "" : "s"} ago
                           </span>
@@ -248,7 +248,7 @@ export function HomeAgendaSection({ agenda }: { agenda: HomeAgenda }) {
                       <span
                         className={cn(
                           e.daysLeft <= 5 &&
-                            "font-medium text-amber-700 dark:text-amber-400",
+                            "font-medium text-warning-foreground",
                         )}
                       >
                         Quote link expires in {e.daysLeft} day
@@ -276,7 +276,7 @@ export function HomeAgendaSection({ agenda }: { agenda: HomeAgenda }) {
                       <>
                         {j.reason}
                         {j.notStarted && (
-                          <span className="ml-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-px text-[10.5px] font-semibold text-amber-700 dark:text-amber-400">
+                          <span className="ml-1.5 rounded-full border border-warning/40 bg-warning-soft px-1.5 py-px text-[10.5px] font-semibold text-warning-foreground">
                             Not started
                           </span>
                         )}

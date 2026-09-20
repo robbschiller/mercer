@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SubmitButton } from "@/components/submit-button";
-import { PageContainer, PageHeader } from "@/components/page-chrome";
+import { PageContainer, PageHeader } from "@/components/chrome";
 
 export default async function NewListPage({
   searchParams,

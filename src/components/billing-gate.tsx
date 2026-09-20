@@ -65,7 +65,7 @@ export function BillingGate({
   return (
     <>
       {banner && !onBilling && (
-        <div className="border-b bg-amber-500/10 px-4 py-2 text-sm text-amber-900 dark:text-amber-200">
+        <div className="border-b bg-warning-soft px-4 py-2 text-sm text-warning-foreground">
           <div className="mx-auto flex max-w-6xl items-center gap-2">
             <Clock className="size-3.5 shrink-0" />
             <span>{banner}</span>

@@ -74,7 +74,7 @@ export default async function BillingPage({
         </p>
       )}
       {params.success && (
-        <p className="rounded-md border border-emerald-500/40 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400">
+        <p className="rounded-md border border-success/40 bg-success-soft px-3 py-2 text-sm text-success-foreground">
           You&apos;re all set. It can take a few seconds for the plan to show
           up here while Stripe confirms the payment.
         </p>
@@ -240,7 +240,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 function Feature({ children }: { children: React.ReactNode }) {
   return (
     <li className="flex items-start gap-2">
-      <Check className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+      <Check className="mt-0.5 size-3.5 shrink-0 text-success-foreground" />
       <span>{children}</span>
     </li>
   );

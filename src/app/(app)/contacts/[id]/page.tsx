@@ -62,9 +62,9 @@ function monthYear(d: Date): string {
 }
 
 const AVATAR_TINTS = [
-  "bg-blue-600",
+  "bg-info",
   "bg-rose-600",
-  "bg-emerald-600",
+  "bg-success",
   "bg-violet-600",
   "bg-amber-600",
   "bg-cyan-600",
@@ -93,13 +93,13 @@ function dealOutcome(d: PropertyDeal): Outcome {
       };
     return {
       label: projectStatusLabel(d.status as ProjectStatus),
-      cls: "border border-blue-600/25 bg-blue-600/10 text-blue-700 dark:text-blue-400",
+      cls: "border border-info/25 bg-info-soft text-info-foreground",
     };
   }
   if (d.status === "won")
     return {
       label: "Won",
-      cls: "border border-emerald-600/25 bg-emerald-600/10 text-emerald-700 dark:text-emerald-400",
+      cls: "border border-success/25 bg-success-soft text-success-foreground",
     };
   if (d.status === "lost")
     return {
@@ -108,7 +108,7 @@ function dealOutcome(d: PropertyDeal): Outcome {
     };
   return {
     label: "Open",
-    cls: "border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+    cls: "border border-warning/30 bg-warning-soft text-warning-foreground",
   };
 }
 
@@ -263,7 +263,7 @@ export default async function ContactDetailPage({
                   </HeroTag>
                 )}
                 {rel === "champ" && (
-                  <HeroTag className="border-emerald-600/25 bg-emerald-600/10 text-emerald-700 dark:text-emerald-400">
+                  <HeroTag className="border-success/25 bg-success-soft text-success-foreground">
                     <Award className="size-3" />
                     Champion
                   </HeroTag>
@@ -368,12 +368,12 @@ export default async function ContactDetailPage({
 
       {/* ── Going-quiet banner ── */}
       {goneQuiet && openWork && (
-        <div className="mb-5 flex flex-wrap items-center gap-4 rounded-2xl border border-amber-500/30 bg-gradient-to-b from-amber-500/10 to-amber-500/15 p-4">
-          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-amber-500 text-white shadow-[0_4px_12px_-3px] shadow-amber-500/50">
+        <div className="mb-5 flex flex-wrap items-center gap-4 rounded-2xl border border-warning/30 bg-gradient-to-b from-amber-500/10 to-amber-500/15 p-4">
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-warning text-white shadow-[0_4px_12px_-3px] shadow-amber-500/50">
             <AlarmClock className="size-5" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[14.5px] font-semibold text-amber-900 dark:text-amber-200">
+            <p className="text-[14.5px] font-semibold text-warning-foreground">
               {silenceDays == null
                 ? `No touch logged with ${firstName} while ${
                     openWork.value != null
@@ -386,7 +386,7 @@ export default async function ContactDetailPage({
                       : `an open ${openWork.kind}`
                   } sits open`}
             </p>
-            <p className="mt-0.5 truncate text-[12.5px] text-amber-800/80 dark:text-amber-300/80">
+            <p className="mt-0.5 truncate text-[12.5px] text-warning-foreground">
               {openWork.name}
               {preferred
                 ? ` — they prefer ${preferred === "phone" ? "a call" : preferred}; the silence is on us.`
@@ -449,7 +449,7 @@ export default async function ContactDetailPage({
                           d.kind === "job"
                             ? "border-foreground bg-foreground text-background"
                             : d.kind === "lead"
-                              ? "border-blue-600/25 bg-blue-600/10 text-blue-700 dark:text-blue-400"
+                              ? "border-info/25 bg-info-soft text-info-foreground"
                               : "border-border bg-muted/60 text-foreground/70",
                         )}
                       >
@@ -489,7 +489,7 @@ export default async function ContactDetailPage({
                           {d.name}
                         </p>
                         {d.kind === "job" && d.acceptedAt && (
-                          <p className="mt-1 inline-flex items-center gap-1.5 text-[11.5px] text-emerald-600">
+                          <p className="mt-1 inline-flex items-center gap-1.5 text-[11.5px] text-success-foreground">
                             <BadgeCheck className="size-3" />
                             Accepted {monthYear(d.acceptedAt)}
                           </p>
@@ -543,20 +543,20 @@ export default async function ContactDetailPage({
                         className={cn(
                           "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-[3px] text-xs font-semibold",
                           p.status === "won"
-                            ? "border-emerald-600/25 bg-emerald-600/10 text-emerald-700 dark:text-emerald-400"
+                            ? "border-success/25 bg-success-soft text-success-foreground"
                             : p.status === "lost"
                               ? "border-border bg-muted/60 text-muted-foreground"
-                              : "border-blue-600/20 bg-blue-600/10 text-blue-700 dark:text-blue-400",
+                              : "border-info/20 bg-info-soft text-info-foreground",
                         )}
                       >
                         <span
                           className={cn(
                             "size-1.5 rounded-full",
                             p.status === "won"
-                              ? "bg-emerald-600"
+                              ? "bg-success"
                               : p.status === "lost"
                                 ? "bg-muted-foreground/60"
-                                : "bg-blue-600",
+                                : "bg-info",
                           )}
                         />
                         {leadStatusLabel(p.status as LeadStatus)}
@@ -610,7 +610,7 @@ export default async function ContactDetailPage({
                       </span>
                     </span>
                     {ch.pref && (
-                      <span className="shrink-0 rounded-md border border-blue-600/25 bg-blue-600/10 px-2 py-px text-[10px] font-bold uppercase tracking-[0.04em] text-blue-700 dark:text-blue-400">
+                      <span className="shrink-0 rounded-md border border-info/25 bg-info-soft px-2 py-px text-[10px] font-bold uppercase tracking-[0.04em] text-info-foreground">
                         Preferred
                       </span>
                     )}

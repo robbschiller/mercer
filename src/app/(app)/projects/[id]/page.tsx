@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowUpRight, Camera, Landmark } from "lucide-react";
-import { PageContainer, PageError, PageHeader } from "@/components/page-chrome";
+import { PageContainer, PageError, PageHeader } from "@/components/chrome";
 import {
   getProject,
   getProjectPreStart,
@@ -462,7 +462,7 @@ function MoneyPanel({
                   (over
                     ? "bg-destructive"
                     : pct > (schedPct ?? 100) + 2
-                      ? "bg-amber-500"
+                      ? "bg-warning"
                       : "bg-foreground")
                 }
                 style={{ width: `${pct}%` }}
@@ -718,7 +718,7 @@ function UpdatesCard({
                   className={
                     "absolute -left-[5px] top-[18px] size-[9px] rounded-full border-2 border-card " +
                     (u.visibleOnPublicUrl
-                      ? "bg-blue-600"
+                      ? "bg-info"
                       : "bg-muted-foreground/50")
                   }
                 />
@@ -728,7 +728,7 @@ function UpdatesCard({
                   </span>
                   <span>{formatDateTime(u.createdAt)}</span>
                   {u.visibleOnPublicUrl ? (
-                    <span className="rounded-full border border-blue-600/25 bg-blue-600/10 px-2 py-px text-[10.5px] font-semibold text-blue-700 dark:text-blue-400">
+                    <span className="rounded-full border border-info/25 bg-info-soft px-2 py-px text-[10.5px] font-semibold text-info-foreground">
                       Customer-visible
                     </span>
                   ) : (
@@ -1340,7 +1340,7 @@ function ChangeOrdersCard({
                     <span
                       className={
                         "shrink-0 tabular-nums text-sm font-medium " +
-                        (amount < 0 ? "text-destructive" : "text-emerald-600")
+                        (amount < 0 ? "text-destructive" : "text-success-foreground")
                       }
                     >
                       {fmtSigned(amount)}

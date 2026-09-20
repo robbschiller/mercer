@@ -179,7 +179,7 @@ function EvidenceDrawer({
       )}
       <div className="min-w-0 text-xs leading-relaxed">
         {line.flagNote && (
-          <p className="mb-1 flex items-start gap-1.5 font-medium text-amber-700 dark:text-amber-400">
+          <p className="mb-1 flex items-start gap-1.5 font-medium text-warning-foreground">
             <TriangleAlert className="mt-0.5 size-3 shrink-0" />
             {line.flagNote}
           </p>
@@ -254,7 +254,7 @@ function LineRow({
       <div
         className={cn(
           "group grid grid-cols-[1fr_auto] items-start gap-x-3 border-t px-4 py-2.5 sm:grid-cols-[minmax(0,1fr)_5.5rem_5.5rem_6rem_3.5rem]",
-          flagged && "bg-amber-500/[0.04]",
+          flagged && "bg-warning/[0.04]",
         )}
       >
         {/* description */}
@@ -263,7 +263,7 @@ function LineRow({
             <span
               className={cn(
                 "size-1.5 shrink-0 rounded-full",
-                flagged ? "bg-amber-500" : "bg-emerald-500/70",
+                flagged ? "bg-warning" : "bg-success-soft",
               )}
               title={flagged ? "Low confidence — verify" : "High confidence"}
             />
@@ -284,7 +284,7 @@ function LineRow({
               <button
                 type="button"
                 onClick={onToggle}
-                className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-px text-[11px] font-medium text-amber-700 dark:text-amber-400"
+                className="inline-flex items-center gap-1 rounded-md border border-warning/40 bg-warning-soft px-1.5 py-px text-[11px] font-medium text-warning-foreground"
               >
                 <TriangleAlert className="size-2.5" />
                 Verify
@@ -295,7 +295,7 @@ function LineRow({
                 type="button"
                 onClick={onConfirm}
                 title="I checked this number — confirm it as-is"
-                className="inline-flex items-center gap-1 rounded-md border border-emerald-600/40 bg-emerald-600/10 px-1.5 py-px text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-600/20 dark:text-emerald-400"
+                className="inline-flex items-center gap-1 rounded-md border border-success/40 bg-success-soft px-1.5 py-px text-[11px] font-medium text-success-foreground transition-colors hover:bg-success-soft"
               >
                 <Check className="size-2.5" />
                 Confirm
@@ -582,7 +582,7 @@ export function QuoteReviewCard({
             {flagged > 0 && (
               <span>
                 {" · "}
-                <span className="font-medium text-amber-700 dark:text-amber-400">
+                <span className="font-medium text-warning-foreground">
                   {flagged} to verify
                 </span>
               </span>
@@ -682,8 +682,8 @@ export function QuoteReviewCard({
             <span className="max-w-xs text-xs text-destructive">{error}</span>
           )}
           {flagged > 0 && (
-            <span className="hidden items-center gap-1.5 text-xs font-medium text-amber-700 sm:inline-flex dark:text-amber-400">
-              <TriangleAlert className="size-3.5 text-amber-500" />
+            <span className="hidden items-center gap-1.5 text-xs font-medium text-warning-foreground sm:inline-flex">
+              <TriangleAlert className="size-3.5 text-warning" />
               {flagged} price{flagged !== 1 ? "s" : ""} need
               {flagged === 1 ? "s" : ""} confirmation
             </span>

@@ -4,6 +4,77 @@ Running log of in-flight work on the lead-to-close MVP (docs/plan.md). Chronolog
 
 ---
 
+## 2026-09-20 — Table controls, round 2: sort on the column headers
+
+**Robb's call:** drop the sort dropdown, put the sort arrow on the column header and let any column with a backing order be clicked; fold the status chip rail into the filter menu.
+
+- `chrome/sortable-header.tsx` — `SortableHeader`, a link header carrying the arrow. Active column shows a direction arrow; an unsorted-but-sortable column shows **no** arrow at rest and a two-way arrow on hover or keyboard focus. The arrow reads in the column's own terms, so ascending on a date is soonest first. Where the query has a reverse order, clicking the sorted column flips it; where it does not, a second click is a no-op rather than an invented order.
+- `SortMenu` deleted from `chrome/table-menu.tsx` and the barrel, along with the three now-dead `*_SORT_LABELS` maps. Column headers name themselves.
+- Status folded into `FilterMenu` as its first group, keeping its tone dot and count, and now surfacing as an `ActiveFilters` chip. `FilterChipRow` is no longer used by Leads or Opportunities; Projects still uses it, so it stays exported and is marked superseded in the design doc.
+- Column-to-sort maps: Leads = Follow-up (one way) and Last contact (toggles; its ascending order is the old "Stalest"), plus Age in the by-contact view. Opportunities = Opportunity, Total, Age (toggles). Lists = everything but Source.
+
+**Tradeoff to watch:** the pipeline counts no longer sit on the surface. They live inside the filter menu with their dots. If glanceable stage counts turn out to matter more than the row they cost, the place to put them back is the page header, not a rail above the bar.
+
+### Verified
+`bunx tsc --noEmit` clean; `bun run lint` 0 errors (3 pre-existing warnings); `bun run build` clean. Canvas artboard 04 redrawn: control bar default and filtered, the filter menu with Status first, the sorted table, the four header states, and the column-to-sort map. **Still not runtime-verified** — the login write to `auth.users` remains blocked.
+
+---
+
+## 2026-09-20 — Table controls pattern (leads · opportunities · lists)
+
+**Trigger (Robb):** the leads control bar wrapped to three rows against real data (1,225 leads / 313 properties). Checked first: the chip and select classes are byte-equivalent across the token migration (`rounded-[10px]`→`rounded-chip` is 10px, `text-[13.5px]`→`text-body` is 13.5px). Nothing got bigger. The bar broke because the native source `<select>` sizes to its longest option, and four-digit chip counts took the rest of the row. A layout that only held while the database was nearly empty.
+
+### New chrome
+- `chrome/table-controls.tsx` — `TableControls` (one row: search/filters/sort left, view toggle + count right) and `ActiveFilters` (removable chips for whatever the filter menu applied; renders nothing when clean).
+- `chrome/table-menu.tsx` — `FilterMenu` and `SortMenu` on Radix DropdownMenu. The **only client leaf in chrome**, because Radix must own focus, Escape and click-outside. Every option inside is a `<Link>`, so filtered URLs stay shareable, the back button steps through filter history, and no Apply button is needed.
+- The rule the pattern exists to enforce: search and the primary view toggle stay on the surface, everything else collapses into one menu and is echoed back as a chip. A `<select>` of user data must never sit in the bar.
+
+### Pages
+- **Leads:** source select + follow-up segmented + Apply → one `FilterMenu` (2 groups, count on the trigger). Sort was reachable only by hand-editing the URL; now a `SortMenu`. Bar went from 3 rows to 1, and its width no longer depends on the data.
+- **Opportunities:** gained sort (`recent` / `value` / `name` / `oldest`, sorted in-memory beside the existing filter) and a `SortMenu`. `sort` threaded through `bidsHref`, the status chips and pagination.
+- **Lists:** had neither search nor sort. Both added in-memory over `getLists()`, plus a no-match empty state. `all.length` now drives the first-run empty state so a zero-result search does not claim there are no lists.
+
+### Verified
+`bunx tsc --noEmit` clean; `bun run lint` 0 errors (3 pre-existing `<img>` warnings); `bun run build` clean. Pattern drawn as artboard 04 on the design canvas (before / default / filtered / anatomy) at the real data widths.
+
+### Open
+- **Not verified at runtime.** Driving the app needs a login, and resetting the dev test user's password writes to `auth.users`, which the sandbox blocks. Everything here is compile- and design-verified only; someone should click through /leads, /opportunities and /lists.
+- `Toolbar` and `ToolbarSelect` are now superseded by `TableControls` and `FilterMenu`. Still exported and still used by pages not touched here; retire them opportunistically.
+
+---
+
+## 2026-09-20 — Design system: token layer, isolated chrome components, docs
+
+**Goal:** make the design language enforceable in code rather than described in prose. No visual change was intended; the token values were taken from Tailwind v4's own oklch palette so the migration is pixel-identical (the handful of shade normalizations are listed below).
+
+### Tokens (`src/app/globals.css`)
+- **Status tones** `success` / `warning` / `info`, each with a bare token (dot and solid fill), a `-foreground` (tinted text that flips for dark on its own, so no `dark:` variant is ever needed) and a `-soft` surface built with `color-mix`. Values are Tailwind's emerald-600/700/400, amber-500/700/400, blue-600/700/400.
+- **Named type scale** `text-2xs` 10.5 · `text-caption` 11 · `text-ui` 13 · `text-body` 13.5 · `text-title` 27, sitting alongside Tailwind's own. Replaces 348 arbitrary `text-[Npx]` usages at the call sites that were migrated.
+- **Radii** `rounded-control` 9px, `rounded-chip` 10px, `rounded-card` 16px — the three app shapes that were previously written as `rounded-[9px]` etc.
+- **Elevation** `shadow-card` / `shadow-card-hover`, which also darken in dark mode (they were hard-coded light-mode rgb before).
+
+### Component isolation
+- `src/components/page-chrome.tsx` (446 lines, 11 exports, one file) split into `src/components/chrome/*`: `page-container`, `page-header`, `page-feedback`, `filter-chips`, `segmented`, `toolbar`, `table-frame`, `pagination`, `empty-state`, re-exported from `chrome/index.ts`. All are Server Components. The old path remains as a deprecated re-export; all 12 importers were re-pointed, so it has no callers.
+- Accessibility added while splitting: `aria-current="page"` on the active chip/segment, `role="alert"` / `role="status"` on the feedback banners, `aria-label` on the search input, `<nav aria-label="Pagination">`, `aria-hidden` on decorative dots and icon tiles.
+- `ui/badge.tsx` gained `success` / `warning` / `info` variants and now renders a `<span>` (it was a `<div>`, which is invalid inside the `<p>` and `<td>` it is used in). `BadgeVariant` in `src/lib/status-meta.ts` widened to match, so status pills can carry a tone through the existing helpers.
+
+### Palette migration
+37 files moved off raw `emerald` / `amber` / `blue` / `red` palette classes onto tones; paired `text-x-700 dark:text-x-400` collapsed to a single `-foreground` token (654 deletions, 282 insertions). **Normalizations, not identities:** `emerald-500` fills → `success` (600), `amber-800`/`amber-900` text → `warning-foreground` (700), `red-600` → `destructive`. Categorical hues (avatar initials, pipeline stage dots in `contacts/*` and `pipeline/page.tsx`) were deliberately left as palette classes — there the hue is the meaning, not a status.
+
+### Docs
+- `AGENTS.md` gained "UI And Design System Rules": the three-layer import rule, page composition, tokens-not-values, and React practice (Server Components by default, server actions + Zod, status via `status-meta.ts`, real elements only). Definition of Done gained a UI-token line.
+- `docs/design-system.md` rewritten against the current code — the previous version referenced `team-switcher.tsx`, `nav-user.tsx`, `dashboard-recents.tsx` and `/bids/[id]`, none of which exist any more.
+- Foundations / Components / Patterns drawn as a three-artboard Design canvas rendering the real token values.
+
+### Verified
+`bunx tsc --noEmit` clean; `bun run lint` 0 errors (3 pre-existing `<img>` warnings); `bun run build` clean. New utilities confirmed present in the built CSS (`rounded-chip` → `10px`, `text-body` → `.84375rem`, `bg-success-soft` → `var(--color-success-soft)`, `border-success/30` → `color-mix` under `@supports`).
+
+### Open
+- `new-lead-intake` (1339), `quote-engine` (1256) and `property-profile` (1209) are over the ~400-line guidance and are the standing split candidates.
+- Arbitrary `text-[Npx]` remains in files the migration did not touch; convert opportunistically when editing them.
+
+---
+
 ## 2026-09-20 — Business model decided + subscription plumbing (Stripe via Vercel Marketplace)
 
 **Decision (Robb):** Mercer is a standalone business; AQP is the first paying customer and is live on production. Product name may change to Renobase; explicitly undecided, nothing renamed. Billing model: flat monthly subscription per org, AI included under fair use, `ai_usage` stays an internal COGS/abuse ledger, usage pricing reserved for future pass-through measurement reports. Rationale and numbers in PRD §4 *Business model and pricing* (Opus 4.8 list price makes AI roughly 2 to 4 percent of a $500 to $1000/mo plan at heavy use). PRD §10 Q11 and Q12 closed; `docs/plan.md` Q11 line re-resolved (supersedes the 2026-05-29 "AQP-specific app" framing); `AGENTS.md` snapshot updated.

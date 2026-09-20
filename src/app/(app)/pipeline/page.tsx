@@ -35,8 +35,8 @@ const STAGE_LABELS: Record<PipelineStage, string> = {
 const STAGE_DOTS: Record<PipelineStage, string> = {
   takeoff: "bg-cyan-600",
   quoting: "bg-violet-600",
-  sent: "bg-blue-600",
-  on_hold: "bg-amber-500",
+  sent: "bg-info",
+  on_hold: "bg-warning",
 };
 
 function compactMoney(n: number): string {
@@ -362,7 +362,7 @@ function PipelineTableRow({
           {row.advancedToday && (
             <span
               title="Advanced today"
-              className="size-[7px] shrink-0 rounded-full bg-blue-600 shadow-[0_0_0_3px] shadow-blue-600/15"
+              className="size-[7px] shrink-0 rounded-full bg-info shadow-[0_0_0_3px] shadow-blue-600/15"
             />
           )}
           <Link href={row.href} className="truncate hover:underline">
@@ -414,7 +414,7 @@ function PipelineTableRow({
                 {row.neverOpened ? (
                   <span className="text-muted-foreground/60">Not opened</span>
                 ) : (
-                  <span className="font-semibold text-blue-600">
+                  <span className="font-semibold text-info-foreground">
                     Viewed {row.quote.viewCount}×
                   </span>
                 )}
@@ -429,8 +429,8 @@ function PipelineTableRow({
       <div
         className={cn(
           "font-mono text-xs tabular-nums text-muted-foreground",
-          quiet && !row.neverOpened && "font-semibold text-amber-600",
-          !quiet && ageAmber(row) && "font-semibold text-amber-600",
+          quiet && !row.neverOpened && "font-semibold text-warning-foreground",
+          !quiet && ageAmber(row) && "font-semibold text-warning-foreground",
           row.stage === "on_hold" && "text-muted-foreground/60",
         )}
       >
@@ -504,7 +504,7 @@ function NextCell({ row }: { row: PipelineRow }) {
         className="inline-flex h-8 items-center gap-1.5 rounded-lg border bg-card px-3 text-xs font-medium text-foreground transition-colors hover:border-foreground hover:bg-foreground hover:text-background [&:hover_svg]:text-background"
       >
         Build quote
-        <ArrowRight className="size-3.5 text-blue-600" />
+        <ArrowRight className="size-3.5 text-info-foreground" />
       </Link>
     );
   }

@@ -22,6 +22,22 @@
   --color-border: oklch(0.922 0 0);
   --color-input: oklch(0.922 0 0);
   --color-ring: oklch(0.708 0 0);
+
+  /* Status tones. `-foreground` is the tinted text color that sits on the
+     page or on `-soft`; the bare token is the fill for dots and solid pills. */
+  --color-success: oklch(0.596 0.145 163.225);
+  --color-success-foreground: oklch(0.508 0.118 165.612);
+  --color-success-soft: color-mix(in oklab, var(--color-success) 10%, transparent);
+  --color-warning: oklch(0.769 0.188 70.08);
+  --color-warning-foreground: oklch(0.555 0.163 48.998);
+  --color-warning-soft: color-mix(in oklab, var(--color-warning) 12%, transparent);
+  --color-info: oklch(0.546 0.245 262.881);
+  --color-info-foreground: oklch(0.488 0.243 264.376);
+  --color-info-soft: color-mix(in oklab, var(--color-info) 10%, transparent);
+
+  /* Elevation: cards rest almost flat. */
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-card-hover: 0 4px 16px -6px rgb(0 0 0 / 0.12);
   --sidebar: hsl(0 0% 98%);
   --sidebar-foreground: hsl(240 5.3% 26.1%);
   --sidebar-primary: hsl(240 5.9% 10%);
@@ -52,6 +68,11 @@
   --color-border: oklch(1 0 0 / 0.1);
   --color-input: oklch(1 0 0 / 0.15);
   --color-ring: oklch(0.556 0 0);
+  --color-success-foreground: oklch(0.765 0.177 163.223);
+  --color-warning-foreground: oklch(0.828 0.189 84.429);
+  --color-info-foreground: oklch(0.707 0.165 254.624);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-card-hover: 0 4px 16px -6px rgb(0 0 0 / 0.5);
   --sidebar: hsl(240 5.9% 10%);
   --sidebar-foreground: hsl(240 4.8% 95.9%);
   --sidebar-primary: hsl(224.3 76.3% 48%);
@@ -82,10 +103,36 @@
   --color-border: var(--color-border);
   --color-input: var(--color-input);
   --color-ring: var(--color-ring);
+  --color-success: var(--color-success);
+  --color-success-foreground: var(--color-success-foreground);
+  --color-success-soft: var(--color-success-soft);
+  --color-warning: var(--color-warning);
+  --color-warning-foreground: var(--color-warning-foreground);
+  --color-warning-soft: var(--color-warning-soft);
+  --color-info: var(--color-info);
+  --color-info-foreground: var(--color-info-foreground);
+  --color-info-soft: var(--color-info-soft);
+
+  /* Radii. shadcn scale plus the three app shapes (see docs/design-system.md). */
   --radius-sm: 0.25rem;
   --radius-md: 0.375rem;
   --radius-lg: 0.5rem;
   --radius-xl: 0.75rem;
+  --radius-control: 9px; /* toolbar buttons, segmented rails, sidebar tools */
+  --radius-chip: 10px; /* filter chips, search input, toolbar selects */
+  --radius-card: 1rem; /* table frames, empty states, list cards */
+
+  /* App type scale: the sizes the product UI actually uses, named so
+     components stop reaching for text-[13.5px]. Body defaults to text-sm. */
+  --text-2xs: 0.65625rem; /* 10.5px: table column heads, micro-labels */
+  --text-caption: 0.6875rem; /* 11px: eyebrow field labels, counts */
+  --text-ui: 0.8125rem; /* 13px: dense UI copy, money in rows */
+  --text-body: 0.84375rem; /* 13.5px: page descriptions, chips, toolbars */
+  --text-title: 1.6875rem; /* 27px: page h1 */
+  --text-title--line-height: 1.25;
+
+  --shadow-card: var(--shadow-card);
+  --shadow-card-hover: var(--shadow-card-hover);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);

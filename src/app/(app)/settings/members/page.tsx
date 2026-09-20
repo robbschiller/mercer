@@ -44,7 +44,7 @@ export default async function SettingsMembersPage({
         </p>
       )}
       {invited && (
-        <p className="rounded-md border border-emerald-500/40 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400">
+        <p className="rounded-md border border-success/40 bg-success-soft px-3 py-2 text-sm text-success-foreground">
           Invitation created. They&apos;ll join your org the next time they
           sign in with that email.
         </p>

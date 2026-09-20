@@ -10,18 +10,20 @@ import {
 import { getBidsWithSummary } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import {
+  ActiveFilters,
   EmptyState,
-  FilterChip,
-  FilterChipRow,
   PageContainer,
   PageHeader,
   Pagination,
+  FilterMenu,
   ResultSummary,
   SearchForm,
+  SortableHeader,
+  type SortDirection,
   TABLE_HEAD_CELL,
+  TableControls,
   TableFrame,
-  Toolbar,
-} from "@/components/page-chrome";
+} from "@/components/chrome";
 import {
   BID_STATUSES,
   bidStatusLabel,
@@ -36,12 +38,26 @@ type BidSummary = Awaited<ReturnType<typeof getBidsWithSummary>>[number];
 // emerald, draft/lost muted. Labels always via status-meta.
 const STATUS_DOTS: Record<BidStatus, string> = {
   draft: "bg-muted-foreground/40",
-  sent: "bg-blue-600",
-  won: "bg-emerald-600",
+  sent: "bg-info",
+  won: "bg-success",
   lost: "bg-muted-foreground/40",
 };
 
 const PAGE_SIZE = 50;
+
+const BID_SORTS = ["recent", "value", "name", "oldest"] as const;
+type BidSort = (typeof BID_SORTS)[number];
+
+function parseSort(raw: string | undefined): BidSort {
+  const v = raw?.trim();
+  return (BID_SORTS as readonly string[]).includes(v ?? "")
+    ? (v as BidSort)
+    : "recent";
+}
+
+function bidName(bid: BidSummary): string {
+  return bid.label ?? bid.propertyName ?? bid.address ?? "";
+}
 
 function compactMoney(n: number): string {
   if (n >= 1_000_000) {
@@ -100,11 +116,13 @@ function parsePage(raw: string | undefined): number {
 function bidsHref(patch: {
   q?: string;
   status?: BidStatus | null;
+  sort?: BidSort;
   page?: number;
 }): string {
   const sp = new URLSearchParams();
   if (patch.q) sp.set("q", patch.q);
   if (patch.status) sp.set("status", patch.status);
+  if (patch.sort && patch.sort !== "recent") sp.set("sort", patch.sort);
   if (patch.page && patch.page > 1) sp.set("page", String(patch.page));
   const s = sp.toString();
   return s ? `/opportunities?${s}` : "/opportunities";
@@ -113,11 +131,17 @@ function bidsHref(patch: {
 export default async function BidsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; page?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    status?: string;
+    sort?: string;
+    page?: string;
+  }>;
 }) {
   const params = await searchParams;
   const status = parseStatus(params.status);
   const q = (params.q ?? "").trim();
+  const sort = parseSort(params.sort);
   const page = parsePage(params.page);
 
   const all = await getBidsWithSummary();
@@ -131,9 +155,22 @@ export default async function BidsPage({
     );
   });
 
-  const total = filtered.length;
+  const sorted = [...filtered].sort((a, b) => {
+    switch (sort) {
+      case "value":
+        return (bidTotal(b) ?? 0) - (bidTotal(a) ?? 0);
+      case "name":
+        return bidName(a).localeCompare(bidName(b));
+      case "oldest":
+        return a.updatedAt.getTime() - b.updatedAt.getTime();
+      default:
+        return b.updatedAt.getTime() - a.updatedAt.getTime();
+    }
+  });
+
+  const total = sorted.length;
   const offset = (page - 1) * PAGE_SIZE;
-  const rows = filtered.slice(offset, offset + PAGE_SIZE);
+  const rows = sorted.slice(offset, offset + PAGE_SIZE);
   const rangeStart = rows.length === 0 ? 0 : offset + 1;
   const rangeEnd = offset + rows.length;
   const hasFilters = Boolean(q || status);
@@ -172,26 +209,7 @@ export default async function BidsPage({
         />
       ) : (
         <>
-          <FilterChipRow>
-            <FilterChip
-              href={bidsHref({ q })}
-              active={status == null}
-              label="All"
-              count={all.length}
-            />
-            {BID_STATUSES.map((s) => (
-              <FilterChip
-                key={s}
-                href={bidsHref({ q, status: s })}
-                active={status === s}
-                label={bidStatusLabel(s)}
-                count={countFor(s)}
-                dot={STATUS_DOTS[s]}
-              />
-            ))}
-          </FilterChipRow>
-
-          <Toolbar
+          <TableControls
             summary={
               <ResultSummary
                 start={rangeStart}
@@ -205,9 +223,45 @@ export default async function BidsPage({
               action="/opportunities"
               q={q}
               placeholder="Search properties, accounts…"
-              hidden={{ status }}
+              hidden={{ status, sort: sort !== "recent" ? sort : null }}
             />
-          </Toolbar>
+            <FilterMenu
+              activeCount={status ? 1 : 0}
+              groups={[
+                {
+                  label: "Status",
+                  options: [
+                    {
+                      label: "All statuses",
+                      href: bidsHref({ q, sort }),
+                      active: status == null,
+                      count: all.length,
+                    },
+                    ...BID_STATUSES.map((st) => ({
+                      label: bidStatusLabel(st),
+                      href: bidsHref({ q, status: st, sort }),
+                      active: status === st,
+                      dot: STATUS_DOTS[st],
+                      count: countFor(st),
+                    })),
+                  ],
+                },
+              ]}
+            />
+          </TableControls>
+
+          <ActiveFilters
+            items={
+              status
+                ? [
+                    {
+                      label: `Status: ${bidStatusLabel(status)}`,
+                      href: bidsHref({ q, sort }),
+                    },
+                  ]
+                : []
+            }
+          />
 
           {rows.length === 0 ? (
             <EmptyState
@@ -226,19 +280,37 @@ export default async function BidsPage({
             <TableFrame minWidth="min-w-[940px]">
               <>
                 <div className={cn("grid items-center gap-x-2.5 border-b bg-muted/30 py-2.5 pl-4 pr-10", GRID)}>
-                  {[
-                    "Opportunity",
-                    "Client",
-                    "Status",
-                    "Quote",
-                    "Total",
-                    "Age",
-                    "Next",
-                  ].map((h) => (
+                  <BidSortHeader
+                    q={q}
+                    status={status}
+                    sort={sort}
+                    label="Opportunity"
+                    to="name"
+                    dir="asc"
+                  />
+                  {["Client", "Status", "Quote"].map((h) => (
                     <span key={h} className={TABLE_HEAD_CELL}>
                       {h}
                     </span>
                   ))}
+                  <BidSortHeader
+                    q={q}
+                    status={status}
+                    sort={sort}
+                    label="Total"
+                    to="value"
+                    dir="desc"
+                  />
+                  <BidSortHeader
+                    q={q}
+                    status={status}
+                    sort={sort}
+                    label="Age"
+                    to="recent"
+                    dir="asc"
+                    reverse="oldest"
+                  />
+                  <span className={TABLE_HEAD_CELL}>Next</span>
                 </div>
                 <div className="flex flex-col">
                   {rows.map((bid) => (
@@ -253,7 +325,7 @@ export default async function BidsPage({
             page={page}
             limit={PAGE_SIZE}
             total={total}
-            hrefFor={(p) => bidsHref({ q, status, page: p })}
+            hrefFor={(p) => bidsHref({ q, status, sort, page: p })}
           />
         </>
       )}
@@ -263,6 +335,37 @@ export default async function BidsPage({
 
 const GRID =
   "grid-cols-[minmax(180px,1.6fr)_minmax(110px,1fr)_100px_150px_80px_48px_minmax(120px,auto)]";
+
+/** An opportunities column header bound to this page's query. */
+function BidSortHeader({
+  q,
+  status,
+  sort,
+  label,
+  to,
+  dir,
+  reverse,
+}: {
+  q: string;
+  status: BidStatus | null;
+  sort: BidSort;
+  label: string;
+  to: BidSort;
+  dir: SortDirection;
+  reverse?: BidSort;
+}) {
+  const isThis = sort === to;
+  const isReverse = reverse != null && sort === reverse;
+  const direction = isThis ? dir : isReverse ? (dir === "asc" ? "desc" : "asc") : null;
+  const next = isThis && reverse != null ? reverse : to;
+  return (
+    <SortableHeader
+      label={label}
+      href={bidsHref({ q, status, sort: next })}
+      direction={direction}
+    />
+  );
+}
 
 function BidRow({ bid }: { bid: BidSummary }) {
   const href = `/opportunities/${bid.id}`;
@@ -315,7 +418,7 @@ function BidRow({ bid }: { bid: BidSummary }) {
               <>
                 <span className="text-muted-foreground/50">·</span>
                 {bid.quote.viewCount > 0 ? (
-                  <span className="font-semibold text-blue-600">
+                  <span className="font-semibold text-info-foreground">
                     Viewed {bid.quote.viewCount}×
                   </span>
                 ) : (
@@ -367,7 +470,7 @@ function NextCell({ bid }: { bid: BidSummary }) {
         className="inline-flex h-8 items-center gap-1.5 rounded-lg border bg-card px-3 text-xs font-medium text-foreground transition-colors hover:border-foreground hover:bg-foreground hover:text-background [&:hover_svg]:text-background"
       >
         Build quote
-        <ArrowRight className="size-3.5 text-blue-600" />
+        <ArrowRight className="size-3.5 text-info-foreground" />
       </Link>
     );
   }

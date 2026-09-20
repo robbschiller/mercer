@@ -36,7 +36,7 @@ function statusBadge(status: "accepted" | "declined" | "sent" | "ready") {
   switch (status) {
     case "accepted":
       return (
-        <Badge className="border-transparent bg-emerald-600/10 text-emerald-700 dark:text-emerald-400">
+        <Badge className="border-transparent bg-success-soft text-success-foreground">
           Accepted
         </Badge>
       );
@@ -128,7 +128,7 @@ export function QuoteTotalsCard({
               <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 Est. gross profit
               </div>
-              <div className="mt-0.5 text-base font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+              <div className="mt-0.5 text-base font-semibold tabular-nums text-success-foreground">
                 {formatCurrency(gp)}
               </div>
             </div>

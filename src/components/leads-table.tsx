@@ -81,7 +81,7 @@ function enrichmentIcon(
     case "success":
       return {
         Icon: CheckCircle2,
-        className: "text-emerald-600 dark:text-emerald-400",
+        className: "text-success-foreground",
       }
     case "failed":
       return { Icon: XCircle, className: "text-destructive" }

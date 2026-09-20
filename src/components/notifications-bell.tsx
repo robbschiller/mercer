@@ -62,7 +62,7 @@ export function NotificationsBell() {
         >
           <Bell className="size-4" />
           {unread > 0 && (
-            <span className="absolute right-1 top-1 size-2 rounded-full bg-blue-600 ring-2 ring-background" />
+            <span className="absolute right-1 top-1 size-2 rounded-full bg-info ring-2 ring-background" />
           )}
         </button>
       </DropdownMenuTrigger>
@@ -94,7 +94,7 @@ export function NotificationsBell() {
                 }
                 className={cn(
                   "flex items-start gap-2.5 border-b px-3 py-2.5 text-sm transition-colors last:border-0 hover:bg-accent/50",
-                  n.unread && "bg-blue-600/[0.04]",
+                  n.unread && "bg-info/[0.04]",
                 )}
               >
                 <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">

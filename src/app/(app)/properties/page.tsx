@@ -244,7 +244,7 @@ export default async function PropertiesPage({
                     {moneyK(list.reduce((n, p) => n + p.lifetime, 0))} lifetime
                   </span>
                   {list.filter((p) => p.repaintDue).length > 0 && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-px text-[11.5px] font-semibold text-amber-700 dark:text-amber-400">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/30 bg-warning-soft px-2.5 py-px text-[11.5px] font-semibold text-warning-foreground">
                       <PaintRoller className="size-3" />
                       {list.filter((p) => p.repaintDue).length} repaint due
                     </span>
@@ -285,13 +285,13 @@ export default async function PropertiesPage({
               {label}
             </span>
             {p.repaintDue ? (
-              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-[3px] text-xs font-semibold text-amber-700 dark:text-amber-400">
-                <span className="size-1.5 rounded-full bg-amber-500" />
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-warning/30 bg-warning-soft px-2.5 py-[3px] text-xs font-semibold text-warning-foreground">
+                <span className="size-1.5 rounded-full bg-warning" />
                 Repaint due
               </span>
             ) : p.hasOpenDeal ? (
-              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-blue-600/20 bg-blue-600/10 px-2.5 py-[3px] text-xs font-semibold text-blue-700 dark:text-blue-400">
-                <span className="size-1.5 rounded-full bg-blue-600" />
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-info/20 bg-info-soft px-2.5 py-[3px] text-xs font-semibold text-info-foreground">
+                <span className="size-1.5 rounded-full bg-info" />
                 Active project
               </span>
             ) : null}
@@ -355,8 +355,8 @@ export default async function PropertiesPage({
               lifetime
             </span>
             {p.openBidCount > 0 && (
-              <span className="inline-flex items-center gap-1.5 rounded-lg border border-blue-600/20 bg-blue-600/10 px-2.5 py-1 text-xs text-blue-700 dark:text-blue-400">
-                <span className="size-1.5 rounded-full bg-blue-600" />
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-info/20 bg-info-soft px-2.5 py-1 text-xs text-info-foreground">
+                <span className="size-1.5 rounded-full bg-info" />
                 <b className="font-mono font-medium tabular-nums">
                   {p.openBidCount}
                 </b>
@@ -373,13 +373,13 @@ export default async function PropertiesPage({
             Last activity · {fmtWhen(p.lastActivityAt)}
           </p>
           {p.repaintDue && p.lastWonAt ? (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
+            <div className="rounded-xl border border-warning/30 bg-warning-soft p-3">
               <div className="mb-2 flex items-center justify-between">
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-warning-foreground">
                   <PaintRoller className="size-3.5" />
                   Repaint due
                 </span>
-                <span className="rounded-md bg-amber-500/15 px-1.5 py-px font-mono text-[11.5px] font-medium text-amber-700 dark:text-amber-400">
+                <span className="rounded-md bg-warning-soft px-1.5 py-px font-mono text-[11.5px] font-medium text-warning-foreground">
                   {Math.floor(
                     (Date.now() - p.lastWonAt.getTime()) /
                       (365.25 * 86_400_000),
@@ -397,7 +397,7 @@ export default async function PropertiesPage({
                 </b>
                 {p.lastWonValue != null && <> · {moneyK(p.lastWonValue)}</>}
               </p>
-              <span className="inline-flex h-[30px] w-full items-center justify-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 text-[12.5px] font-medium text-amber-800 dark:text-amber-300">
+              <span className="inline-flex h-[30px] w-full items-center justify-center gap-1.5 rounded-lg border border-warning/40 bg-warning-soft text-[12.5px] font-medium text-warning-foreground">
                 <CirclePlus className="size-3.5" />
                 Start lead
               </span>
@@ -405,7 +405,7 @@ export default async function PropertiesPage({
           ) : p.dealNote ? (
             <div className="rounded-xl border bg-muted/30 p-3">
               <p className="mb-2.5 flex items-center gap-2 text-[12.5px] font-medium text-foreground/80">
-                <span className="size-[7px] shrink-0 rounded-full bg-blue-600 shadow-[0_0_0_3px] shadow-blue-600/15" />
+                <span className="size-[7px] shrink-0 rounded-full bg-info shadow-[0_0_0_3px] shadow-blue-600/15" />
                 {p.dealNote}
               </p>
               <span className="inline-flex h-[30px] w-full items-center justify-center gap-1.5 rounded-lg border bg-card text-[12.5px] font-medium text-foreground/80">

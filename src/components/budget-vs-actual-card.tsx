@@ -79,7 +79,7 @@ export function BudgetVsActualCard({
             <p
               className={cn(
                 "font-mono text-lg font-bold tabular-nums",
-                remaining < 0 && "text-red-600 dark:text-red-400",
+                remaining < 0 && "text-destructive",
               )}
             >
               {formatCurrency(remaining)}
@@ -112,7 +112,7 @@ export function BudgetVsActualCard({
                   <span
                     className={cn(
                       "font-mono tabular-nums text-muted-foreground",
-                      over && "font-semibold text-amber-600",
+                      over && "font-semibold text-warning-foreground",
                     )}
                   >
                     {formatCurrency(a)}
@@ -126,7 +126,7 @@ export function BudgetVsActualCard({
                   <div
                     className={cn(
                       "h-full rounded-full",
-                      over ? "bg-amber-500" : "bg-foreground/70",
+                      over ? "bg-warning" : "bg-foreground/70",
                     )}
                     style={{ width: `${Math.round(pct * 100)}%` }}
                   />

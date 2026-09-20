@@ -7,10 +7,33 @@ import {
   PageContainer,
   PageHeader,
   ResultSummary,
+  SearchForm,
+  SortableHeader,
+  type SortDirection,
   TABLE_HEAD_ROW,
+  TableControls,
   TableFrame,
-  Toolbar,
-} from "@/components/page-chrome";
+} from "@/components/chrome";
+
+type ListRow = Awaited<ReturnType<typeof getLists>>[number];
+
+const LIST_SORTS = ["recent", "name", "people", "converted"] as const;
+type ListSort = (typeof LIST_SORTS)[number];
+
+function parseSort(raw: string | undefined): ListSort {
+  const v = raw?.trim();
+  return (LIST_SORTS as readonly string[]).includes(v ?? "")
+    ? (v as ListSort)
+    : "recent";
+}
+
+function listsHref(patch: { q?: string; sort?: ListSort }): string {
+  const sp = new URLSearchParams();
+  if (patch.q) sp.set("q", patch.q);
+  if (patch.sort && patch.sort !== "recent") sp.set("sort", patch.sort);
+  const s = sp.toString();
+  return s ? `/lists?${s}` : "/lists";
+}
 
 function fmtDate(d: Date): string {
   return d.toLocaleDateString("en-US", {
@@ -24,8 +47,38 @@ function fmtDate(d: Date): string {
  * Lists (Jordan 2026-09-02): "just raw CSV of people ... unrelated object to
  * anything else, lives on its own." Nobody here is a lead until converted.
  */
-export default async function ListsPage() {
-  const lists = await getLists();
+export default async function ListsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; sort?: string }>;
+}) {
+  const params = await searchParams;
+  const q = (params.q ?? "").trim();
+  const sort = parseSort(params.sort);
+
+  const all = await getLists();
+
+  const needle = q.toLowerCase();
+  const filtered = needle
+    ? all.filter((l: ListRow) =>
+        [l.name, l.fileName, l.sourceTag].some((v) =>
+          v?.toLowerCase().includes(needle),
+        ),
+      )
+    : all;
+
+  const lists = [...filtered].sort((a: ListRow, b: ListRow) => {
+    switch (sort) {
+      case "name":
+        return a.name.localeCompare(b.name);
+      case "people":
+        return b.rowCount - a.rowCount;
+      case "converted":
+        return b.convertedCount - a.convertedCount;
+      default:
+        return b.createdAt.getTime() - a.createdAt.getTime();
+    }
+  });
 
   return (
     <PageContainer>
@@ -43,7 +96,7 @@ export default async function ListsPage() {
         }
       />
 
-      {lists.length === 0 ? (
+      {all.length === 0 ? (
         <EmptyState
           icon={<ClipboardList />}
           title="No lists yet"
@@ -59,25 +112,65 @@ export default async function ListsPage() {
         />
       ) : (
         <>
-          <Toolbar
+          <TableControls
             summary={
               <ResultSummary
-                start={1}
+                start={lists.length === 0 ? 0 : 1}
                 end={lists.length}
                 total={lists.length}
                 noun="lists"
               />
             }
-          />
+          >
+            <SearchForm
+              action="/lists"
+              q={q}
+              placeholder="Search lists…"
+              hidden={{ sort: sort !== "recent" ? sort : null }}
+            />
+          </TableControls>
+          {lists.length === 0 ? (
+            <EmptyState
+              icon={<ClipboardList />}
+              title={`No lists match “${q}”`}
+              description="Try a different name, file name or source tag."
+              actions={
+                <Button variant="outline" asChild>
+                  <Link href="/lists">Clear search</Link>
+                </Button>
+              }
+            />
+          ) : (
           <TableFrame>
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className={TABLE_HEAD_ROW}>
-                  <th className="px-4 py-2.5 font-semibold">List</th>
+                  <ListHead q={q} sort={sort} label="List" to="name" dir="asc" />
                   <th className="px-4 py-2.5 font-semibold">Source</th>
-                  <th className="px-4 py-2.5 text-right font-semibold">People</th>
-                  <th className="px-4 py-2.5 text-right font-semibold">Converted</th>
-                  <th className="px-4 py-2.5 text-right font-semibold">Uploaded</th>
+                  <ListHead
+                    q={q}
+                    sort={sort}
+                    label="People"
+                    to="people"
+                    dir="desc"
+                    align="right"
+                  />
+                  <ListHead
+                    q={q}
+                    sort={sort}
+                    label="Converted"
+                    to="converted"
+                    dir="desc"
+                    align="right"
+                  />
+                  <ListHead
+                    q={q}
+                    sort={sort}
+                    label="Uploaded"
+                    to="recent"
+                    dir="desc"
+                    align="right"
+                  />
                 </tr>
               </thead>
               <tbody>
@@ -116,8 +209,46 @@ export default async function ListsPage() {
               </tbody>
             </table>
           </TableFrame>
+          )}
         </>
       )}
     </PageContainer>
+  );
+}
+
+/**
+ * A lists column header. The `<th>` carries `aria-sort` (valid here because
+ * this is a real `<table>`), the link carries the arrow and the click.
+ */
+function ListHead({
+  q,
+  sort,
+  label,
+  to,
+  dir,
+  align = "left",
+}: {
+  q: string;
+  sort: ListSort;
+  label: string;
+  to: ListSort;
+  dir: SortDirection;
+  align?: "left" | "right";
+}) {
+  const active = sort === to;
+  return (
+    <th
+      aria-sort={
+        active ? (dir === "asc" ? "ascending" : "descending") : "none"
+      }
+      className={`px-4 py-2.5 font-semibold ${align === "right" ? "text-right" : ""}`}
+    >
+      <SortableHeader
+        label={label}
+        href={listsHref({ q, sort: to })}
+        direction={active ? dir : null}
+        align={align}
+      />
+    </th>
   );
 }

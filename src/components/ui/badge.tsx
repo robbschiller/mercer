@@ -14,6 +14,12 @@ const badgeVariants = cva(
         destructive:
           "border-transparent bg-destructive text-white shadow",
         outline: "text-foreground",
+        // Status tones. Pick via src/lib/status-meta.ts, never by hand.
+        success:
+          "border-success/25 bg-success-soft text-success-foreground",
+        warning:
+          "border-warning/30 bg-warning-soft text-warning-foreground",
+        info: "border-info/25 bg-info-soft text-info-foreground",
       },
     },
     defaultVariants: {
@@ -23,12 +29,18 @@ const badgeVariants = cva(
 );
 
 export interface BadgeProps
-  extends React.HTMLAttributes<HTMLDivElement>,
+  extends React.HTMLAttributes<HTMLSpanElement>,
     VariantProps<typeof badgeVariants> {}
+
+export type BadgeVariant = NonNullable<BadgeProps["variant"]>;
 
 function Badge({ className, variant, ...props }: BadgeProps) {
   return (
-    <div className={cn(badgeVariants({ variant }), className)} {...props} />
+    <span
+      data-slot="badge"
+      className={cn(badgeVariants({ variant }), className)}
+      {...props}
+    />
   );
 }
 

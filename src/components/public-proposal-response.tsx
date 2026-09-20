@@ -70,7 +70,7 @@ export function PublicProposalResponse({
 
   if (accepted) {
     return (
-      <p className="text-sm text-emerald-700">
+      <p className="text-sm text-success-foreground">
         Proposal accepted
         {acceptedByName ? ` by ${acceptedByName}` : ""}.
         {acceptedByTitle ? ` (${acceptedByTitle})` : ""}

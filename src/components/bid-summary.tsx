@@ -500,7 +500,7 @@ function TrackingStrip({
           <span
             className={
               it.tone === "amber"
-                ? "font-semibold text-amber-700 dark:text-amber-400"
+                ? "font-semibold text-warning-foreground"
                 : it.tone === "muted"
                   ? "text-muted-foreground/70"
                   : "font-medium text-foreground"

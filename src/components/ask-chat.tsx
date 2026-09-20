@@ -236,7 +236,7 @@ function MessageRow({ message }: { message: ChatMessage }) {
   return (
     <div className="flex flex-col gap-1.5">
       {message.offline && (
-        <span className="inline-flex w-fit items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[0.6875rem] font-medium text-amber-600 dark:text-amber-400">
+        <span className="inline-flex w-fit items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-[0.6875rem] font-medium text-warning-foreground">
           Offline mode
         </span>
       )}

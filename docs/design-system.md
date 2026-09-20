@@ -1,340 +1,375 @@
 # Mercer Design System
 
-Source of truth for visual + interaction design across the app. Derived from the actual code — not aspirational. When this file and the code disagree, the code wins; update this file in the same PR.
+Source of truth for visual and interaction design in the product app. Derived
+from the code, not aspirational. **If this file and the code disagree, the
+code wins — update this file in the same PR.** The operating rules an agent
+must follow are the condensed version in `AGENTS.md` → "UI And Design System
+Rules"; this file is the reference behind them.
 
-> **Scope.** The product app under `src/app/(app)/*` is a shadcn / Radix dark+light themed app on a parchment palette. The marketing surface (`(marketing)/*`) shares the brand palette but uses its own typographic and grid motifs (`bg-grid-ink`, `bg-grid-parchment`, `hero-vignette`, `.kicker`, `.font-display-editorial`) layered on top of these tokens. Auth (`(auth)/*`) sits between them — parchment background, shadcn forms.
+**Canvas:** <https://claude.ai/artifact/Gfic75uS9MfDDUgV2FYhy1> — the
+foundations, components and patterns drawn as three artboards. It renders the
+real token values, so it is the fastest way to see what a tone or a size
+actually looks like. Private to Robb unless shared.
+
+**Scope.** The product app under `src/app/(app)/*` is a shadcn/Radix app on
+neutral oklch greys with three status tones. The marketing surface
+(`(marketing)/*`) shares the brand palette but owns its own typographic and
+grid motifs (`bg-grid-ink`, `bg-grid-parchment`, `hero-vignette`, `.kicker`,
+`.font-display-editorial`). Auth (`(auth)/*`) sits between them.
 
 ---
 
-## 1. Tokens
+## 1. Architecture: three layers
 
-All tokens live in `src/app/globals.css` and resolve to Tailwind utilities via `@theme inline`.
+Build downward. A component may import from the layer below it, never above.
 
-### 1.1 Color (light → dark)
-
-shadcn-style semantic tokens. Always reference by role, never raw color.
-
-| Role | Light | Dark | Tailwind |
+| Layer | Path | Owns | Rule |
 |---|---|---|---|
-| `background` | `oklch(1 0 0)` | `oklch(0.145 0 0)` | `bg-background` |
-| `foreground` | `oklch(0.145 0 0)` | `oklch(0.985 0 0)` | `text-foreground` |
-| `card` | `oklch(1 0 0)` | `oklch(0.205 0 0)` | `bg-card` |
-| `card-foreground` | inherits foreground | inherits foreground | `text-card-foreground` |
-| `popover` / `popover-foreground` | matches `card` | matches `card` | `bg-popover` |
-| `primary` | near-black `oklch(0.205 0 0)` | near-white `oklch(0.985 0 0)` | `bg-primary` |
-| `primary-foreground` | near-white | near-black | `text-primary-foreground` |
-| `secondary` | light grey `oklch(0.965 0 0)` | dark grey `oklch(0.269 0 0)` | `bg-secondary` |
-| `muted` | same as secondary | same as secondary | `bg-muted` |
-| `muted-foreground` | mid-grey `oklch(0.556 0 0)` | light-grey `oklch(0.708 0 0)` | `text-muted-foreground` |
-| `accent` | same as secondary | same as secondary | `bg-accent` |
-| `destructive` | red `oklch(0.577 0.245 27.325)` | red `oklch(0.704 0.191 22.216)` | `bg-destructive` |
-| `border` | `oklch(0.922 0 0)` | translucent white 10% | `border` |
-| `input` | matches border | translucent white 15% | (used by inputs) |
-| `ring` | mid-grey | mid-grey | focus ring |
+| 1. Primitives | `src/components/ui/*` | Styling, a11y, Radix behaviour | No product knowledge. Add one only when shadcn ships it. |
+| 2. Chrome | `src/components/chrome/*` | Page structure shared by every section | One concern per file. Import from `@/components/chrome`. |
+| 3. Features | `src/components/*` | Product behaviour and data | Composes layers 1 and 2. |
 
-**Sidebar** has its own tokens — `--sidebar`, `--sidebar-foreground`, `--sidebar-accent`, `--sidebar-primary`, etc. Light mode uses near-white sidebar; dark mode uses the same ink-near-black as background. Don't reuse `--background` for sidebar surfaces; use `bg-sidebar`.
+### 1.1 Primitives
 
-### 1.2 Brand palette (marketing + accent moments)
+`alert` · `avatar` · `badge` · `breadcrumb` · `button` · `calendar` · `card` ·
+`command` · `dialog` · `dropdown-menu` · `input` · `label` · `password-input` ·
+`popover` · `select` · `separator` · `sheet` · `sidebar` · `skeleton` ·
+`sortable` · `table` · `textarea` · `tooltip`
 
-Exposed inside `@theme inline` so they're available as Tailwind classes app-wide:
+Do not invent a new primitive when one of these fits.
 
-| Token | Hex | Use |
+### 1.2 Chrome
+
+| Export | File | Purpose |
 |---|---|---|
-| `--color-ink` | `#0b0c0e` | Marketing dark surfaces, deep ink text |
-| `--color-ink-soft` | `#15171a` | Secondary ink fields |
-| `--color-ink-border` / `--color-ink-rule` | rgba whites at 8% / 14% | Borders on ink surfaces |
-| `--color-parchment` | `#efeae0` | Marketing/auth background warmth |
-| `--color-parchment-soft` | `#f6f2e9` | Cards and panels on parchment |
-| `--color-parchment-border` | rgba(11,12,14,0.1) | Borders on parchment |
-| `--color-amber` | `#e85d23` | Primary brand accent — CTAs, kickers, glow |
-| `--color-amber-soft` | `#f28a54` | Hover state of `amber`, destructive-on-dark |
-| `--color-blueprint` | `#1e3a5f` | Cool accent — used in hero vignette only |
+| `PageContainer` | `page-container.tsx` | Page frame. `wide` = 1240 (tables), `narrow` = 860 (forms). |
+| `PageHeader`, `BackLink` | `page-header.tsx` | Eyebrow or back link, title, status badge, description, actions. |
+| `PageError`, `PageNotice` | `page-feedback.tsx` | Inline `?error=` / `?notice=` banners. |
+| `Segmented`, `SegmentedLink` | `segmented.tsx` | View or time-window toggle. |
+| `TableControls` | `table-controls.tsx` | **The control bar above a table.** Search, filters and sort left; view toggle and count right. |
+| `ActiveFilters` | `table-controls.tsx` | Removable chips echoing whatever the filter menu has applied. |
+| `FilterMenu` | `table-menu.tsx` | Every filter, status included, collapsed into one menu. Client leaf; its options are links. |
+| `SortableHeader` | `sortable-header.tsx` | A column header that sorts. Sort lives here, never in the control bar. |
+| `FilterChipRow`, `FilterChip` | `filter-chips.tsx` | A stage rail. **Superseded** on tables by the Status group inside `FilterMenu`; still used by Projects. |
+| `Toolbar`, `SearchForm`, `ToolbarSelect`, `ResultSummary` | `toolbar.tsx` | `SearchForm` and `ResultSummary` feed `TableControls`. `Toolbar` and `ToolbarSelect` are superseded by `TableControls` and `FilterMenu`. |
+| `TableFrame`, `TABLE_HEAD_CELL`, `TABLE_HEAD_ROW` | `table-frame.tsx` | Rounded card around a table or grid list. |
+| `Pagination` | `pagination.tsx` | Prev/next plus the range readout. |
+| `EmptyState` | `empty-state.tsx` | Icon tile, title, one sentence, the ways forward. |
 
-Reach for amber for "this is Mercer's brand moment" (CTAs on auth pages, the dashboard hero glow). Reach for parchment for warm surfaces. Otherwise use the semantic shadcn tokens above.
+All are Server Components except `table-menu.tsx`, which is a client leaf
+because Radix has to own focus, Escape and click-outside. Its options are
+still ordinary links, so a filtered URL stays shareable and the back button
+steps through filter history. `SortableHeader` is a link too, for the same
+reason.
 
-### 1.3 Radii
+`src/components/page-chrome.tsx` is a **deprecated** re-export kept so existing
+pages compile. Do not add imports to it; migrate a page to
+`@/components/chrome` when you next touch it.
 
-```
---radius-sm: 0.25rem    →  rounded-sm
---radius-md: 0.375rem   →  rounded-md
---radius-lg: 0.5rem     →  rounded-lg
---radius-xl: 0.75rem    →  rounded-xl
-```
+### 1.3 Feature components
 
-Cards default to `rounded-xl`. Buttons/inputs use `rounded-md`. Pills use `rounded-full`. Icon avatars in the sidebar use `rounded-md` (square-ish), user avatars use `rounded-full`.
-
-### 1.4 Typography
-
-Three Google fonts loaded in `src/app/layout.tsx`:
-
-| Stack | Font | Use | Tailwind |
-|---|---|---|---|
-| `--font-sans` | **Geist** | Everything in the product app — body, UI, headings | `font-sans` (default) |
-| `--font-display` | **Fraunces** (variable: SOFT, WONK, opsz) | Marketing display headlines, auth-page titles | `font-display` |
-| `--font-mono` | **JetBrains Mono** | Marketing kickers (`§ 01 · workflow`), code | `font-mono` |
-
-Marketing-specific utility `.font-display-editorial` opts into Fraunces' optical-size + SOFT + WONK axes for hero headlines. Don't use it for body text.
-
-**Type scale used in the wild** (search the app to confirm):
-
-| Use | Class |
-|---|---|
-| App-shell base body | `text-sm` (`14px`) — default for sidebar nav, button text, form labels |
-| Page H1 (auth, settings) | `font-display text-3xl font-medium tracking-tight` |
-| Dashboard hero greeting | `text-[2.125rem] leading-[1.15] font-semibold tracking-tight` |
-| Card title | `text-base font-semibold` |
-| Eyebrow / kicker | `text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground` (dashboard) or `.kicker` class (marketing) |
-| Helper / hint | `text-xs text-muted-foreground` |
-| Numeric values | add `tabular-nums` |
+Keep a feature component under roughly 400 lines. Past that, split its sections
+into siblings rather than growing the file. The current outliers
+(`new-lead-intake`, `quote-engine`, `property-profile`) predate this rule and
+are the standing candidates for a split.
 
 ---
 
-## 2. Layout
+## 2. Tokens
 
-### 2.1 App shell
+All tokens live in `src/app/globals.css` and reach Tailwind through
+`@theme inline`. Reference by role, never by value.
 
-Lives in `src/app/(app)/layout.tsx` + `src/components/app-sidebar.tsx`.
+### 2.1 Semantic color
 
-- `SidebarProvider` + `AppSidebar` + `SidebarInset` + `AppShellHeader`
-- Sidebar: `collapsible="icon"` — collapses to a thin icon rail. Collapse trigger is the panel-left icon inside `TeamSwitcher`, NOT a separate `SidebarTrigger` in the header.
-- Top header bar (`AppShellHeader`) renders on every page **except `/dashboard`** (the welcome moment has no chrome) and holds breadcrumb + portal slot for per-page actions.
-- Use `PageHeaderActions` (a portal target) for per-page top-bar buttons rather than passing them through layout props.
+shadcn neutrals in oklch: `background`, `foreground`, `card`,
+`card-foreground`, `popover`, `primary`, `primary-foreground`, `secondary`,
+`muted`, `muted-foreground`, `accent`, `destructive`, `border`, `input`,
+`ring`. Light mode is a white ground with near-black text; dark mode inverts
+and lifts `card` off `background`.
 
-### 2.2 Page container patterns
+The sidebar owns a parallel set (`--sidebar`, `--sidebar-foreground`,
+`--sidebar-accent`, `--sidebar-border`, …). Use `bg-sidebar`, not
+`bg-background`, on sidebar surfaces.
 
-| Pattern | Where | Class |
+### 2.2 Status tones
+
+Three tones, each with three tokens. **These replaced the raw
+`emerald`/`amber`/`blue` palette classes across the app** — their values are
+Tailwind's own oklch, so the swap was pixel-identical.
+
+| Tone | Means | Fill | Text | Surface |
+|---|---|---|---|---|
+| `success` | won · accepted · on file | `bg-success` | `text-success-foreground` | `bg-success-soft` |
+| `warning` | verify · overdue · low confidence | `bg-warning` | `text-warning-foreground` | `bg-warning-soft` |
+| `info` | live · unread · viewed | `bg-info` | `text-info-foreground` | `bg-info-soft` |
+| `destructive` | failure · irreversible action | `bg-destructive` | `text-destructive` | `bg-destructive/10` |
+
+`-foreground` already flips for dark mode, so **never pair it with a `dark:`
+variant**. Borders take an opacity modifier: `border-success/30`.
+
+Near-black `primary` is the action color. A tone is a signal, not decoration.
+
+### 2.3 Categorical color
+
+Avatar initials and pipeline stage dots use raw palette classes
+(`bg-violet-600`, `bg-cyan-600`, `bg-rose-600`, `bg-amber-600`) in
+`contacts/page.tsx`, `contacts/[id]/page.tsx`, `pipeline/page.tsx` and
+`leads/page.tsx`. Here the hue **is** the meaning — it distinguishes items
+rather than ranking them. This is the one sanctioned exception to "no palette
+classes"; do not convert these to status tones.
+
+### 2.4 Brand palette
+
+`--color-amber` `#e85d23` (and `--color-amber-soft`), `--color-blueprint`,
+`--color-parchment`, `--color-parchment-soft`, `--color-ink`. These are the
+marketing and auth brand, plus the `amber` Button variant. Reach for amber
+when a screen needs one brand moment (auth CTA, marketing hero). Not for
+routine in-app actions.
+
+### 2.5 Typography
+
+Loaded in `src/app/layout.tsx`.
+
+| Stack | Font | Use |
 |---|---|---|
-| **Centered narrow** — auth, dashboard, single-form pages | login, dashboard, settings forms | `container mx-auto max-w-2xl px-4 py-8` (or `max-w-[46rem]` for dashboard) |
-| **Wide content** — lists, tables | leads, bids, projects, contacts | `container mx-auto px-4 py-8` |
-| **Marketing hero** | `(marketing)/*` | full-bleed + `.bg-grid-*` + `.hero-vignette` + `.noise-overlay` |
+| `font-sans` | Geist | Everything in the product app |
+| `font-mono` | JetBrains Mono | Numerals, money, `kbd`, marketing kickers |
+| `font-display` | Fraunces | Marketing headlines, auth titles |
+| `.font-serif-brand` | Instrument Serif | The sidebar wordmark, nothing else |
 
-Dashboard hero has a soft radial glow behind it: `radial-gradient(60rem 32rem at 50% -8rem, color-mix(in oklab, var(--primary) 18%, transparent), transparent 70%)`. Use `color-mix` against semantic tokens (not raw hexes) so the same hero works in light + dark.
+**The app scale is named. Never write `text-[13.5px]` again.**
 
-### 2.3 Spacing
-
-Tailwind's default scale. Common shapes:
-
-- Card outer gap: `gap-6` between sibling cards in a page
-- Card inner: `px-6 py-5` header, `px-6 py-4 sm:py-6` content
-- Form field gap: `gap-4` inside a column form
-- Inline label/control: `gap-1.5` or `gap-2`
-- Sheet header/body/footer: `px-6` consistently, `py-5` header, `p-6` body, `py-4` footer
-
----
-
-## 3. Components
-
-### 3.1 Inventory
-
-All in `src/components/ui/*` — shadcn defaults with light edits. **Do not invent a new primitive when one of these fits.**
-
-`alert` · `avatar` · `badge` · `breadcrumb` · `button` · `calendar` · `card` · `command` · `dialog` · `dropdown-menu` · `input` · `label` · `password-input` · `popover` · `select` · `separator` · `sheet` · `sidebar` · `skeleton` · `sortable` · `table` · `textarea` · `tooltip`
-
-### 3.2 Custom shells
-
-Higher-level patterns above the shadcn primitives:
-
-| Component | File | Purpose |
+| Token | Size | Use |
 |---|---|---|
-| `AppSidebar` | `app-sidebar.tsx` | The product nav shell |
-| `TeamSwitcher` | `team-switcher.tsx` | Org switcher + sidebar collapse trigger (panel-left icon) |
-| `NavUser` | `nav-user.tsx` | Footer user menu — theme switcher + sign out |
-| `AppShellHeader` | `app-shell-header.tsx` | Per-page top bar (hidden on `/dashboard`) |
-| `AppBreadcrumb` | `app-breadcrumb.tsx` | Path-derived crumbs; section labels live in `SECTION_LABELS` |
-| `PageHeaderActions` | `page-header-actions.tsx` | Portal — child pages call this to inject top-bar buttons |
-| `BidDetailSections` | `bid-detail-sections.tsx` | Collapsible 4-section pattern (Buildings → Access → Pricing → Proposals) |
-| `BidSummary` | `bid-summary.tsx` | Property/client header on bid detail |
-| `DashboardHero` / `DashboardActionPills` / `DashboardRecents` | `dashboard-*.tsx` | The welcome moment |
-| `SubmitButton` | `submit-button.tsx` | Form submit w/ pending state — use this for server-action forms |
-| `PasswordInput` | `ui/password-input.tsx` | Input w/ eye-toggle for password fields |
+| `text-2xs` | 10.5px | Table column heads, micro-labels (uppercase, `tracking-[0.06em]`) |
+| `text-caption` | 11px | Eyebrow field labels, counts (uppercase, `tracking-[0.05em]`) |
+| `text-xs` | 12px | Helper text, sublines, result meta |
+| `text-ui` | 13px | Dense UI copy, money in rows |
+| `text-body` | 13.5px | Page descriptions, filter chips, toolbar controls |
+| `text-sm` | 14px | **The app default**: rows, buttons, labels, dialogs |
+| `text-base` | 16px | Card titles |
+| `text-xl` | 20px | Empty-state titles |
+| `text-title` | 27px | Page `h1` (`font-semibold tracking-tight`, `lh 1.25`) |
 
-### 3.3 Button variants
+Money and counts always carry `tabular-nums`, usually `font-mono`.
 
-From `ui/button.tsx`. Default = filled primary (near-black on light, near-white on dark). Variants in use across the app:
+### 2.6 Radius and elevation
 
-| Variant | When | Example |
+| Token | Value | Use |
 |---|---|---|
-| `default` | Primary action on a page | "Generate proposal", "Save contact" |
-| `outline` | Secondary nav / "view all" / cancel | "View leads →", sheet Cancel |
-| `ghost` | Tertiary, low-vis, often paired with icon | breadcrumb back, sidebar menu items |
-| `destructive` | Irreversible destructive actions | "Delete bid" |
-| `amber` *(custom)* | Brand-moment CTAs on parchment surfaces | "Sign in", "Send reset link" |
+| `rounded-sm/md/lg/xl` | 4 / 6 / 8 / 12px | shadcn scale. Buttons, inputs and badges are `md`; `Card` is `xl`. |
+| `rounded-control` | 9px | Segmented rails, sidebar tool buttons |
+| `rounded-chip` | 10px | Filter chips, search input, toolbar selects |
+| `rounded-card` | 16px | Table frames, empty states, list cards |
+| `rounded-full` | — | Status pills, avatars, dots |
 
-The custom **`amber`** variant lives in `submit-button.tsx`'s class composition — it gives the warm orange glow used on auth pages. Use it sparingly (auth, onboarding, the marketing hero) — not on routine in-app actions.
+`shadow-card` (`0 1px 2px rgb(0 0 0 / .04)`) at rest, `shadow-card-hover` on
+interactive cards. Both darken in dark mode. Cards rest almost flat.
 
-### 3.4 Slide-over `Sheet` pattern
+### 2.7 Spacing
 
-The dashboard action pills, bid edit drawers, and lead detail panels all use `Sheet` from the right. House style:
+Tailwind's default scale. The shapes every page shares:
 
-- `side="right"`, `className="w-full sm:max-w-md gap-0 p-0"` to override the default narrow width and remove the default gap (we manage padding ourselves).
-- `SheetHeader` w/ `px-6 py-5 border-b`, `SheetFooter` w/ `px-6 py-4 border-t flex-row justify-end gap-2`.
-- Body is `flex-1 overflow-y-auto p-6`.
-- Forms inside sheets use `flex flex-col gap-5` for fields.
-
-### 3.5 Collapsible section pattern (heavy detail pages)
-
-Used on `/bids/[id]`. Each section: icon + title + one-line summary, click to expand. Summary string surfaces "what's done / not done" without expanding. The bid page auto-expands a section if it's empty / incomplete. This pattern is reusable — wrap in `CollapsibleSection` from `components/collapsible-section.tsx`.
-
-### 3.6 Status badges
-
-`badge.tsx` + helpers in `src/lib/status-meta.ts` (`leadStatusLabel`, `bidStatusVariant`, etc.). **Never hand-pick a badge color** — always go through these helpers so all status surfaces stay in sync.
+- Page frame: `max-w-[1240px] px-6 pt-7 pb-24` (narrow: `max-w-[860px]`)
+- Header → chips → toolbar: `mb-5`, `mb-4`, `mb-3`
+- Controls: `h-9` default, `h-8` small, `h-7` segment
+- Table row: `py-3 pl-4 pr-10`, `gap-x-2.5`
+- Sheet: `px-6 py-5` header, `p-6` body, `px-6 py-4` footer, `gap-5` fields
 
 ---
 
-## 4. Forms
+## 3. Page patterns
 
-- Server-action forms. `<form action={someAction}>` + `SubmitButton`.
-- Inputs from `ui/input.tsx`. Labels from `ui/label.tsx` — always pair `<Label htmlFor>` with an `id` on the input.
-- Password fields use `PasswordInput` (eye-toggle baked in).
-- Validation is **zod, server-side** (`src/lib/validations.ts`). On failure the action redirects back with `?error=…`.
-- Error display: a single `<p className="mb-4 text-sm text-destructive dark:text-[var(--color-amber-soft)]">{error}</p>` block above the form.
-- Confirmation / "we sent you an email" states render in the same card slot as the form (don't navigate away).
-
----
-
-## 5. Iconography
-
-**Lucide-react** is the single icon library. Always:
+### 3.1 Index page
 
 ```tsx
-import { Plus } from "lucide-react";
-<Plus className="size-4" />
+<PageContainer>
+  <PageHeader eyebrow={{ icon, label }} title="Leads" description="…"
+              actions={<>…</>} />
+  <PageError message={error} />
+  <TableControls view={<Segmented>…</Segmented>} summary={<ResultSummary … />}>
+    <SearchForm action="/leads" q={q} placeholder="Search leads…" hidden={{…}} />
+    <FilterMenu activeCount={n}
+                groups={[{ label: "Status", options }, { label: "Source", … }]} />
+  </TableControls>
+  <ActiveFilters items={…} clearHref={…} />
+  <TableFrame minWidth="min-w-[940px]">
+    {/* sortable columns only; the rest stay TABLE_HEAD_CELL spans */}
+    <SortableHeader label="Follow-up" href={…} direction="asc" />
+  </TableFrame>
+  <Pagination page={page} limit={limit} total={total} hrefFor={…} />
+</PageContainer>
 ```
 
-Don't use the `<i data-lucide="...">` web pattern from designs (that's the prototype) — translate to the React import.
+### 3.1.1 What goes where in the control bar
 
-Common sizes: `size-3.5` (pill chips), `size-4` (most UI), `size-[17px]` (recents row, send button), `size-5` (sidebar collapsed). Lucide icons inside `<button>` get `text-muted-foreground` by default and `text-foreground` on hover — match this.
+This is the part that decays fastest, so the rule is explicit. **Two
+controls sit above the table and no more: a search field and one filter
+menu.** Sort is not one of them.
+
+| Control | Where | Why |
+|---|---|---|
+| Free text | Search field, always visible | The one control people reach for without looking. |
+| Every filter, status included | Inside `FilterMenu` | One menu, grouped. Status is the first group and keeps its dot and count. |
+| Sort | On the column header | It belongs next to the data it orders, not in a control that names columns from a distance. |
+| View mode | `Segmented`, right side | Only when there are two or three modes and it changes the row shape. |
+| Applied filters | `ActiveFilters` chips | Nothing may filter the table invisibly. |
+
+Five rules the pattern enforces:
+
+1. **Never put a `<select>` of user data in the bar.** Its width is its
+   longest option, so real data stretches the row and wraps everything after
+   it. This is what broke the leads bar at 313 properties. Options belong in
+   a menu, which is a fixed width.
+2. **No Apply button.** Every option is a link, so the filter applies on
+   click. An Apply button is the tell that a `<select>` is in the bar.
+3. **The trigger carries the state.** `FilterMenu` shows a count when
+   filters are applied.
+4. **Whatever the menu hides, `ActiveFilters` shows.** A filtered table
+   always says so on the surface, and each filter lifts off in one click.
+5. **A header sorts only where a server order already backs it.** Everything
+   else stays a plain `TABLE_HEAD_CELL` span. A header that cannot sort must
+   never look like it can.
+
+### 3.1.2 Sortable columns
+
+`SortableHeader` takes the current `direction` for its column (`"asc"`,
+`"desc"`, or null when another column is sorted) and the `href` a click goes
+to. At rest an unsorted column shows **no arrow**; a two-way arrow appears on
+hover and on keyboard focus, which is the only hint the header is
+interactive. The arrow reads in the column's own terms, so ascending on a
+date column means soonest first.
+
+Where the query has a reverse order, clicking the sorted column flips it.
+Where it does not, a second click is a no-op rather than an invented order.
+
+| Page | Sortable columns | Notes |
+|---|---|---|
+| Leads | Follow-up, Last contact (by property); Follow-up, Age (by contact) | Last contact toggles; its ascending order is what "Stalest" used to be. |
+| Opportunities | Opportunity, Total, Age | Age toggles newest against stalest. |
+| Lists | List, People, Converted, Uploaded | Everything but Source. |
+
+On a real `<table>` (Lists) the `<th>` also carries `aria-sort`. The
+grid-based tables have no table semantics to hang it on, so the link's
+accessible name states the direction instead.
+
+Row anatomy: primary cell is a `text-sm font-semibold` name link over a
+`text-xs text-muted-foreground` subline; money is `font-mono text-ui
+tabular-nums`; age is `font-mono text-xs tabular-nums`, turning
+`text-warning-foreground font-semibold` when overdue; status is a pill with a
+tone dot. **Every row carries its ONE next action inline**, and a hover-only
+open arrow floats at the right edge.
+
+### 3.2 Child page
+
+Same frame, but `PageHeader` takes `back={{ href, label }}` instead of
+`eyebrow`, the record's name as `title`, and a status `badge` beside it.
+
+### 3.3 Empty state
+
+`EmptyState` — one icon tile, a title, one sentence, and the two ways forward.
+Never an empty table with a header.
+
+### 3.4 Sheet
+
+`Sheet` from the right, `side="right" className="w-full sm:max-w-md gap-0 p-0"`.
+Header `px-6 py-5 border-b`, body `flex-1 overflow-y-auto p-6`, footer
+`px-6 py-4 border-t flex-row justify-end gap-2`. Fields `flex flex-col gap-5`.
+
+### 3.5 Collapsible sections
+
+Heavy detail pages use `CollapsibleSection`: icon, title, one-line summary that
+says what is done without expanding. Auto-expand a section that is empty or
+incomplete.
+
+### 3.6 App shell
+
+`SidebarProvider` → `AppSidebar` → `SidebarInset` → `AppShellHeader`. There is
+**no breadcrumb bar** — the sidebar names the page. Per-page actions portal to
+the top-right through `PageHeaderActions`; the notifications bell sits beside
+them. The sidebar is `collapsible="icon"` and its collapse trigger lives in the
+brand row.
 
 ---
 
-## 6. Motion
+## 4. React and forms
 
-- shadcn defaults — `transition-colors` / `transition-opacity` `.15s` for hover, `.2s` for focus/box-shadow.
-- Sheet slide-over: Radix default cubic-bezier, ~250ms.
-- Buttons get `active:translate-y-px` on press for tactile feedback (used on the dashboard pills).
-
----
-
-## 7. Accessibility
-
-- Every interactive thing has a `<button>` or `<a>` (or `role="button" tabIndex={0}` with keyboard handlers when nested-button HTML would be invalid — see the team switcher's collapse icon).
-- `aria-label` on icon-only buttons.
-- `aria-live="polite"` on async status text under the composer.
-- `Sheet` close on Esc, overlay click, X — all wired by Radix; don't roll your own.
-- Color is never the only signal — pair with text or icon (e.g. status badges have a label + a variant).
-
----
-
-## 8. Don'ts
-
-- Don't import a raw hex into a component. Add to `globals.css` or use a semantic token.
-- Don't use system fonts. The three Google fonts above are the only typefaces.
-- Don't add the `dark` class manually — the `ThemeProvider` (`next-themes`) handles it.
-- Don't create a new `Sheet`-like primitive. Use `ui/sheet.tsx` with the house styling above.
-- Don't put `SidebarTrigger` in the page header — the collapse moved to the team switcher. Use `useSidebar().toggleSidebar()` if you need to trigger it from elsewhere.
+- **Server Components by default.** Add `"use client"` only for state,
+  effects, event handlers or browser APIs, and push it to the smallest leaf.
+- Mutations are server actions: `<form action={someAction}>` plus
+  `SubmitButton` (which reads `useFormStatus` for the pending state).
+- Validation is server-side Zod in `src/lib/validations.ts`. On failure the
+  action redirects back with `?error=` and the page renders `PageError`. No
+  toasts.
+- Status labels and Badge variants come from `src/lib/status-meta.ts`
+  (`leadStatusLabel`, `bidStatusVariant`, `invoiceStatusVariant`, …). The enum
+  arrays there are the same ones the Drizzle schema and the Zod validators
+  derive from, so the three layers cannot drift. **Never hand-pick a badge
+  colour.**
+- Compose class names with `cn()`. Use `cva` when a component has real
+  variants; a one-off conditional does not need it.
+- Confirmation states render in the same card slot as the form. Do not
+  navigate away.
 
 ---
 
-## 9. Direction A — the shipped page language (2026-07-15)
+## 5. Iconography and motion
 
-The six sidebar pages (Home · Pipeline · Jobs · Properties · Reports ·
-Contacts) plus New Lead / New Bid shipped a shared page language. **Every
-new or reworked page must use these exact shapes** — they're deliberately
-letter-for-letter consistent across the redesigned pages; copy classes from
-an existing page rather than approximating.
+Lucide is the only icon library: `import { Plus } from "lucide-react"` at
+`size-4` (`size-3.5` inside chips and pills, `size-6` in empty-state tiles).
+Icons inside a button inherit `text-muted-foreground` and go `text-foreground`
+on hover.
 
-### 9.1 Page frame
-
-```tsx
-<div className="relative mx-auto w-full max-w-[1240px] px-6 pb-24 pt-7">
-```
-(Reports uses `max-w-[1300px]`; intake front doors use `max-w-[860px]`.)
-No breadcrumb bar — the sidebar names the page; actions + bell float
-top-right via `PageHeaderActions`.
-
-### 9.2 Page header
-
-```tsx
-<header className="mb-5 flex items-end gap-5">
-  <div>
-    <h1 className="text-[27px] font-semibold leading-tight tracking-tight">Pipeline</h1>
-    <p className="mt-1 text-[13.5px] text-muted-foreground">One-line purpose, lowercase-calm.</p>
-  </div>
-  <div className="ml-auto flex shrink-0 items-center gap-2">…buttons…</div>
-</header>
-```
-
-### 9.3 Filter rails & toolbars
-
-- **Stage/filter chips** (Pipeline): `inline-flex h-[38px] items-baseline gap-2 rounded-[10px] border px-3.5 text-[13.5px] font-medium` — active = `border-foreground bg-foreground text-background`, inactive = `bg-card text-foreground/80 hover:border-foreground/25 hover:bg-muted/40`. Count in `font-semibold tabular-nums`, money suffix in `border-l pl-2 font-mono text-xs`.
-- **Toolbar buttons/selects** (Contacts/Properties/Jobs): `inline-flex h-9 items-center gap-2 rounded-[10px] border px-3 text-[13.5px] font-medium`.
-- **Search input**: `h-9 w-56 rounded-[10px] border bg-card pl-9 pr-3 text-[13.5px]` with a `Search` icon absolutely placed left; `focus:border-foreground/30`.
-- **Lens toggle** (All / Going quiet): segmented `flex gap-0.5 rounded-[9px] border bg-muted/70 p-[3px]` with `rounded-md px-3 py-1 text-xs font-medium` buttons, active = `bg-background text-foreground shadow-sm`.
-- Right-aligned result meta line: `text-xs tabular-nums text-muted-foreground` with bold `text-foreground/80` numbers.
-
-### 9.4 The table card (Pipeline is canonical)
-
-```tsx
-<div className="overflow-x-auto rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
-  <div className="min-w-[940px]">
-    {/* header row */}
-    <div className="grid grid-cols-[…] items-center gap-x-2.5 border-b bg-muted/30 py-2.5 pl-4 pr-10">
-      <span className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">…</span>
-    </div>
-    {/* rows */}
-    <div className="group relative grid grid-cols-[…] items-center gap-x-2.5 border-t py-3 pl-4 pr-10 first:border-t-0 hover:bg-muted/20">
-```
-Row anatomy: primary cell = `text-sm font-semibold tracking-tight` name link
-(`hover:underline`) over a `text-xs text-muted-foreground` subline; money =
-`font-mono text-[13px] font-medium tabular-nums`; age = `font-mono text-xs
-tabular-nums text-muted-foreground` (amber `text-amber-600 font-semibold`
-when overdue); status = pill `rounded-full border bg-muted/50 py-[3px] pl-2
-pr-2.5 text-xs font-medium` with a colored `size-1.5 rounded-full` dot;
-**every row carries its ONE next action inline** in the last column; a
-hover-only open arrow floats at the right edge
-(`absolute inset-y-0 right-2 … opacity-0 group-hover:opacity-100`).
-
-### 9.5 Card-grid list (Contacts/Properties/Jobs alternative to tables)
-
-`grid … rounded-2xl border bg-card p-[17px_19px] shadow-[0_1px_2px_rgb(0_0_0/0.04)]
-transition-[border-color,box-shadow,transform] hover:border-foreground/20
-hover:shadow-[0_4px_16px_-6px_rgb(0_0_0/0.12)] active:translate-y-px`.
-
-### 9.6 Empty state
-
-```tsx
-<div className="flex flex-col items-center rounded-2xl border bg-card px-8 py-14 text-center shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
-  <span className="mb-5 flex size-[54px] items-center justify-center rounded-2xl bg-muted text-foreground/60"><Icon className="size-6" /></span>
-  <h3 className="mb-2 text-xl font-semibold tracking-tight">…</h3>
-  <p className="max-w-md text-sm leading-relaxed text-muted-foreground [text-wrap:pretty]">…</p>
-  <div className="mt-6 flex gap-2">…CTAs…</div>
-</div>
-```
-
-### 9.7 Field labels & eyebrows (intake bands)
-
-`text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground`;
-card-grid micro-labels use `text-[10.5px] … tracking-[0.05em]`.
-
-### 9.8 Accent discipline
-
-Near-black is the primary action color. Blue (`text-blue-600`/`bg-blue-600`)
-ONLY for live/unread signals (dots, view counts, links). Amber for
-verify/overdue. Emerald for won/accepted/"on file". Money and counts always
-`tabular-nums`, usually `font-mono`.
+Motion is shadcn's defaults: `transition-colors` for hover, Radix's own
+cubic-bezier for sheets and dialogs. Buttons take `active:translate-y-px`.
+Nothing animates on load except skeletons.
 
 ---
 
-## 10. Where to look in code
+## 6. Accessibility
+
+- Real elements only: `<button>`, `<a href>`, `<input>` paired with a
+  `<label>`. No `onClick` on a div or span — Tab skips it.
+- `aria-label` on icon-only buttons; `aria-current="page"` on the active
+  filter chip, segment and nav item; `aria-hidden` on decorative dots and
+  icon tiles.
+- `role="alert"` on `PageError`, `role="status"` on `PageNotice`.
+- Colour is never the only signal. A tone is always paired with a label or an
+  icon.
+- Text holds 4.5:1 (3:1 at 24px+). The tokens that fail this most easily are
+  caption grey on a tinted surface and white on a `-soft` fill — use
+  `-foreground` on `-soft`, never the bare tone.
+- Sheets and dialogs close on Esc, overlay click and X via Radix. Do not roll
+  your own.
+
+---
+
+## 7. Don'ts
+
+- No raw hex in a component. Add a token to `globals.css` instead.
+- No Tailwind palette class for status (`text-emerald-700`, `bg-blue-600`).
+  Use a tone. The categorical avatar and stage hues in §2.3 are the only
+  exception.
+- No `dark:` variant paired with a `-foreground` token — it already flips.
+- No arbitrary type size (`text-[13.5px]`). The scale in §2.5 is named.
+- No new imports from `src/components/page-chrome.tsx`.
+- No system fonts. The four families above are the only typefaces.
+- No manual `dark` class — `ThemeProvider` (next-themes) owns it.
+- No new Sheet-like primitive. Use `ui/sheet.tsx` with the house styling.
+
+---
+
+## 8. Where to look
 
 | Looking for | Read |
 |---|---|
-| All design tokens | `src/app/globals.css` |
-| Font setup | `src/app/layout.tsx` (top of file) |
-| App shell | `src/app/(app)/layout.tsx` + `src/components/app-sidebar.tsx` |
-| shadcn primitives | `src/components/ui/*` |
-| Status colors / labels | `src/lib/status-meta.ts` |
-| Form action pattern | any of `src/lib/actions.ts` — they're all the same shape |
-| A canonical hero | `src/app/(app)/dashboard/page.tsx` + `dashboard-hero.tsx` |
-| A canonical detail page | `src/app/(app)/bids/[id]/page.tsx` + `bid-detail-sections.tsx` |
+| Every token | `src/app/globals.css` |
+| Font setup | `src/app/layout.tsx` |
+| App shell | `src/app/(app)/layout.tsx`, `src/components/app-sidebar.tsx` |
+| Primitives | `src/components/ui/*` |
+| Page chrome | `src/components/chrome/*` |
+| Status labels and variants | `src/lib/status-meta.ts` |
+| A canonical index page | `src/app/(app)/leads/page.tsx` |
+| A canonical detail page | `src/app/(app)/opportunities/[id]/page.tsx` |
 | A canonical auth page | `src/app/(auth)/login/page.tsx` |

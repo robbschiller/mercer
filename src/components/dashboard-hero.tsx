@@ -41,7 +41,7 @@ export function DashboardHero({ firstName, briefSlot }: DashboardHeroProps) {
         className="mb-3 flex min-h-4 items-center gap-2 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground"
         suppressHydrationWarning
       >
-        <span className="size-[5px] rounded-full bg-emerald-500 shadow-[0_0_0_3px] shadow-emerald-500/15" />
+        <span className="size-[5px] rounded-full bg-success shadow-[0_0_0_3px] shadow-emerald-500/15" />
         {dateLine}
       </p>
       <h1

@@ -401,7 +401,7 @@ export function DashboardActionPills({
               <div className="flex-1 overflow-y-auto p-6">
                 {action.kind === "form" && showSuccess && (
                   <div className="flex flex-col items-center text-center py-10 gap-3">
-                    <div className="size-14 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center">
+                    <div className="size-14 rounded-full bg-success-soft text-success flex items-center justify-center">
                       <Check className="size-7" />
                     </div>
                     <h3 className="text-[1.0625rem] font-semibold">
@@ -442,7 +442,7 @@ export function DashboardActionPills({
                 {action.kind === "overdue" &&
                   (overdue.length === 0 ? (
                     <div className="flex flex-col items-center text-center py-10 gap-2">
-                      <div className="size-12 rounded-full bg-emerald-500/15 text-emerald-500 flex items-center justify-center">
+                      <div className="size-12 rounded-full bg-success-soft text-success flex items-center justify-center">
                         <Check className="size-6" />
                       </div>
                       <p className="text-sm font-medium">All caught up</p>

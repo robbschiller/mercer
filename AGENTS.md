@@ -15,6 +15,8 @@ This file keeps human contributors and AI agents aligned on Mercer.
 - Session-by-session log: `docs/worklog.md`.
 - This operating guide: `AGENTS.md`.
 - Database schema: `src/db/schema.ts`. Manual migrations: `drizzle/manual/*.sql`.
+- Design tokens, components and page patterns: `docs/design-system.md` (with a
+  rendered canvas linked at the top).
 
 If this file and another doc conflict, update the docs in the same PR and call it out.
 
@@ -48,6 +50,9 @@ A task is not done unless all applicable items pass:
 - Build: `bun run build`
 - Data changes include migration in `drizzle/manual/`
 - `docs/plan.md` is updated when roadmap status changes
+- UI changes use design tokens, not raw hexes or palette classes (see
+  "UI And Design System Rules"), and `docs/design-system.md` is updated when
+  a token, a chrome component or a page pattern changes
 
 ## Database Change Rules
 
@@ -62,11 +67,94 @@ A task is not done unless all applicable items pass:
 - Protected app pages must remain behind auth checks.
 - Keep proxy logic in `src/proxy.ts` (do not reintroduce `src/middleware.ts`).
 
-## UX Consistency Rules
+## UI And Design System Rules
 
-- Preserve existing shadcn patterns and component style.
+**Source of truth: `docs/design-system.md`.** Tokens live in
+`src/app/globals.css`; the canvas of foundations, components and patterns is
+the Mercer Design System artifact linked from that doc. If the code and the
+doc disagree, the code wins: fix the doc in the same PR.
+
+### The three layers
+
+Build downward, never sideways. A component may import from the layer below
+it, never from the layer above.
+
+1. `src/components/ui/*` — shadcn/Radix primitives. Styling only, no product
+   knowledge. Add one only when shadcn ships it; do not invent a primitive
+   when one of these fits.
+2. `src/components/chrome/*` — page chrome: `PageContainer`, `PageHeader`,
+   `BackLink`, `PageError`, `PageNotice`, `Segmented`, `TableControls`,
+   `ActiveFilters`, `FilterMenu`, `SortableHeader`, `SearchForm`,
+   `ResultSummary`, `TableFrame`, `Pagination`, `EmptyState`. One concern per
+   file, re-exported from `@/components/chrome`. Import from there, not from
+   the file.
+   `src/components/page-chrome.tsx` is a deprecated re-export kept so old
+   pages compile; do not add imports to it.
+3. `src/components/*` — feature components, which own product behaviour.
+
+### Page composition
+
+Index pages: `PageContainer` → `PageHeader` (with `eyebrow`) →
+`TableControls` → `ActiveFilters` → `TableFrame` → `Pagination`. Child pages swap the eyebrow for `back` and add the record's
+status `badge`. Every list row carries its ONE next action inline. A number
+you cannot act on belongs on Reports.
+
+**Table controls.** Two controls above a table and no more: a search field
+and one `FilterMenu`. Every filter goes in that menu, status included, and
+whatever is applied comes back out as `ActiveFilters` chips. **Sort belongs
+on the column header** (`SortableHeader`), and only on columns a server order
+already backs; every other header stays a plain span. **Never put a
+`<select>` of user data in the bar**, because its width is its longest option
+and real data wraps the row. That also means no Apply button: menu options
+are links and apply on click. Full rules in `docs/design-system.md` §3.1.1
+and §3.1.2.
+
+### Tokens, not values
+
+- **Never write a raw hex or a Tailwind palette class** (`text-emerald-700`,
+  `bg-blue-600`) for status. Use `success`, `warning`, `info`, `destructive`.
+  Each has `-foreground` (tinted text, flips for dark on its own, so no
+  `dark:` variant is needed) and `-soft` (the surface fill).
+  `success` = won/accepted/on file. `warning` = verify/overdue/low
+  confidence. `info` = live/unread/viewed. Near-black `primary` is the
+  action color.
+- The one exception is **categorical** hue (avatar initials, pipeline stage
+  dots in `pipeline/page.tsx` and `contacts/page.tsx`), where the palette
+  class IS the meaning. Leave those alone.
+- `--color-amber` and the parchment/ink tokens are the **marketing and auth**
+  brand, plus the `amber` Button variant. Not for routine in-app actions.
+- **Never write `text-[13.5px]`.** The app scale is named: `text-2xs`
+  (column heads), `text-caption` (eyebrow labels), `text-xs`, `text-ui`
+  (dense/money), `text-body` (descriptions, chips, toolbars), `text-sm`
+  (default), `text-base`, `text-title` (page h1).
+- Radii: `rounded-control` (9px, segmented rails), `rounded-chip` (10px,
+  chips/search/selects), `rounded-card` (16px, table frames, empty states),
+  plus the shadcn `sm/md/lg/xl`. Elevation is `shadow-card` and
+  `shadow-card-hover`; cards rest almost flat.
+- Money and counts always get `tabular-nums`, usually `font-mono`.
+
+### React practice
+
+- Server Components by default. Add `"use client"` only for state, effects,
+  event handlers or browser APIs, and push it to the smallest leaf.
+- Mutations are server actions plus `<SubmitButton>`; validation is
+  server-side Zod in `src/lib/validations.ts`. Failures redirect back with
+  `?error=` and render through `PageError`, never a toast.
+- Status labels and Badge variants come from `src/lib/status-meta.ts`
+  (`leadStatusVariant`, `bidStatusLabel`, …). Never hand-pick a badge colour.
+- Real elements only: `<button>`, `<a href>`, `<input>` with a `<label>`.
+  No `onClick` on a div. `aria-label` on icon-only buttons. Colour is never
+  the only signal — pair a tone with a label or an icon.
+- Icons are `lucide-react` at `size-4` (`size-3.5` in chips). Compose class
+  names with `cn()`; use `cva` when a component has real variants.
+- Keep a feature component under ~400 lines. Past that, split the sections
+  into siblings rather than growing the file.
+
+### Still true
+
 - Maintain table/card dual view behavior where implemented.
-- For new workflow state, favor explicit status badges and lightweight text feedback.
+- For new workflow state, favor explicit status badges and lightweight text
+  feedback.
 
 ## Agent Execution Rules
 

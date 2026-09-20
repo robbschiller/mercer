@@ -30,8 +30,6 @@ import { leadFullName } from "@/lib/leads/name";
 import { LeadsGridRow } from "@/components/leads-row";
 import {
   EmptyState,
-  FilterChip,
-  FilterChipRow,
   PageContainer,
   PageError,
   PageHeader,
@@ -41,11 +39,14 @@ import {
   SearchForm,
   Segmented,
   SegmentedLink,
+  SortableHeader,
+  type SortDirection,
+  TableControls,
+  ActiveFilters,
+  FilterMenu,
   TABLE_HEAD_CELL,
   TableFrame,
-  Toolbar,
-  ToolbarSelect,
-} from "@/components/page-chrome";
+} from "@/components/chrome";
 import { cn } from "@/lib/utils";
 
 type LeadsView = "property" | "contact";
@@ -66,11 +67,11 @@ type LeadsQuery = {
 // status-meta; only the dot colors live here.
 const LEAD_STATUS_DOTS: Record<LeadStatus, string> = {
   takeoff: "bg-cyan-600",
-  quoted: "bg-blue-600",
-  won: "bg-emerald-600",
+  quoted: "bg-info",
+  won: "bg-success",
   lost: "bg-muted-foreground/40",
   no_response: "bg-muted-foreground/40",
-  on_hold: "bg-amber-500",
+  on_hold: "bg-warning",
   expired: "bg-muted-foreground/40",
 };
 
@@ -250,26 +251,25 @@ export default async function LeadsPage({
       )}
       <PageError message={params.error} />
 
-      <FilterChipRow>
-        <FilterChip
-          href={leadsHref(query, { status: null, page: 1 })}
-          active={query.status == null}
-          label="All"
-          count={counts.total}
-        />
-        {LEAD_STATUSES.map((s) => (
-          <FilterChip
-            key={s}
-            href={leadsHref(query, { status: s, page: 1 })}
-            active={query.status === s}
-            label={leadStatusLabel(s)}
-            count={counts[s]}
-            dot={LEAD_STATUS_DOTS[s]}
-          />
-        ))}
-      </FilterChipRow>
-
-      <Toolbar
+      <TableControls
+        view={
+          <Segmented>
+            <SegmentedLink
+              href={leadsHref(query, { view: "property", page: 1 })}
+              active={query.view === "property"}
+            >
+              <Building2 className="size-3" />
+              By property
+            </SegmentedLink>
+            <SegmentedLink
+              href={leadsHref(query, { view: "contact", page: 1 })}
+              active={query.view === "contact"}
+            >
+              <UserPlus className="size-3" />
+              By contact
+            </SegmentedLink>
+          </Segmented>
+        }
         summary={
           <ResultSummary
             start={rangeStart}
@@ -285,56 +285,111 @@ export default async function LeadsPage({
           placeholder="Search leads, accounts…"
           hidden={{
             status: query.status,
+            source: query.source,
             followUp: query.followUp,
             sort: query.sort,
             limit:
               query.limit !== LEADS_PAGE_DEFAULT_LIMIT ? query.limit : null,
             view: query.view === "contact" ? "contact" : null,
           }}
-        >
-          <ToolbarSelect name="source" defaultValue={query.source ?? ""}>
-            <option value="">All sources</option>
-            {sourceOptions.map((opt: LeadSourceOption) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </ToolbarSelect>
-        </SearchForm>
-        <Segmented label="View">
-          <SegmentedLink
-            href={leadsHref(query, { view: "property", page: 1 })}
-            active={query.view === "property"}
-          >
-            <Building2 className="size-3" />
-            By property
-          </SegmentedLink>
-          <SegmentedLink
-            href={leadsHref(query, { view: "contact", page: 1 })}
-            active={query.view === "contact"}
-          >
-            <UserPlus className="size-3" />
-            By contact
-          </SegmentedLink>
-        </Segmented>
-        <Segmented label="Follow-up">
-          <SegmentedLink
-            href={leadsHref(query, { followUp: null, page: 1 })}
-            active={query.followUp == null}
-          >
-            All
-          </SegmentedLink>
-          {LEADS_FOLLOW_UP_FILTERS.map((f) => (
-            <SegmentedLink
-              key={f}
-              href={leadsHref(query, { followUp: f, page: 1 })}
-              active={query.followUp === f}
-            >
-              {FOLLOW_UP_LABELS[f]}
-            </SegmentedLink>
-          ))}
-        </Segmented>
-      </Toolbar>
+        />
+        <FilterMenu
+          activeCount={
+            (query.status ? 1 : 0) +
+            (query.source ? 1 : 0) +
+            (query.followUp ? 1 : 0)
+          }
+          groups={[
+            {
+              label: "Status",
+              options: [
+                {
+                  label: "All statuses",
+                  href: leadsHref(query, { status: null, page: 1 }),
+                  active: query.status == null,
+                  count: counts.total,
+                },
+                ...LEAD_STATUSES.map((st) => ({
+                  label: leadStatusLabel(st),
+                  href: leadsHref(query, { status: st, page: 1 }),
+                  active: query.status === st,
+                  dot: LEAD_STATUS_DOTS[st],
+                  count: counts[st],
+                })),
+              ],
+            },
+            {
+              label: "Source",
+              options: [
+                {
+                  label: "All sources",
+                  href: leadsHref(query, { source: null, page: 1 }),
+                  active: query.source == null,
+                },
+                ...sourceOptions.map((opt: LeadSourceOption) => ({
+                  label: opt.label,
+                  href: leadsHref(query, { source: opt.value, page: 1 }),
+                  active: query.source === opt.value,
+                })),
+              ],
+            },
+            {
+              label: "Follow-up",
+              options: [
+                {
+                  label: "Any",
+                  href: leadsHref(query, { followUp: null, page: 1 }),
+                  active: query.followUp == null,
+                },
+                ...LEADS_FOLLOW_UP_FILTERS.map((f) => ({
+                  label: FOLLOW_UP_LABELS[f],
+                  href: leadsHref(query, { followUp: f, page: 1 }),
+                  active: query.followUp === f,
+                })),
+              ],
+            },
+          ]}
+        />
+      </TableControls>
+
+      <ActiveFilters
+        clearHref={leadsHref(query, {
+          status: null,
+          source: null,
+          followUp: null,
+          page: 1,
+        })}
+        items={[
+          ...(query.status
+            ? [
+                {
+                  label: `Status: ${leadStatusLabel(query.status)}`,
+                  href: leadsHref(query, { status: null, page: 1 }),
+                },
+              ]
+            : []),
+          ...(query.source
+            ? [
+                {
+                  label: `Source: ${
+                    sourceOptions.find(
+                      (o: LeadSourceOption) => o.value === query.source,
+                    )?.label ?? query.source
+                  }`,
+                  href: leadsHref(query, { source: null, page: 1 }),
+                },
+              ]
+            : []),
+          ...(query.followUp
+            ? [
+                {
+                  label: `Follow-up: ${FOLLOW_UP_LABELS[query.followUp]}`,
+                  href: leadsHref(query, { followUp: null, page: 1 }),
+                },
+              ]
+            : []),
+        ]}
+      />
 
       {visible === 0 ? (
         hasFilters ? (
@@ -378,9 +433,9 @@ export default async function LeadsPage({
           />
         )
       ) : propertyGroups ? (
-        <PropertyGroupsTable groups={propertyGroups} />
+        <PropertyGroupsTable groups={propertyGroups} query={query} />
       ) : (
-        <ContactLeadsTable leads={rows} />
+        <ContactLeadsTable leads={rows} query={query} />
       )}
 
       <Pagination
@@ -391,6 +446,43 @@ export default async function LeadsPage({
       />
     </PageContainer>
   );
+}
+
+/**
+ * A leads column header. `sort` is the order this column applies and `dir`
+ * is how that order reads in this column's own terms; `reverse` is the
+ * opposite order where the query has one, which is what a second click
+ * gets. Columns with no backing order stay plain spans.
+ */
+function LeadSortHeader({
+  query,
+  label,
+  sort,
+  dir,
+  reverse,
+}: {
+  query: LeadsQuery;
+  label: string;
+  sort: LeadsSort;
+  dir: SortDirection;
+  reverse?: LeadsSort;
+}) {
+  const current = effectiveSort(query);
+  const isThis = current === sort;
+  const isReverse = reverse != null && current === reverse;
+  const direction = isThis ? dir : isReverse ? flip(dir) : null;
+  const next = isThis && reverse != null ? reverse : sort;
+  return (
+    <SortableHeader
+      label={label}
+      href={leadsHref(query, { sort: next, page: 1 })}
+      direction={direction}
+    />
+  );
+}
+
+function flip(d: SortDirection): SortDirection {
+  return d === "asc" ? "desc" : "asc";
 }
 
 function StatusPill({ status }: { status: LeadStatus }) {
@@ -410,7 +502,7 @@ function FollowUpCell({ followUpAt }: { followUpAt: string | null }) {
     <div
       className={cn(
         "font-mono text-xs tabular-nums text-muted-foreground",
-        overdue && "font-semibold text-amber-600",
+        overdue && "font-semibold text-warning-foreground",
       )}
     >
       {shortDate(followUpAt)}
@@ -421,7 +513,13 @@ function FollowUpCell({ followUpAt }: { followUpAt: string | null }) {
 const CONTACT_GRID =
   "grid-cols-[minmax(180px,1.6fr)_minmax(110px,1fr)_minmax(150px,1.1fr)_120px_88px_48px_minmax(80px,auto)]";
 
-function ContactLeadsTable({ leads }: { leads: Lead[] }) {
+function ContactLeadsTable({
+  leads,
+  query,
+}: {
+  leads: Lead[];
+  query: LeadsQuery;
+}) {
   return (
     <TableFrame minWidth="min-w-[940px]">
       <>
@@ -431,16 +529,19 @@ function ContactLeadsTable({ leads }: { leads: Lead[] }) {
             CONTACT_GRID,
           )}
         >
-          {["Lead", "Company", "Contact", "Status", "Follow-up", "Age", "Next"].map(
-            (h) => (
-              <span
-                key={h}
-                className={TABLE_HEAD_CELL}
-              >
-                {h}
-              </span>
-            ),
-          )}
+          {["Lead", "Company", "Contact", "Status"].map((h) => (
+            <span key={h} className={TABLE_HEAD_CELL}>
+              {h}
+            </span>
+          ))}
+          <LeadSortHeader
+            query={query}
+            label="Follow-up"
+            sort="follow_up"
+            dir="asc"
+          />
+          <LeadSortHeader query={query} label="Age" sort="recent" dir="asc" />
+          <span className={TABLE_HEAD_CELL}>Next</span>
         </div>
         <div className="flex flex-col">
           {leads.map((lead) => (
@@ -521,7 +622,13 @@ function ContactLeadRow({ lead }: { lead: Lead }) {
 const PROPERTY_GRID =
   "grid-cols-[minmax(200px,1.6fr)_minmax(120px,1fr)_64px_minmax(180px,1.4fr)_100px_100px]";
 
-function PropertyGroupsTable({ groups }: { groups: LeadPropertyGroup[] }) {
+function PropertyGroupsTable({
+  groups,
+  query,
+}: {
+  groups: LeadPropertyGroup[];
+  query: LeadsQuery;
+}) {
   return (
     <TableFrame minWidth="min-w-[940px]">
       <>
@@ -531,21 +638,24 @@ function PropertyGroupsTable({ groups }: { groups: LeadPropertyGroup[] }) {
             PROPERTY_GRID,
           )}
         >
-          {[
-            "Property",
-            "Account",
-            "Leads",
-            "Contacts",
-            "Follow-up",
-            "Last contact",
-          ].map((h) => (
-            <span
-              key={h}
-              className={TABLE_HEAD_CELL}
-            >
+          {["Property", "Account", "Leads", "Contacts"].map((h) => (
+            <span key={h} className={TABLE_HEAD_CELL}>
               {h}
             </span>
           ))}
+          <LeadSortHeader
+            query={query}
+            label="Follow-up"
+            sort="follow_up"
+            dir="asc"
+          />
+          <LeadSortHeader
+            query={query}
+            label="Last contact"
+            sort="last_contact"
+            dir="desc"
+            reverse="stalest"
+          />
         </div>
         <div className="flex flex-col">
           {groups.map((group) => (

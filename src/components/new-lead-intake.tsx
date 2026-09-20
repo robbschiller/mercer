@@ -38,13 +38,13 @@ import {
   type FinderBuilding,
 } from "@/components/property-finder";
 import { cn } from "@/lib/utils";
-import { BackLink } from "@/components/page-chrome";
+import { BackLink } from "@/components/chrome";
 import { WorkTypeField } from "@/components/work-type-field";
 
 const AVATAR_TINTS = [
-  "bg-blue-600",
+  "bg-info",
   "bg-rose-600",
-  "bg-emerald-600",
+  "bg-success",
   "bg-violet-600",
   "bg-amber-600",
   "bg-cyan-600",
@@ -378,7 +378,7 @@ export function NewLeadIntake({
                   </div>
                   {isKnown && (
                     <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
-                      <Sparkles className="mt-px size-[13px] shrink-0 text-emerald-600" />
+                      <Sparkles className="mt-px size-[13px] shrink-0 text-success-foreground" />
                       Came attached to {name} — their name is on its history.
                     </p>
                   )}
@@ -405,9 +405,9 @@ export function NewLeadIntake({
                         setNewContact(false);
                         setNewContactName("");
                       }}
-                      className="flex items-center gap-2 rounded-[10px] border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-left text-[12.5px] text-amber-800 transition-colors hover:bg-amber-500/15 dark:text-amber-300"
+                      className="flex items-center gap-2 rounded-[10px] border border-warning/35 bg-warning-soft px-3 py-2 text-left text-[12.5px] text-warning-foreground transition-colors hover:bg-warning-soft"
                     >
-                      <BadgeCheck className="size-4 shrink-0 text-amber-600" />
+                      <BadgeCheck className="size-4 shrink-0 text-warning-foreground" />
                       <span className="min-w-0 flex-1">
                         <b className="font-semibold">{newContactMatch.name}</b>{" "}
                         is already in Mercer
@@ -499,7 +499,7 @@ export function NewLeadIntake({
                                 .join(" · ") || "—"}
                             </span>
                           </span>
-                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-600/25 bg-emerald-600/10 px-1.5 py-px text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-success/25 bg-success-soft px-1.5 py-px text-[10px] font-semibold text-success-foreground">
                             <BadgeCheck className="size-[11px]" />
                             In Mercer
                           </span>
@@ -684,7 +684,7 @@ export function NewLeadIntake({
       )}
 
       {listRowId && (
-        <div className="mb-4 rounded-xl border border-emerald-600/30 bg-emerald-600/5 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-400">
+        <div className="mb-4 rounded-xl border border-success/30 bg-success-soft px-4 py-2 text-sm text-success-foreground">
           Converting from the list{listName ? <> “{listName}”</> : null} —
           everything below came off the row. Fix anything that&apos;s off, name
           the job, and add the lead.
@@ -759,13 +759,13 @@ export function NewLeadIntake({
               href={`/properties/${knownB.id}`}
               target="_blank"
               rel="noreferrer"
-              className="shrink-0 text-[12.5px] font-medium text-blue-700 hover:underline dark:text-blue-400"
+              className="shrink-0 text-[12.5px] font-medium text-info-foreground hover:underline"
             >
               View history
             </a>
           )}
           {due && (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11.5px] font-semibold text-amber-700 dark:text-amber-400">
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-warning/30 bg-warning-soft px-2.5 py-1 text-[11.5px] font-semibold text-warning-foreground">
               <RotateCcw className="size-3" />
               Repaint due
             </span>
@@ -1003,7 +1003,7 @@ export function NewLeadIntake({
                 lead from day one.
               </span>
             </span>
-            <span className="shrink-0 text-[12.5px] font-medium text-blue-700 dark:text-blue-400">
+            <span className="shrink-0 text-[12.5px] font-medium text-info-foreground">
               Browse
             </span>
           </button>
@@ -1214,7 +1214,7 @@ function CompanyField({
           className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
         />
         {accountId && (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-600/25 bg-emerald-600/10 px-1.5 py-px text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-success/25 bg-success-soft px-1.5 py-px text-[10px] font-semibold text-success-foreground">
             <BadgeCheck className="size-[11px]" />
             Linked
           </span>
@@ -1239,7 +1239,7 @@ function CompanyField({
               <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium">
                 {s.name}
               </span>
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-600/25 bg-emerald-600/10 px-1.5 py-px text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-success/25 bg-success-soft px-1.5 py-px text-[10px] font-semibold text-success-foreground">
                 <BadgeCheck className="size-[11px]" />
                 In Mercer
               </span>
@@ -1313,7 +1313,7 @@ function BandNote({
     <span
       className={cn(
         "inline-flex items-center gap-1.5 text-xs",
-        done ? "font-medium text-emerald-600" : "text-muted-foreground/80",
+        done ? "font-medium text-success-foreground" : "text-muted-foreground/80",
       )}
     >
       {icon}

@@ -40,7 +40,7 @@ import {
   projectStatusLabel,
   projectStatusVariant,
 } from "@/lib/status-meta";
-import { PageContainer, PageError, PageHeader } from "@/components/page-chrome";
+import { PageContainer, PageError, PageHeader } from "@/components/chrome";
 
 export default async function BidPage({
   params,

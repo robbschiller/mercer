@@ -69,7 +69,7 @@ function AiComposerRow({
           <span className="text-xs text-destructive">{status.text}</span>
         )}
         {status.kind === "done" && (
-          <span className="text-xs font-medium text-emerald-600">
+          <span className="text-xs font-medium text-success-foreground">
             {status.text}
           </span>
         )}
@@ -144,7 +144,7 @@ export function CloseoutButton({ bidId }: { bidId: string }) {
         <span className="text-xs text-destructive">{status.text}</span>
       )}
       {status.kind === "done" && (
-        <span className="text-xs font-medium text-emerald-600">
+        <span className="text-xs font-medium text-success-foreground">
           Posted to updates — visible on the customer link.
         </span>
       )}

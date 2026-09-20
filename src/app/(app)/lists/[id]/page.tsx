@@ -16,7 +16,7 @@ import {
   TABLE_HEAD_ROW,
   TableFrame,
   Toolbar,
-} from "@/components/page-chrome";
+} from "@/components/chrome";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 200;
@@ -209,7 +209,7 @@ export default async function ListDetailPage({
                       {converted ? (
                         <Link
                           href={`/leads/${r.convertedLeadId}`}
-                          className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-medium text-emerald-700 hover:bg-emerald-600/10 dark:text-emerald-400"
+                          className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-medium text-success-foreground hover:bg-success-soft"
                         >
                           <Check className="size-3.5" />
                           Converted
