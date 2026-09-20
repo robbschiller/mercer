@@ -206,6 +206,7 @@ export async function parseDashboardIntent(
     const parsed = response.parsed_output;
     await recordAiUsage({
       ownerUserId: ctx.ownerUserId,
+      actorUserId: ctx.userId,
       feature: "composer",
       model: "claude-opus-4-8",
       usage: response.usage,

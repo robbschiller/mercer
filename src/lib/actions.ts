@@ -2055,6 +2055,7 @@ export async function submitOnboardingWebsiteAction(formData: FormData) {
   try {
     const extraction = await enrichCompanyFromWebsite(websiteUrl, {
       signal: controller.signal,
+      meter: { ownerUserId: ctx.ownerUserId, actorUserId: ctx.userId },
     });
     await setEnrichmentResult(ctx.ownerUserId, {
       status: "success",

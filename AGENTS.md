@@ -4,7 +4,7 @@ This file keeps human contributors and AI agents aligned on Mercer.
 
 ## Project Snapshot
 
-- Product: Mercer, a lead-to-close sales platform for exterior renovation contractors.
+- Product: Mercer, a lead-to-close sales platform for commercial multifamily exterior renovation contractors. Standalone business; Affordable Quality Painting (AQP) is the first paying customer on production. A rename to Renobase is under consideration and undecided; do not rename anything until it is.
 - Current stack: Next.js 16 (App Router), React 19, Tailwind 4, Supabase, Drizzle, Zod.
 - Current focus: finish remaining MVP gaps after Phase C and D.
 

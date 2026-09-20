@@ -11,6 +11,8 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { AppShellHeader } from "@/components/app-shell-header";
 import { BreadcrumbLabelProvider } from "@/components/breadcrumb-label";
 import { GlobalSearch } from "@/components/global-search";
+import { BillingGate } from "@/components/billing-gate";
+import { getAccessState } from "@/lib/billing";
 
 export default async function AppLayout({
   children,
@@ -30,6 +32,9 @@ export default async function AppLayout({
   if (ctx.role === "owner" && !isOnboardingComplete(onboarding)) {
     redirect("/onboarding");
   }
+  // Subscription gate: resolved from the webhook-mirrored row, never from
+  // Stripe. Inert until BILLING_ENFORCED=1 (see src/lib/billing.ts).
+  const access = await getAccessState(ctx.ownerUserId, onboarding?.startedAt ?? null);
 
   return (
     <SidebarProvider>
@@ -43,7 +48,9 @@ export default async function AppLayout({
       <SidebarInset>
         <BreadcrumbLabelProvider>
           <AppShellHeader />
-          {children}
+          <BillingGate access={access} role={ctx.role}>
+            {children}
+          </BillingGate>
         </BreadcrumbLabelProvider>
       </SidebarInset>
       <GlobalSearch />

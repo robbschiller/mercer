@@ -214,6 +214,7 @@ export async function extractLeadDraftAction(
     const parsed = response.parsed_output;
     await recordAiUsage({
       ownerUserId: ctx.ownerUserId,
+      actorUserId: ctx.userId,
       feature: "lead_intake",
       model: MODEL,
       usage: response.usage,

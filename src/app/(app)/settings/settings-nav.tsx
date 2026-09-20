@@ -8,6 +8,7 @@ import {
   CircleDollarSign,
   FileText,
   Coins,
+  CreditCard,
   Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -23,7 +24,8 @@ const items = [
   { href: "/settings/catalog", label: "Catalog & suppliers", icon: Package },
   { href: "/settings/company", label: "Company details", icon: FileText },
   { href: "/settings/members", label: "Team", icon: Building2 },
-  { href: "/settings/usage", label: "Usage & billing", icon: Coins },
+  { href: "/settings/billing", label: "Plan & billing", icon: CreditCard },
+  { href: "/settings/usage", label: "AI activity", icon: Coins },
 ];
 
 export function SettingsNav() {

@@ -1,11 +1,6 @@
 import { Coins, Info } from "lucide-react";
 import { getUsageSummary } from "@/lib/store";
-import {
-  AI_FEATURE_LABELS,
-  TOKEN_PRICING_PER_MTOK,
-  usageCostUsd,
-  type AiFeature,
-} from "@/lib/usage";
+import { AI_FEATURE_LABELS, type AiFeature } from "@/lib/usage";
 import {
   Card,
   CardHeader,
@@ -13,13 +8,6 @@ import {
   CardDescription,
   CardContent,
 } from "@/components/ui/card";
-
-const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 function fmtTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
@@ -49,23 +37,21 @@ export default async function UsagePage() {
       cacheReadTokens: 0,
     },
   );
-  const totalCost = usageCostUsd(totals);
-
   return (
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Coins className="size-4" />
-            Usage & billing
+            AI activity
           </CardTitle>
           <CardDescription>
-            Every AI feature is metered by the token. This is {monthLabel}{" "}
-            month-to-date — the same ledger your invoice is computed from.
+            Every AI feature is included in your plan. This is what your team
+            has run in {monthLabel}, month-to-date.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <Stat label="AI calls" value={String(totals.calls)} />
             <Stat
               label="Tokens processed"
@@ -76,7 +62,6 @@ export default async function UsagePage() {
                   totals.cacheReadTokens,
               )}
             />
-            <Stat label="Month-to-date charges" value={money.format(totalCost)} />
           </div>
 
           {rows.length === 0 ? (
@@ -93,8 +78,7 @@ export default async function UsagePage() {
                     <th className="py-2 pr-4 text-right font-medium">Calls</th>
                     <th className="py-2 pr-4 text-right font-medium">Input</th>
                     <th className="py-2 pr-4 text-right font-medium">Output</th>
-                    <th className="py-2 pr-4 text-right font-medium">Cache</th>
-                    <th className="py-2 text-right font-medium">Charges</th>
+                    <th className="py-2 text-right font-medium">Cache</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -112,11 +96,8 @@ export default async function UsagePage() {
                       <td className="py-2 pr-4 text-right font-mono text-[13px] tabular-nums">
                         {fmtTokens(r.outputTokens)}
                       </td>
-                      <td className="py-2 pr-4 text-right font-mono text-[13px] tabular-nums text-muted-foreground">
+                      <td className="py-2 text-right font-mono text-[13px] tabular-nums text-muted-foreground">
                         {fmtTokens(r.cacheWriteTokens + r.cacheReadTokens)}
-                      </td>
-                      <td className="py-2 text-right font-mono text-[13px] font-medium tabular-nums">
-                        {money.format(usageCostUsd(r))}
                       </td>
                     </tr>
                   ))}
@@ -131,13 +112,10 @@ export default async function UsagePage() {
                     <td className="py-2.5 pr-4 text-right font-mono text-[13px] font-semibold tabular-nums">
                       {fmtTokens(totals.outputTokens)}
                     </td>
-                    <td className="py-2.5 pr-4 text-right font-mono text-[13px] font-semibold tabular-nums text-muted-foreground">
+                    <td className="py-2.5 text-right font-mono text-[13px] font-semibold tabular-nums text-muted-foreground">
                       {fmtTokens(
                         totals.cacheWriteTokens + totals.cacheReadTokens,
                       )}
-                    </td>
-                    <td className="py-2.5 text-right font-mono text-[13px] font-semibold tabular-nums">
-                      {money.format(totalCost)}
                     </td>
                   </tr>
                 </tbody>
@@ -148,12 +126,9 @@ export default async function UsagePage() {
           <div className="flex items-start gap-2.5 rounded-xl border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
             <Info className="mt-px size-3.5 shrink-0" />
             <span>
-              Rates per million tokens: input{" "}
-              {money.format(TOKEN_PRICING_PER_MTOK.input)}, output{" "}
-              {money.format(TOKEN_PRICING_PER_MTOK.output)}, cache write{" "}
-              {money.format(TOKEN_PRICING_PER_MTOK.cacheWrite)}, cache read{" "}
-              {money.format(TOKEN_PRICING_PER_MTOK.cacheRead)}. Charges accrue
-              month-to-date and bill at the start of the next month.
+              Fair use applies: plans include generous AI allowances sized for
+              a full estimating team. We&apos;ll reach out before anything
+              changes if an org runs far beyond that.
             </span>
           </div>
         </CardContent>

@@ -12,11 +12,12 @@ The deployed product today is the full non-AI operating loop: lead pipeline with
 | ----------- | ------- | ------------- |
 | `(marketing)` | Public landing page; redirects to `/dashboard` if signed in | `/` |
 | `(auth)` | Branded sign-in / sign-up shell that mirrors the marketing surface, with the Mercer wordmark linking back to `/` | `/login`, `/signup` |
-| `(app)` | Authenticated app behind a sidebar shell | `/dashboard`, `/ask`, `/leads`, `/leads/[id]`, `/leads/accounts/[id]`, `/leads/properties/[id]`, `/leads/contacts/[id]`, `/leads/import`, `/leads/new`, `/takeoff-queue`, `/bids`, `/bids/[id]`, `/bids/new`, `/bids/new/small`, `/projects`, `/projects/[id]`, `/reports`, `/settings`, `/settings/catalog`, `/settings/company`, `/settings/members` |
+| `(app)` | Authenticated app behind a sidebar shell | `/dashboard`, `/ask`, `/leads`, `/leads/[id]`, `/leads/accounts/[id]`, `/leads/properties/[id]`, `/leads/contacts/[id]`, `/leads/import`, `/leads/new`, `/takeoff-queue`, `/bids`, `/bids/[id]`, `/bids/new`, `/bids/new/small`, `/projects`, `/projects/[id]`, `/reports`, `/settings`, `/settings/catalog`, `/settings/company`, `/settings/members`, `/settings/billing`, `/settings/usage` |
 | `(onboarding)` | Post-signup branding wizard with website enrichment and theme confirmation | `/onboarding` |
 | Public sharing | No-auth proposal/status page | `/p/[slug]` (proposal pre-acceptance, project status page post-acceptance) |
 | Auth callback | Supabase OAuth redirect handler | `/auth/callback` |
 | Image proxy | Server-side Maps Static fetch (key never reaches the browser) | `/api/maps/satellite` |
+| Stripe webhook | Mirrors subscription events into the `subscriptions` row (signature-verified, no auth middleware) | `/api/stripe/webhook` |
 
 ## Current capabilities
 
@@ -73,6 +74,8 @@ The deployed product today is the full non-AI operating loop: lead pipeline with
 - `/settings` — pricing defaults (coverage, $/gal, labor rate, margin) that prefill new bids.
 - `/settings/catalog` — the org's service price list (SKU, category, unit, charge/sub-cost per unit) and supplier products (paint/material pricing). Feeds the bid catalog picker and the small-job takeoff.
 - `/settings/company` — company profile pulled from the onboarding website-enrichment step; editable, will power themed bid surfaces once Phase G slice 3 lands.
+- `/settings/billing` — the org's plan. Flat monthly subscription per org with AI included (PRD §4 *Business model and pricing*); Stripe Checkout in subscription mode, hosted customer portal for cards and invoices, and a `subscriptions` row mirrored from `/api/stripe/webhook`. The `(app)` layout gates on that row through `BillingGate`, inert until `BILLING_ENFORCED=1`; new orgs get a 14-day trial and pre-launch orgs get theirs from the billing launch date.
+- `/settings/usage` — AI activity month-to-date per feature (calls and tokens). The `ai_usage` ledger behind it records each call's actor seat and list-price cost, for internal COGS only; it is never an invoice line.
 - `/settings/members` — invite teammates by email; pending invites resolve the next time the invitee signs in with that email. One owner per org, plus `admin` and `member` roles. Tenant scoping is `ownerUserId` throughout: existing `user_id` columns semantically hold the org owner's id, and `requireUser()` routes through `getOrgContext()` so members share the owner's bids/leads/projects.
 
 ### Brand and theming

@@ -121,6 +121,7 @@ export async function getMorningBriefAction(
       if (t) text = t;
       await recordAiUsage({
         ownerUserId: ctx.ownerUserId,
+        actorUserId: ctx.userId,
         feature: "morning_brief",
         model: "claude-opus-4-8",
         usage: response.usage,

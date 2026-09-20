@@ -2,13 +2,14 @@
 
 **Status:** Draft
 **Audience:** Robbie + Timmy
-**Last updated:** 2026-05-30
+**Last updated:** 2026-09-20
+**Naming:** the product is called Mercer throughout this document. A rename to **Renobase** is under consideration and undecided; nothing in the codebase or docs should be renamed until that call is made.
 
 ---
 
 ## 1. Overview
 
-Mercer is an **AI-native workflow engine** for commercial multifamily exterior renovation contractors, covering the full workflow from lead acquisition through post-construction punch-out. The beachhead is exterior painting; the design partner is Reno Base / AQP; the long-term scope is the full exterior trade stack (siding, stucco, envelope, concrete restoration) on occupied commercial properties.
+Mercer is an **AI-native workflow engine** for commercial multifamily exterior renovation contractors, covering the full workflow from lead acquisition through post-construction punch-out. The beachhead is exterior painting; the first paying customer is Affordable Quality Painting (AQP), running the production app since September 2026; the long-term scope is the full exterior trade stack (siding, stucco, envelope, concrete restoration) on occupied commercial properties.
 
 The product's architectural stance is the thing that matters most. Most vertical SaaS in 2026 is a system of record with AI features bolted on — a chatbot on the dashboard, generated copy in the proposal, a summary at the top of a report. Mercer is the inversion: an **AI-native workflow engine with record-keeping**. The defining operations of the product — measurement, scope writing, lead qualification, ops reconciliation, customer negotiation — are done by AI systems, with humans as supervisors and editors. Structured records (buildings, surfaces, scope items, expenses, punch-list entries) are the substrate the agents read and write against, and the artifact the business runs on.
 
@@ -28,7 +29,7 @@ Existing tools fragment the workflow and assume human data entry at every step: 
 - Make scope gaps (the porch-floors pattern) structurally impossible by reconciling measurement, spec, capture, and customer request into a single traceable scope object.
 - Turn trade-show attendee lists into ranked pipelines with generated briefs, not spreadsheets of names to manually research.
 - Collapse the post-sale ops layer (expense tracking, change orders, punch-lists, paint guides) into structured records that LLMs read and write against, so that adding an "ops feature" is days of work rather than weeks.
-- Own the lead-to-punch-out workflow for one trade (exterior painting) on one property type (multifamily) with one design partner (Reno Base) before expanding trades.
+- Own the lead-to-punch-out workflow for one trade (exterior painting) on one property type (multifamily) with one first customer (AQP) before expanding trades.
 - Keep the data model trade-agnostic so that siding, stucco, envelope, and concrete restoration can be added as incremental capture types and scope templates on the same spine.
 
 ### Non-Goals
@@ -138,6 +139,16 @@ This distinction is defensible in a way the stage-and-buyer framing alone isn't.
 Roofing contractors have JobNimbus and AccuLynx as systems of record with AI features. Ground-up construction has Procore in the same category. Occupied commercial renovation, across the full exterior trade stack, has no category leader at all — and no one has yet built an AI-native version for any adjacent trade either. Mercer is that product: AI-native, multifamily exterior, painting first, widening trade-by-trade as the foundation holds.
 
 The roofing analogue still validates the workflow pattern. The architectural stance is where the category-defining opportunity lives.
+
+### Business model and pricing
+
+**Decided 2026-09-20.** Mercer is a standalone business, not an internal tool. AQP is the first paying customer; every further customer is an org on the same multi-tenant app.
+
+- **Flat monthly subscription per org**, priced on seats, with AI usage included under a fair-use allowance. Two tiers to start; exact price points are set with AQP as the reference customer and target the $500 to $1000 per month band this document has always assumed.
+- **AI is not metered to the customer.** Back-of-envelope on Opus 4.8 list pricing ($5 input / $25 output per million tokens): a heavy user running 30 AI quote drafts, 200 Ask Mercer questions, and a daily brief costs roughly $15 to $25 per month in model spend, about 2 to 4 percent of the subscription. Even the future vision takeoff over a 100-photo site walk lands under $2 per bid. Billing tokens at that ratio would buy a support burden and buyer anxiety in exchange for a rounding error; contractors compare Mercer to JobNimbus and AccuLynx, which are per-seat.
+- **The `ai_usage` ledger stays**, as the COGS and abuse instrument: every model call is recorded per org with its cost frozen at insert time. A soft cap per org raises an internal alert; a hard cap well above it degrades the feature with a message rather than failing silently. The customer-facing surface shows AI activity, never "charges."
+- **Usage pricing is reserved for pass-through third-party reports** (EagleView-style measurement reports at $20 to $100 each), sold as credits or a per-report fee. That is a line item a contractor already pays today and understands.
+- **Billing provider:** Stripe, provisioned through the Vercel Marketplace. Subscription state lives in a `subscriptions` row per org and is mirrored from Stripe webhooks; the app gates on that row, not on live Stripe calls.
 
 ### Why not [the obvious choice]
 
@@ -572,6 +583,21 @@ Child entity that drives both the public status page and the contractor-internal
 - `visible_on_public_url` (boolean, not null, default `false`) — internal-by-default; when true, update appears on `/p/[slug]`.
 - `created_at` (timestamptz, not null).
 
+### 6.4 Subscriptions and usage metering
+
+The tenant is the org, identified by the owner's `user_id` (see `getOrgContext()`). Billing hangs off that key.
+
+| Entity | Fields | Purpose |
+|---|---|---|
+| subscription | user_id (org owner), stripe_customer_id, stripe_subscription_id, plan (`starter`/`pro`), status (`trialing`/`active`/`past_due`/`canceled`/`incomplete`), seats, current_period_end, trial_ends_at, cancel_at_period_end | One row per org, mirrored from Stripe webhooks. The app layout gates on `status`; nothing in the request path calls Stripe. |
+| ai_usage | user_id, actor_user_id, feature, model, input/output/cache tokens, cost_usd, created_at | Immutable per-call ledger. Internal COGS, per-seat attribution, abuse caps, and the "cost per bid" metric. Never an invoice line. |
+
+Rules:
+
+- New orgs start on a trial with full access; the trial length and the post-trial gate are config, not code.
+- Invited members inherit the org's subscription; seats are counted from active `org_memberships` plus the owner.
+- Plan limits (seats, third-party report credits) are enforced in the app from the `subscriptions` row. Stripe is the source of truth for money; the row is the source of truth for access.
+
 ### AI Architecture Principles
 
 Binding constraints that shape every feature:
@@ -587,7 +613,7 @@ Binding constraints that shape every feature:
 
 - **Mobile-first for on-site use.** Capture is the primary input surface and must work in a parking lot on a phone with spotty cell service. Asynchronous upload and offline queueing are design requirements, not nice-to-haves.
 - **Latency.** Capture upload is async; takeoff agent results appear within 60 seconds of upload completion for a typical property walk. Address autocomplete and satellite preview under 500ms. Bid totals recompute synchronously on edit. Scope reconciliation runs asynchronously on bid save.
-- **Unit economics.** Per-bid cost of AI operations (vision, qualification, reconciliation, negotiation) must be modeled into pricing from day one. Target: under $X per bid at typical property size, where X is small enough that the product sustains at $500-1000/mo subscription tiers.
+- **Unit economics.** Per-bid cost of AI operations (vision, qualification, reconciliation, negotiation) is tracked from day one in the `ai_usage` ledger. Current shipped features cost well under $0.50 per bid at Opus 4.8 list price; the target for the capture-first flow is under $5 per bid at typical property size, which keeps AI under 5 percent of a $500 to $1000 per month subscription (see §4 Business model and pricing).
 - **Evals before features.** No agent ships to production without an evaluation suite covering at least the design-partner ground-truth dataset. "It works on one bid" is not shipping criteria.
 - **Observability of agent behavior.** Agent runs, confidence scores, human override rates, and cost-per-run are first-class dashboards for the build team — not just system logs.
 - **Deployability.** Vercel preview per PR; production on merge to main. Agent prompt versions are part of the deploy artifact, not runtime config.
@@ -607,6 +633,8 @@ Binding constraints that shape every feature:
 | PDF | @react-pdf/renderer | Fallback surface; not primary |
 | Hosting | Vercel | |
 | Analytics | Vercel Web Analytics | |
+| Billing | Stripe via the Vercel Marketplace | Subscriptions per org; webhook-mirrored `subscriptions` row gates access. See §4 Business model and pricing and §6.4. |
+| AI usage metering | `ai_usage` ledger (Postgres) | Per-call token and cost ledger on the platform Anthropic key; internal COGS, not customer billing |
 | Maps | Google Places API (New); Maps Static API; Google Street View API | Places for autocomplete + lead qualification; Static for thumbnails; Street View for remote-capture mode |
 | Building footprints | TBD (see §10 open questions) | Microsoft GlobalMLBuildingFootprints via PostGIS, ATTOM, or paid EagleView tier |
 | **Vision models** | **Frontier multimodal API (Claude, GPT-4o, Gemini) in Phase 1; custom fine-tune evaluated later** | Selection driven by evals, not vendor preference |
@@ -640,6 +668,7 @@ As of this PRD, the following is live at mercer-bids.vercel.app:
 - Dashboard at `/dashboard` with lead and bid summary counts
 - Onboarding wizard at `/onboarding` with website capture, Anthropic Haiku profile extraction when configured, confirm/edit step, theme confirmation, and skip path
 - Project layer with `/projects`, `/projects/[id]`, automatic project creation on proposal acceptance, project status state machine, public project updates, and `/p/[slug]` status-page pivot post-acceptance
+- Platform-key AI with a per-call `ai_usage` ledger (tokens per feature and model, keyed by org) and a month-to-date rollup at `/settings/usage`; BYO Anthropic keys were removed in migration 040
 - Multi-user organizations via `org_memberships`: per-user `owner`/`admin`/`member` roles, email-keyed invites auto-accepted on first sign-in, `/settings/members` to manage the team, `/settings/company` for the company profile pulled from onboarding, and `getOrgContext()` so all tenant-scoped queries route through the org owner's id with no data migration on existing `user_id` columns
 
 **What's not built:** none of the AI-native operations described in §5. The current app is a Phase 0 proof of the data model and the non-AI surfaces. The product described in this PRD starts from here.
@@ -764,8 +793,8 @@ Decisions needed before or during execution.
 
 9. **Production server-side Places API key.** Dev uses HTTP-referrer restriction via a Referer spoof; production needs IP-restricted server key.
 10. **Supabase email confirmation.** On by default; affects design-partner access and any early-user onboarding. Decide per milestone.
-11. **Business model.** Is Reno Base using this internally, or is it the first customer of a new business? Changes priorities on multi-tenancy, billing, onboarding, and product framing. *Needed before Milestone 5.*
-12. **Unit economics target.** What compute cost per bid is sustainable at what subscription tier? Sensitivity analysis needed with real Milestone 1 numbers.
+11. ~~**Business model.**~~ **Resolved 2026-09-20.** Mercer is a standalone business; AQP is the first paying customer and is using the production app. Multi-tenancy, billing, and onboarding are product requirements, not optional. See §4 Business model and pricing. (An earlier 2026-05-29 note in `docs/plan.md` called this an AQP-specific app; that is superseded.)
+12. ~~**Unit economics target.**~~ **Resolved 2026-09-20 for shipped features.** Model spend is 2 to 4 percent of the subscription target at heavy use, so AI is included in the flat price and metered internally only. Re-run the sensitivity analysis when the vision takeoff (Milestone 1) ships with real per-bid photo counts.
 13. **Co-founder split.** Robbie (design + product) and brother (engineering). Working agreement on decision-making, code review, release cadence, and ownership of the agent/eval stack needs to exist in writing before Milestone 2 starts.
 
 ### Product shape

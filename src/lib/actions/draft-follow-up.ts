@@ -90,6 +90,7 @@ export async function draftFollowUpAction(data: {
       .trim();
     await recordAiUsage({
       ownerUserId: ctx.ownerUserId,
+      actorUserId: ctx.userId,
       feature: "follow_up",
       model: "claude-opus-4-8",
       usage: response.usage,

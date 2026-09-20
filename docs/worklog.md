@@ -4,6 +4,43 @@ Running log of in-flight work on the lead-to-close MVP (docs/plan.md). Chronolog
 
 ---
 
+## 2026-09-20 — Business model decided + subscription plumbing (Stripe via Vercel Marketplace)
+
+**Decision (Robb):** Mercer is a standalone business; AQP is the first paying customer and is live on production. Product name may change to Renobase; explicitly undecided, nothing renamed. Billing model: flat monthly subscription per org, AI included under fair use, `ai_usage` stays an internal COGS/abuse ledger, usage pricing reserved for future pass-through measurement reports. Rationale and numbers in PRD §4 *Business model and pricing* (Opus 4.8 list price makes AI roughly 2 to 4 percent of a $500 to $1000/mo plan at heavy use). PRD §10 Q11 and Q12 closed; `docs/plan.md` Q11 line re-resolved (supersedes the 2026-05-29 "AQP-specific app" framing); `AGENTS.md` snapshot updated.
+
+### Stripe integration
+- `vercel integration discover --category payments` → Stripe is the only marketplace payments provider. First install landed in the **Personal** scope (the CLI default) while `mercer` lives in the **renobase** team, so the resource could not connect ("Project not found"); that empty sandbox was deleted and the install re-run with `--scope renobase` after Robb accepted the marketplace terms for the team. Resource `mercer-stripe` (sandbox, test mode, `acct_1UHnV98FUJZnWyHB`) is connected to the project and injected `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_MCP_KEY` on all three environments. `stripe@22.6.2` SDK installed per the integration's Next.js guide; the `stripe-best-practices` agent skill is installed at `.claude/skills/`.
+- Sandbox catalog created via the API: products `Mercer Starter` (`price_1UHo6D8FUJZnWyHBBzhC7amG`, $499/mo) and `Mercer Pro` (`price_1UHo6D8FUJZnWyHB4enqWzBg`, $999/mo), one product per tier per the Stripe skill. `STRIPE_PRICE_STARTER` / `STRIPE_PRICE_PRO` set on production, preview, development and in `.env.local`.
+- Webhook endpoint `we_1UHo6u8FUJZnWyHBvk7Cd9KB` → `https://usemercer.com/api/stripe/webhook` with the six events; its signing secret went straight into `STRIPE_WEBHOOK_SECRET` (production, sensitive) without touching disk.
+- Skill-driven adjustments: `integration_identifier` on the Checkout session, `invoice.paid` / `invoice.payment_failed` handled by re-reading the subscription, owner resolved customer-row first (metadata and `client_reference_id` as fallbacks), and `constructEventAsync` so signature verification works on WebCrypto runtimes too.
+
+### Code
+- `048_subscriptions.sql` (applied to **staging**, not prod): `subscriptions` (one row per org owner, Stripe customer/subscription ids, plan, Stripe status string, seats, period end, trial end, cancel flag) + `ai_usage.actor_user_id` and `ai_usage.cost_usd numeric(12,6)`.
+- `src/lib/billing.ts`: `PLANS` (starter $499 / 3 seats, pro $999 / 10 seats, **placeholder** price points; Stripe Price ids from `STRIPE_PRICE_STARTER` / `STRIPE_PRICE_PRO`), `resolveAccess()` (pure: active / trialing / grace / locked; no row = implicit 14-day trial from onboarding start, or from `BILLING_LAUNCH_AT` for pre-launch orgs so AQP cannot be locked out the day enforcement turns on), `billingEnforced()` (`BILLING_ENFORCED=1`), `upsertSubscriptionFromStripe()` (period end read from the subscription item, which is where this API version keeps it).
+- `src/lib/stripe.ts`: lazy client, null without `STRIPE_SECRET_KEY`.
+- `src/lib/actions/billing.ts`: `startCheckoutAction` (owner-only; creates the Stripe customer, records it on the row, hosted Checkout in subscription mode with `owner_user_id` in `client_reference_id` + subscription metadata) and `openBillingPortalAction`.
+- `src/app/api/stripe/webhook/route.ts`: signature-verified with `STRIPE_WEBHOOK_SECRET`; handles `checkout.session.completed` and `customer.subscription.{created,updated,deleted}`; owner resolved from metadata → client_reference_id → customer row. Outside the proxy matcher, so no auth middleware.
+- `src/app/(app)/settings/billing/page.tsx`: plan card (status badge, seats used vs included, trial/renewal date), two plan cards with Choose/Switch, portal button; buttons disabled with a note when billing is not connected.
+- `src/components/billing-gate.tsx` wraps the `(app)` layout page slot: lock card everywhere except `/settings/billing` when `access.blocked`; trial-ending (≤7 days) and payment-failed banners otherwise.
+- `src/lib/usage.ts`: `MODEL_RATES_PER_MTOK` at Anthropic list price per model (the 2.4x `TOKEN_PRICING_PER_MTOK` markup is gone), `usageCostUsd(model, counts)`, `recordAiUsage` now writes `actorUserId` and `costUsd`. Five call sites with an `OrgContext` pass `actorUserId: ctx.userId`; the Haiku onboarding extraction is now metered as feature `onboarding`.
+- `/settings/usage` reframed from "Usage & billing" with charges to "AI activity" (calls and tokens only). Settings nav and sidebar gained "Plan & billing".
+- `.env.local.example`: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PRO`, `BILLING_ENFORCED`.
+
+### Verified
+- `bunx tsc --noEmit` clean; `bun run lint` 0 errors (3 pre-existing warnings); `bun run build` clean with `/settings/billing` and `/api/stripe/webhook` in the route list.
+- Runtime, on staging with `BILLING_ENFORCED=1` and the sandbox keys (Playwright, `bun run dev -p 3010`, test user `claude-test+phase-a@mercer.dev`): billing page renders the implicit trial (pre-launch org → clock from launch date); "Choose Starter" creates the Stripe customer, writes the `incomplete` row, and redirects to `checkout.stripe.com`; a `canceled` row shows the lock card on `/dashboard` with `/settings/billing` still reachable; signed test events replayed against the local route: wrong secret → 400, `customer.subscription.created` → `active` / `starter` / period end from the item, `updated` with `past_due` → `past_due`, `invoice.paid` → `active`; dashboard unlocked, billing page shows "Starter is active" + Current plan badge, "Manage cards & invoices" redirects to `billing.stripe.com`. Sandbox subscriptions canceled and the test row deleted afterwards.
+- Gotcha: after editing the webhook route the dev server wedged at 100% CPU and stopped answering every route; a restart fixed it. Bun's fetch/WebCrypto also cannot run the SDK's sync signing helpers, so the drive script signs with `node:crypto` HMAC.
+
+### Open
+1. The Stripe resource is a **sandbox** (test mode, `charges_enabled: false`). Before real money: `vercel integration resource claim mercer-stripe --scope renobase` to attach it to the real Stripe account, activate the account, then recreate the two Prices and the webhook endpoint in live mode and replace `STRIPE_PRICE_*` / `STRIPE_WEBHOOK_SECRET` on production. Prefer a restricted key (`rk_`) over the injected `sk_` if the integration allows swapping it.
+2. Apply `048_subscriptions.sql` to **prod** (not done; staging only) before or with the deploy.
+3. Decide the real price points; the $499 / $999 constants in `src/lib/billing.ts` and the Stripe Prices must agree.
+4. Put AQP's org on a plan (Checkout from Jordan's owner account), then set `BILLING_ENFORCED=1` on production.
+5. Stripe Tax is not enabled; if US sales tax applies to the subscription, enable it with a registration before turning on real billing.
+6. `STRIPE_WEBHOOK_SECRET` exists only on production; preview deploys can't verify events (fine, they have no endpoint). Local testing: replay signed events as in the scratchpad drive, or install the Stripe CLI and `stripe listen --forward-to localhost:3000/api/stripe/webhook`.
+
+---
+
 ## 2026-09-02 — Jordan's top-of-funnel batch + clean production
 
 **Source:** Jordan's meeting notes (morning), parsed into [`docs/roadmap.md`](roadmap.md). Everything in roadmap Phase 0 and Phase 1 shipped and was runtime-verified on staging (Playwright against `bun run dev -p 3010`, test user `claude-test+phase-a@mercer.dev`).

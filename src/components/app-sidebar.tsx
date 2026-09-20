@@ -25,6 +25,7 @@ import {
   UsersRound,
   ClipboardList,
   Upload,
+  CreditCard,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
@@ -418,9 +419,15 @@ function AccountCard({
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
+              <Link href="/settings/billing" onClick={dismissOnMobile}>
+                <CreditCard className="size-4" />
+                Plan &amp; billing
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
               <Link href="/settings/usage" onClick={dismissOnMobile}>
                 <Coins className="size-4" />
-                Usage &amp; billing
+                AI activity
               </Link>
             </DropdownMenuItem>
           </div>

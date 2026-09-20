@@ -111,6 +111,7 @@ export async function askMercer(input: {
 
     await recordAiUsage({
       ownerUserId: ctx.ownerUserId,
+      actorUserId: ctx.userId,
       feature: "ask",
       model: "claude-opus-4-8",
       usage: response.usage,

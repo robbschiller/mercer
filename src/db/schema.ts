@@ -1008,24 +1008,59 @@ export const photos = pgTable("photos", {
  * (app)/layout gate. See docs/plan.md → Phase G.
  */
 /**
- * Token-metered AI usage: one row per model call, per org. The billing
- * ledger — Mercer charges by the token instead of BYO API keys.
+ * AI usage ledger: one row per model call, per org, on the platform
+ * Anthropic key. Internal COGS, per-seat attribution, and abuse caps.
+ * Never an invoice line: AI is included in the flat subscription
+ * (PRD §4 "Business model and pricing", §6.4).
  */
 export const aiUsage = pgTable("ai_usage", {
   id: uuid("id").primaryKey().defaultRandom(),
-  /** Org owner — the billing key everything else scopes by. */
+  /** Org owner — the tenant key everything else scopes by. */
   userId: uuid("user_id").notNull(),
-  /** Which surface spent it: quote_engine | ask | morning_brief | follow_up | composer. */
+  /** The seat that triggered the call (null for background/system work). */
+  actorUserId: uuid("actor_user_id"),
+  /** Which surface spent it — see AiFeature in src/lib/usage.ts. */
   feature: text("feature").notNull(),
   model: text("model").notNull(),
   inputTokens: integer("input_tokens").notNull().default(0),
   outputTokens: integer("output_tokens").notNull().default(0),
   cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
   cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
+  /** Model list-price cost frozen at insert (048) so rate changes never rewrite history. */
+  costUsd: numeric("cost_usd", { precision: 12, scale: 6 }).notNull().default("0"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
+
+/**
+ * Subscriptions (048): one row per org, mirrored from Stripe webhooks.
+ * Stripe is the source of truth for money; this row is the source of
+ * truth for access. A row with no stripeSubscriptionId only records the
+ * Stripe customer (checkout started) and counts as "no subscription".
+ */
+export const subscriptions = pgTable("subscriptions", {
+  /** Org owner. */
+  userId: uuid("user_id").primaryKey(),
+  stripeCustomerId: text("stripe_customer_id").unique(),
+  stripeSubscriptionId: text("stripe_subscription_id").unique(),
+  /** starter | pro — see PLANS in src/lib/billing.ts. */
+  plan: text("plan").notNull().default("starter"),
+  /** Mirrors Stripe's subscription status string. */
+  status: text("status").notNull().default("incomplete"),
+  seats: integer("seats").notNull().default(1),
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type Subscription = typeof subscriptions.$inferSelect;
 
 export const onboardings = pgTable("onboardings", {
   userId: uuid("user_id").primaryKey(),

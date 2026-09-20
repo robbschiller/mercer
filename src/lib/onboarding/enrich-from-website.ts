@@ -2,6 +2,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
+import { recordAiUsage } from "@/lib/usage";
 
 export const CompanyProfileExtractionSchema = z.object({
   companyName: z.string().nullable(),
@@ -51,7 +52,11 @@ export class EnrichmentError extends Error {
 
 export async function enrichCompanyFromWebsite(
   websiteUrl: string,
-  opts: { signal?: AbortSignal } = {}
+  opts: {
+    signal?: AbortSignal;
+    /** Org owner + acting seat for the ai_usage ledger; omit to skip metering. */
+    meter?: { ownerUserId: string; actorUserId?: string | null };
+  } = {}
 ): Promise<CompanyProfileExtraction> {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new EnrichmentError("ANTHROPIC_API_KEY is not configured");
@@ -85,6 +90,16 @@ export async function enrichCompanyFromWebsite(
     },
     { signal: opts.signal, timeout: MODEL_TIMEOUT_MS }
   );
+
+  if (opts.meter) {
+    await recordAiUsage({
+      ownerUserId: opts.meter.ownerUserId,
+      actorUserId: opts.meter.actorUserId,
+      feature: "onboarding",
+      model: "claude-haiku-4-5",
+      usage: response.usage,
+    });
+  }
 
   const parsed = response.parsed_output;
   if (!parsed) {
